@@ -12,9 +12,8 @@ The parent task is
   They belong in the private estate.
 - Implementation code is Rust; reused services are open source and written in Rust. No paid or
   proprietary product enters the cache.
-- `registry/decisions.json` and `registry/android-jvm.json` are the only hand-edited registry
-  inputs. `registry/stack.json` derives from them and official-source evidence.
-  `registry/journal.jsonl` is append-only.
+- `registry/decisions.json` is the only hand-edited registry input. `registry/stack.json` derives
+  from it and official-source evidence. `registry/journal.jsonl` is append-only.
 - A version below the latest stable upstream needs a reason, an upstream reference and a removal
   condition. Version values stay out of Markdown.
 - Shared build caches accept writes only from CI identities.

@@ -164,12 +164,6 @@
    "status": "latest+compat",
    "scope": "core",
    "reason": "Owner selects TypeScript 7 (native compiler) and the latest TypeScript 6 (JavaScript compiler API for typescript-eslint, openapi-typescript, @astrojs/check, svelte-language-server). The @typescript/typescript6 alias package currently publishes 6.0.2; alias npm:typescript@6.0.3 instead.",
-   "companion_upstream": [
-    "https://github.com/typescript-eslint/typescript-eslint/issues/10940",
-    "https://github.com/openapi-ts/openapi-typescript/issues/2841",
-    "https://github.com/withastro/astro/pull/17852"
-   ],
-   "companion_removal_condition": "typescript-eslint, openapi-typescript and @astrojs/check run on TypeScript 7.",
    "upstream_detail": {
     "tags": {
      "rc": "7.0.1-rc",
@@ -178,7 +172,13 @@
     }
    },
    "source": "https://registry.npmjs.org/-/package/typescript/dist-tags",
-   "verified_at": "2026-10-25T12:49:53Z"
+   "verified_at": "2026-10-25T12:49:53Z",
+   "upstream": [
+    "https://github.com/typescript-eslint/typescript-eslint/issues/10940",
+    "https://github.com/openapi-ts/openapi-typescript/issues/2841",
+    "https://github.com/withastro/astro/pull/17852"
+   ],
+   "removal_condition": "The TypeScript 6 line stays until typescript-eslint, openapi-typescript and @astrojs/check run on TypeScript 7."
   },
   {
    "id": "npm",
@@ -2766,7 +2766,6 @@
     "latest": "25.1.0",
     "stack": "25.1.0",
     "status": "latest",
-    "reason": "Latest. Conditional: miniopy-async would force <24.",
     "requires_python": ">=3.8",
     "source": "https://pypi.org/pypi/argon2-cffi/json"
    },
@@ -2875,7 +2874,6 @@
     "latest": "2026.10.23",
     "stack": "2026.10.23",
     "status": "latest",
-    "reason": "Latest. Conditional: miniopy-async 1.23.5 would force 2025.11.12 (stale CA bundle); remove miniopy-async instead.",
     "requires_python": ">=3.7",
     "source": "https://pypi.org/pypi/certifi/json"
    },
@@ -3486,7 +3484,6 @@
     "latest": "4.2.0",
     "stack": "4.2.0",
     "status": "latest",
-    "reason": "Latest. Conditional: miniopy-async would force <4.",
     "requires_python": ">=3.9",
     "source": "https://pypi.org/pypi/pycryptodome/json"
    },
@@ -3501,7 +3498,6 @@
     "latest": "2.14.1",
     "stack": "2.14.1",
     "status": "latest",
-    "reason": "Latest in core; aiogram 3.31.0 (experimental only) needs <2.14.",
     "requires_python": ">=3.10",
     "source": "https://pypi.org/pypi/pydantic/json"
    },
@@ -5777,279 +5773,225 @@
  "github_actions": {
   "DavidAnson/markdownlint-cli2-action": {
    "latest": "v24.2.0",
-   "sha": "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff",
-   "core_refs": null
+   "sha": "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff"
   },
   "actions-rust-lang/setup-rust-toolchain": {
    "latest": "v2.0.0",
-   "sha": "ecabd13d1c56bd1345c230e542e9144811ad706f",
-   "core_refs": null
+   "sha": "ecabd13d1c56bd1345c230e542e9144811ad706f"
   },
   "actions/attest": {
    "latest": "v4.2.2",
-   "sha": "1e69f48acb82d1966a394da916b4c1698aa569d6",
-   "core_refs": null
+   "sha": "1e69f48acb82d1966a394da916b4c1698aa569d6"
   },
   "actions/attest-build-provenance": {
    "latest": "v4.2.2",
-   "sha": "4d101475d8b20a2381f78447822ac1eab6504dd8",
-   "core_refs": null
+   "sha": "4d101475d8b20a2381f78447822ac1eab6504dd8"
   },
   "actions/cache": {
    "latest": "v6.1.0",
-   "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-   "core_refs": null
+   "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
   },
   "actions/checkout": {
    "latest": "v7.0.1",
-   "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
-   "core_refs": null
+   "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1"
   },
   "actions/dependency-review-action": {
    "latest": "v5.0.0",
-   "sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
-   "core_refs": null
+   "sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294"
   },
   "actions/download-artifact": {
    "latest": "v8.0.2",
-   "sha": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
-   "core_refs": null
+   "sha": "9000827ccba6bdab643e8b6fd33ac0654aef8333"
   },
   "actions/github-script": {
    "latest": "v9.0.0",
-   "sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
-   "core_refs": null
+   "sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3"
   },
   "actions/labeler": {
    "latest": "v7.0.0",
-   "sha": "bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13",
-   "core_refs": null
+   "sha": "bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13"
   },
   "actions/setup-dotnet": {
    "latest": "v6.0.0",
-   "sha": "a98b56852c35b8e3190ac28c8c2271da59106c68",
-   "core_refs": null
+   "sha": "a98b56852c35b8e3190ac28c8c2271da59106c68"
   },
   "actions/setup-go": {
    "latest": "v7.0.0",
-   "sha": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
-   "core_refs": null
+   "sha": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
   },
   "actions/setup-java": {
    "latest": "v6.1.0",
-   "sha": "b843ebf9b913146b38da2eaa7aeddf76074ae1ad",
-   "core_refs": null
+   "sha": "b843ebf9b913146b38da2eaa7aeddf76074ae1ad"
   },
   "actions/setup-node": {
    "latest": "v7.1.0",
-   "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
-   "core_refs": null
+   "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1"
   },
   "actions/setup-python": {
    "latest": "v7.1.0",
-   "sha": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
-   "core_refs": null
+   "sha": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
   },
   "actions/stale": {
    "latest": "v11.0.0",
-   "sha": "4391f3da665fdf50b6810c1a66712fb9ba21aa93",
-   "core_refs": null
+   "sha": "4391f3da665fdf50b6810c1a66712fb9ba21aa93"
   },
   "actions/upload-artifact": {
    "latest": "v7.0.2",
-   "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-   "core_refs": null
+   "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
   },
   "amannn/action-semantic-pull-request": {
    "latest": "v6.1.1",
-   "sha": "48f256284bd46cdaab1048c3721360e808335d50",
-   "core_refs": null
+   "sha": "48f256284bd46cdaab1048c3721360e808335d50"
   },
   "anchore/scan-action": {
    "latest": "v7.4.2",
-   "sha": "27805bf3b4e84b4a5c980df22ed233c00390a439",
-   "core_refs": null
+   "sha": "27805bf3b4e84b4a5c980df22ed233c00390a439"
   },
   "android-actions/setup-android": {
    "latest": "v4.0.4",
-   "sha": "be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd",
-   "core_refs": null
+   "sha": "be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd"
   },
   "aquasecurity/trivy-action": {
    "latest": "v0.36.0",
-   "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
-   "core_refs": null
+   "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25"
   },
   "astral-sh/setup-uv": {
    "latest": "v10.3.2",
-   "sha": "07a047e608db84b3d8c06cd9a7c7dcc9c355c18e",
-   "core_refs": null
+   "sha": "07a047e608db84b3d8c06cd9a7c7dcc9c355c18e"
   },
   "benchmark-action/github-action-benchmark": {
    "latest": "v1.22.2",
-   "sha": "4322e5726e6334590d251fc4f92bec0efafc45dc",
-   "core_refs": null
+   "sha": "4322e5726e6334590d251fc4f92bec0efafc45dc"
   },
   "bridgecrewio/checkov-action": {
    "latest": "v12.3135.0",
    "sha": "99bb2caf247dfd9f03cf984373bc6043d4e32ebf",
-   "core_refs": null,
    "note": "tags only; no GitHub releases since 2022"
   },
   "codecov/codecov-action": {
    "latest": "v7.1.1",
-   "sha": "303a32d7a59b442fa8d48b6a1cc6825c09c847a5",
-   "core_refs": null
+   "sha": "303a32d7a59b442fa8d48b6a1cc6825c09c847a5"
   },
   "coverallsapp/github-action": {
    "latest": "v2.3.8",
-   "sha": "8d6379e14d29928660c4ba802d8e85393440b329",
-   "core_refs": null
+   "sha": "8d6379e14d29928660c4ba802d8e85393440b329"
   },
   "crate-ci/typos": {
    "latest": "v1.51.1",
-   "sha": "7f9d0819ca1c008ade73f4b41fa9d258d48f605b",
-   "core_refs": null
+   "sha": "7f9d0819ca1c008ade73f4b41fa9d258d48f605b"
   },
   "docker/build-push-action": {
    "latest": "v7.4.0",
-   "sha": "c3c9e263c25d99ce0380d002d59b67737d91b0dc",
-   "core_refs": null
+   "sha": "c3c9e263c25d99ce0380d002d59b67737d91b0dc"
   },
   "docker/login-action": {
    "latest": "v4.7.0",
-   "sha": "81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
-   "core_refs": null
+   "sha": "81c6f93d4bc991e510b342a00b419b3bb4efc5c6"
   },
   "docker/setup-buildx-action": {
    "latest": "v4.4.1",
-   "sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
-   "core_refs": null
+   "sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069"
   },
   "docker/setup-compose-action": {
    "latest": "v2.4.0",
-   "sha": "54042514f505b273907334ae2b9cdbb9a0213c1a",
-   "core_refs": null
+   "sha": "54042514f505b273907334ae2b9cdbb9a0213c1a"
   },
   "docker/setup-docker-action": {
    "latest": "v5.6.0",
-   "sha": "7ec28a010822b4626af4874f9448a4b05ac6f3e5",
-   "core_refs": null
+   "sha": "7ec28a010822b4626af4874f9448a4b05ac6f3e5"
   },
   "dtolnay/rust-toolchain": {
    "latest": "v1",
-   "sha": "683b588c487a69d01f6c6ddf40f036ff682cc2c8",
-   "core_refs": null
+   "sha": "683b588c487a69d01f6c6ddf40f036ff682cc2c8"
   },
   "extractions/setup-just": {
    "latest": "v4",
-   "sha": "53165ef7e734c5c07cb06b3c8e7b647c5aa16db3",
-   "core_refs": null
+   "sha": "53165ef7e734c5c07cb06b3c8e7b647c5aa16db3"
   },
   "github/codeql-action": {
    "latest": "v4.39.1",
-   "sha": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
-   "core_refs": null
+   "sha": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370"
   },
   "google/clusterfuzzlite": {
-   "latest": null,
-   "sha": null,
-   "core_refs": null
+   "latest": "v1",
+   "sha": "884713a6c30a92e5e8544c39945cd7cb630abcd1",
+   "note": "tags only; no GitHub releases"
   },
   "gradle/actions": {
    "latest": "v6.4.0",
-   "sha": "3f5f9adaf7d9fecd50b5935e54106014257a94e6",
-   "core_refs": null
+   "sha": "3f5f9adaf7d9fecd50b5935e54106014257a94e6"
   },
   "hashicorp/setup-terraform": {
    "latest": "v4.0.1",
-   "sha": "dfe3c3f87815947d99a8997f908cb6525fc44e9e",
-   "core_refs": null
+   "sha": "dfe3c3f87815947d99a8997f908cb6525fc44e9e"
   },
   "hendrikmuhs/ccache-action": {
    "latest": "v1.2.24",
-   "sha": "f09c25b45002a07be2955cbe52e8cee55643f89d",
-   "core_refs": null
+   "sha": "f09c25b45002a07be2955cbe52e8cee55643f89d"
   },
   "lycheeverse/lychee-action": {
    "latest": "v2.9.0",
-   "sha": "e7477775783ea5526144ba13e8db5eec57747ce8",
-   "core_refs": null
+   "sha": "e7477775783ea5526144ba13e8db5eec57747ce8"
   },
   "opentofu/setup-opentofu": {
    "latest": "v2.0.2",
-   "sha": "a1320f892987e89d278cc92dc5adc984fb93aca4",
-   "core_refs": null
+   "sha": "a1320f892987e89d278cc92dc5adc984fb93aca4"
   },
   "ossf/scorecard-action": {
    "latest": "v2.5.0",
-   "sha": "fa7117db83c52d787ae5a89f350999701505d78e",
-   "core_refs": null
+   "sha": "fa7117db83c52d787ae5a89f350999701505d78e"
   },
   "oven-sh/setup-bun": {
    "latest": "v2.2.0",
-   "sha": "0c5077e51419868618aeaa5fe8019c62421857d6",
-   "core_refs": null
+   "sha": "0c5077e51419868618aeaa5fe8019c62421857d6"
   },
   "pypa/gh-action-pypi-publish": {
    "latest": "v1.14.3",
-   "sha": "7245906fb61fa33a13554f9d5fb856fe61758086",
-   "core_refs": null
+   "sha": "7245906fb61fa33a13554f9d5fb856fe61758086"
   },
   "r-lib/actions": {
    "latest": "v2",
-   "sha": "f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05",
-   "core_refs": null
+   "sha": "f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05"
   },
   "ruby/setup-ruby": {
    "latest": "v1.335.0",
-   "sha": "7f797815d8adceb1c412e7abefdd1ab4abc47a5f",
-   "core_refs": null
+   "sha": "7f797815d8adceb1c412e7abefdd1ab4abc47a5f"
   },
   "runs-on/cache": {
    "latest": "v5.0.7",
-   "sha": "88d90644011a3a9957fd141a106f5a94f9794203",
-   "core_refs": null
+   "sha": "88d90644011a3a9957fd141a106f5a94f9794203"
   },
   "rust-lang/crates-io-auth-action": {
    "latest": "v1.0.6",
-   "sha": "3268eb413133e2960fa4ae0e963ca76380c54cd9",
-   "core_refs": null
+   "sha": "3268eb413133e2960fa4ae0e963ca76380c54cd9"
   },
   "step-security/harden-runner": {
    "latest": "v2.22.2",
-   "sha": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2",
-   "core_refs": null
+   "sha": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2"
   },
   "subosito/flutter-action": {
    "latest": "v2.23.0",
-   "sha": "1a449444c387b1966244ae4d4f8c696479add0b2",
-   "core_refs": null
+   "sha": "1a449444c387b1966244ae4d4f8c696479add0b2"
   },
   "swift-actions/setup-swift": {
    "latest": "v2.4.0",
-   "sha": "7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a",
-   "core_refs": null
+   "sha": "7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a"
   },
   "taiki-e/install-action": {
    "latest": "v2.87.31",
-   "sha": "1e29709c0ec63babbe8f266397a465f29a825f91",
-   "core_refs": null
+   "sha": "1e29709c0ec63babbe8f266397a465f29a825f91"
   },
   "trufflesecurity/trufflehog": {
    "latest": "v3.99.7",
-   "sha": "31ce31ee1abbcc7dc8eee5764c17121c3044c8b2",
-   "core_refs": null
+   "sha": "31ce31ee1abbcc7dc8eee5764c17121c3044c8b2"
   },
   "wagoid/commitlint-github-action": {
    "latest": "v6.2.1",
-   "sha": "b948419dd99f3fd78a6548d48f94e3df7f6bf3ed",
-   "core_refs": null
+   "sha": "b948419dd99f3fd78a6548d48f94e3df7f6bf3ed"
   },
   "webfactory/ssh-agent": {
    "latest": "v0.10.0",
-   "sha": "e83874834305fe9a4a2997156cb26c5de65a8555",
-   "core_refs": null
+   "sha": "e83874834305fe9a4a2997156cb26c5de65a8555"
   }
  },
  "container_images": {
@@ -6223,174 +6165,5 @@
    "result": "3 of 126 behind (mise, tealdeer, tombi)"
   }
  ],
- "cache_services": {
-  "status": "design input; no cache service is implemented yet",
-  "evidence_levels": {
-   "verified": "checked against the primary source on the registry snapshot date",
-   "reported": "research result with a primary-source URL, not re-checked",
-   "unverified": "no primary source confirmed it"
-  },
-  "owner_constraints": [
-   "No paid or proprietary products. The cache is an NDS Rust implementation or reuses open-source components written in Rust.",
-   "Clients reach the cache only over the internal network, and every client authenticates with a key.",
-   "Consumers are owner devices and private self-hosted GitHub Actions runners. Public repositories keep free GitHub-hosted runners."
-  ],
-  "rust_components": [
-   {
-    "name": "sccache",
-    "repository": "https://github.com/mozilla/sccache",
-    "license": "Apache-2.0",
-    "role": "Rust/C/C++ compiler cache client with an S3-compatible backend",
-    "level": "verified"
-   },
-   {
-    "name": "RustFS",
-    "repository": "https://github.com/rustfs/rustfs",
-    "license": "Apache-2.0",
-    "role": "S3-compatible object store for build-cache and blob storage; already used by company stacks",
-    "level": "verified"
-   },
-   {
-    "name": "Kellnr",
-    "repository": "https://github.com/kellnr/kellnr",
-    "license": "Apache-2.0",
-    "role": "crates registry with an optional crates.io proxy mode",
-    "level": "reported",
-    "open_question": "Sparse-index proxy behaviour and checksum verification under the cache's key model."
-   },
-   {
-    "name": "Trow",
-    "repository": "https://github.com/trow-registry/trow",
-    "license": "Apache-2.0",
-    "role": "OCI registry advertising pull-through proxying of any registry",
-    "level": "reported",
-    "open_question": "Last release predates the snapshot by more than a year; multi-upstream proxy and push for BuildKit cache must be qualified before reuse."
-   }
-  ],
-  "module_protocols": [
-   {
-    "protocol": "npm registry (Bun and npm clients)",
-    "upstream": "https://registry.npmjs.org",
-    "client": "bunfig [install].registry or BUN_CONFIG_REGISTRY; .npmrc registry"
-   },
-   {
-    "protocol": "PyPI simple index and files (uv, pip)",
-    "upstream": "https://pypi.org/simple",
-    "client": "UV_DEFAULT_INDEX or [[tool.uv.index]] default = true"
-   },
-   {
-    "protocol": "crates.io sparse index and crate files",
-    "upstream": "https://index.crates.io",
-    "client": "[source.crates-io] replace-with a sparse+https registry; the replacement must be an exact mirror",
-    "reuse_candidate": "Kellnr"
-   },
-   {
-    "protocol": "Go module proxy, checksum database and golang.org/toolchain",
-    "upstream": "https://proxy.golang.org, https://sum.golang.org",
-    "client": "GOPROXY; GOSUMDB stays enabled"
-   },
-   {
-    "protocol": "pub hosted repository v2",
-    "upstream": "https://pub.dev",
-    "client": "PUB_HOSTED_URL",
-    "note": "archive_url values are absolute and may be signed, so a plain reverse proxy does not cache archives (reported)."
-   },
-   {
-    "protocol": "Maven repositories (Maven Central, Google Maven, Gradle Plugin Portal)",
-    "upstream": "https://repo1.maven.org/maven2, https://dl.google.com/dl/android/maven2, https://plugins.gradle.org/m2",
-    "client": "Gradle init script in ~/.gradle/init.d replacing repositories"
-   },
-   {
-    "protocol": "OCI distribution pull-through (docker.io, ghcr.io, gcr.io, cgr.dev) and pushed BuildKit cache refs",
-    "upstream": "registry endpoints",
-    "client": "Docker registry-mirrors for Docker Hub; containerd hosts.toml under /etc/docker/certs.d/<registry>/ for other registries; buildkitd.toml mirrors",
-    "reuse_candidate": "Trow"
-   },
-   {
-    "protocol": "Immutable HTTP downloads",
-    "upstream": "static.rust-lang.org, storage.googleapis.com/flutter_infra_release, python-build-standalone releases, cdn.playwright.dev, services.gradle.org distributions, GitHub release assets",
-    "client": "RUSTUP_DIST_SERVER and RUSTUP_UPDATE_ROOT; FLUTTER_STORAGE_BASE_URL; UV_PYTHON_INSTALL_MIRROR; PLAYWRIGHT_DOWNLOAD_HOST; Gradle distributionUrl with distributionSha256Sum; mise url_replacements and playbook-dev-devices artifact URLs"
-   },
-   {
-    "protocol": "Gradle HTTP build cache",
-    "upstream": "none (local store)",
-    "client": "settings.gradle(.kts) buildCache remote HttpBuildCache; CI pushes, devices load only"
-   }
-  ],
-  "constraints": [
-   {
-    "fact": "Docker registry-mirrors only mirror Docker Hub.",
-    "level": "verified",
-    "source": "https://docs.docker.com/docker-hub/image-library/mirror/"
-   },
-   {
-    "fact": "dockerd reads containerd hosts.toml from /etc/docker/certs.d/<registry>/ with the containerd image store.",
-    "level": "reported",
-    "source": "https://github.com/moby/moby/blob/master/daemon/hosts.go"
-   },
-   {
-    "fact": "Go toolchain auto-download goes through GOPROXY as module golang.org/toolchain and requires checksum database verification.",
-    "level": "reported",
-    "source": "https://go.dev/doc/toolchain"
-   },
-   {
-    "fact": "sccache Rust caching requires incremental compilation disabled and cannot cache bin, dylib, cdylib and proc-macro crates.",
-    "level": "verified",
-    "source": "https://github.com/mozilla/sccache/blob/v0.19.0/docs/Rust.md"
-   },
-   {
-    "fact": "sccache cross-machine Rust hits need identical absolute paths.",
-    "level": "reported",
-    "source": "https://github.com/mozilla/sccache/pull/2918"
-   },
-   {
-    "fact": "sccache with bazel-remote does not work (open issue).",
-    "level": "verified",
-    "source": "https://github.com/mozilla/sccache/issues/2278"
-   },
-   {
-    "fact": "Develocity/Gradle Build Cache Node is deprecated and unavailable after 2026-12-31.",
-    "level": "verified",
-    "source": "https://docs.develocity.ai/build-cache-node/"
-   },
-   {
-    "fact": "Android sdkmanager has HTTP/SOCKS proxy options but no mirror URL setting.",
-    "level": "reported",
-    "source": "https://developer.android.com/tools/sdkmanager"
-   },
-   {
-    "fact": "Several clients cannot send credentials to a mirror (rustup; likely Flutter storage and Playwright downloads).",
-    "level": "reported",
-    "source": "https://rust-lang.github.io/rustup/environment-variables.html"
-   },
-   {
-    "fact": "minio/minio GitHub repository is archived.",
-    "level": "verified",
-    "source": "https://github.com/minio/minio"
-   }
-  ],
-  "build_caches": {
-   "rust": "Devices keep the managed per-device Cargo build-dir. A shared sccache on RustFS is limited to CI release builds; CI writes, devices read only.",
-   "docker": "BuildKit type=registry cache refs pushed only by CI identities.",
-   "gradle": "HTTP build cache served by the module; CI pushes, devices load only.",
-   "c-cpp": "ccache remote storage through storage helpers, read-only for devices (reported)."
-  },
-  "security": [
-   "Serve only on the internal network with trusted TLS and per-client keys; clients that cannot send credentials are admitted by network identity only.",
-   "Shared build caches are writable only by CI identities; devices and pull-request jobs read only.",
-   "Untrusted pull-request code never receives cache write keys.",
-   "Private package names are never proxied to public upstreams."
-  ],
-  "size_budget_gb_estimate": {
-   "level": "unverified",
-   "oci_mirror": 60,
-   "buildkit_cache": 35,
-   "package_proxies": 73,
-   "immutable_downloads": 38,
-   "build_caches": 40,
-   "metadata_logs": 8,
-   "headroom": 46
-  }
- },
  "registry_note": "Project bindings and survey evidence are private estate data."
 }

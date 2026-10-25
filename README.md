@@ -50,10 +50,10 @@ observations append lines and existing lines are never rewritten.
 
 | File | Role |
 | --- | --- |
-| `registry/decisions.json`, `registry/android-jvm.json` | Hand-edited decisions: lines, holds, exceptions, replacements and their references. |
+| `registry/decisions.json` | The only hand-edited registry input: lines, holds, exceptions, replacements and their references. |
 | `registry/stack.json` | Registry state derived from the decisions and official-source evidence. |
 | `registry/journal.jsonl` | Append-only events with UTC timestamps. |
-| `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints and security rules. |
+| `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
 
 ### How the registry is checked
 
