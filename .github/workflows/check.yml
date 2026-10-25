@@ -1,0 +1,38 @@
+name: NDS checks
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.59.0'
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal
+      - name: Install the pinned registry validator
+        run: just setup
+      - name: Validate schemas and registry
+        run: just check
+      - name: Reject invalid registry content
+        run: just test
+      - name: Require an append-only journal
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: just journal-check "origin/${BASE_REF:-main}"

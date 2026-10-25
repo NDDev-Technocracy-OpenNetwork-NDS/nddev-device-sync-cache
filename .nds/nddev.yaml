@@ -8,7 +8,7 @@ metadata:
 spec:
   standard:
     id: std-0001
-    version: 3.0.1
+    version: 3.0.0
   role: component
   profiles:
   - docs
@@ -17,5 +17,28 @@ spec:
     root: github:NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync
   portfolios:
   - portfolio:nddev-technocracy-opennetwork-nds
+  provides:
+  - name: technology-registry
+    source: contracts/stack.schema.json
+    direction: schema-first
+  - name: technology-registry-decisions
+    source: contracts/decisions.schema.json
+    direction: schema-first
+  - name: technology-registry-journal
+    source: contracts/journal.schema.json
+    direction: schema-first
+  variations:
+  - paths: [module.yaml]
+    purpose: manifest
+    reason: NDS module descriptor owned by the product standards corpus.
+    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
+  - paths: [standarts.lock]
+    purpose: lock
+    reason: NDS contract lock pinning the standards source.
+    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
+  - paths: [contracts]
+    purpose: manifest
+    reason: NDS contract corpus of the technology registry schemas.
+    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
   adapters:
   - claude

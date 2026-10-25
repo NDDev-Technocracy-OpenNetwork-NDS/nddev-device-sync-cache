@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/contracts/decisions.schema.json",
+  "title": "NDS cache technology registry decisions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "snapshot_date", "scopes", "owner_constraints", "toolchains", "package_holds", "replacements", "isolated_tools", "workspace_rules"],
+  "properties": {
+    "schema": {"const": 1},
+    "snapshot_date": {"type": "string", "format": "date"},
+    "scopes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core", "experimental", "archive"],
+      "properties": {
+        "core": {"$ref": "#/$defs/text"},
+        "experimental": {"$ref": "#/$defs/text"},
+        "archive": {"$ref": "#/$defs/text"}
+      }
+    },
+    "owner_constraints": {"$ref": "#/$defs/textMap"},
+    "toolchains": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9+._-]*$"},
+      "additionalProperties": {"$ref": "#/$defs/toolchainDecision"}
+    },
+    "package_holds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npm", "pypi", "crates", "pub"],
+      "properties": {
+        "npm": {"$ref": "#/$defs/holdSet"},
+        "pypi": {"$ref": "#/$defs/holdSet"},
+        "crates": {"$ref": "#/$defs/holdSet"},
+        "pub": {"$ref": "#/$defs/holdSet"},
+        "go": {"$ref": "#/$defs/holdSet"}
+      }
+    },
+    "replacements": {"$ref": "#/$defs/textMap"},
+    "isolated_tools": {"$ref": "#/$defs/textMap"},
+    "workspace_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rule", "verified", "upstream", "removal_condition"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+          "rule": {"$ref": "#/$defs/text"},
+          "verified": {"$ref": "#/$defs/text"},
+          "upstream": {"$ref": "#/$defs/references"},
+          "removal_condition": {"$ref": "#/$defs/text"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "version": {"type": "string", "minLength": 1, "pattern": "^\\S+$"},
+    "references": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "textMap": {"type": "object", "additionalProperties": {"$ref": "#/$defs/text"}},
+    "toolchainDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stack", "status"],
+      "properties": {
+        "stack": {"anyOf": [{"$ref": "#/$defs/version"}, {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/version"}}, {"$ref": "#/$defs/text"}]},
+        "status": {"enum": ["latest", "latest+compat", "latest+lts", "held"]},
+        "scope": {"$ref": "#/$defs/text"},
+        "reason": {"$ref": "#/$defs/text"},
+        "note": {"$ref": "#/$defs/text"},
+        "upstream": {"$ref": "#/$defs/references"},
+        "removal_condition": {"$ref": "#/$defs/text"},
+        "source": {"anyOf": [{"$ref": "#/$defs/text"}, {"$ref": "#/$defs/references"}]}
+      },
+      "if": {"properties": {"status": {"const": "latest"}}},
+      "then": {"properties": {"stack": {"$ref": "#/$defs/version"}}},
+      "else": {"required": ["reason", "removal_condition"]}
+    },
+    "holdSet": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stack", "kind", "reason", "upstream", "removal_condition", "project_count"],
+        "properties": {
+          "stack": {"$ref": "#/$defs/version"},
+          "kind": {"const": "project"},
+          "reason": {"$ref": "#/$defs/text"},
+          "decision": {"$ref": "#/$defs/text"},
+          "alternative": {"$ref": "#/$defs/text"},
+          "upstream": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
+          "removal_condition": {"$ref": "#/$defs/text"},
+          "project_count": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}
