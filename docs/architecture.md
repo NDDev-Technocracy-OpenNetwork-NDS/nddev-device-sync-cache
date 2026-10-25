@@ -1,0 +1,84 @@
+# Cache service architecture
+
+The cache service is one Rust process that serves owner devices and private runners. It proxies a
+fixed allowlist of upstream routes, keeps their objects on the cache volume and reports its state
+through the NDS observability pipeline. It is not an open proxy: a request outside a declared route
+is rejected before any upstream connection.
+
+## Access
+
+The service listens on a loopback address of its host. Devices and runners reach it with
+`rds forward`, so the remote-device-sync transport authenticates every peer with its device key and
+the estate allowlist decides which devices may connect. Write operations that later protocol
+increments add, such as shared build caches, additionally require a per-client key that only CI
+identities hold. Host, port and allowlist values live in the private estate.
+
+## Responsibilities
+
+| Module | Responsibility |
+| --- | --- |
+| `domain` | Route allowlist, upstream mapping, request path validation and object freshness. Pure Rust without I/O. |
+| `cache` | The serve use case: store lookup, single-flight upstream fetch, revalidation, bounded fetch admission and stale fallback. It composes the store and upstream adapters and performs no I/O itself. |
+| `store` | Objects and metadata on the cache volume, atomic commits through temporary files and renames, size accounting, least-recently-used eviction and readiness. |
+| `upstream` | HTTPS client with rustls, connect and read deadlines, conditional requests and redirects limited to allowlisted hosts. |
+| `http` | axum routes for the downloads, `/v1/health`, `/v1/ready` and `/source`; matched route templates for telemetry. |
+| `telemetry` | Build identity for the shared `nddev-device-sync-telemetry` SDK, which owns the envelope, filtering and output. |
+| `config` | Bounded settings from the process environment. |
+
+Each adapter has one implementation, so the use case calls it directly instead of through a port
+trait. Tests exercise the real filesystem store and a real local upstream over sockets.
+
+## Objects and consistency
+
+An object is immutable when its upstream path identifies one release artifact, and mutable when it
+is a channel or index document that upstream rewrites. Immutable objects are served from the store
+after their first complete download. Mutable objects carry their upstream validators and are
+revalidated after a bounded age; when revalidation fails, the stored copy is served and the stale
+response is reported. A download is committed only after it completes within its size bound, so a
+partial transfer never becomes a cached object. Concurrent requests for one missing object share
+one upstream fetch.
+
+The store has a configured capacity. Commits that would exceed it evict the least recently used
+objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
+holds acceleration state only: losing it costs downloads, not data.
+
+## Current limits
+
+- The first request for a missing object waits until the complete download is committed; later
+  requests stream from the store.
+- A `HEAD` request for a missing object downloads and commits the object first.
+- Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings, need the
+  forwarded endpoint behind a local TLS terminator or a later TLS listener.
+
+## Observability
+
+Every request, lifecycle transition and dependency state change emits the canonical NDS event
+envelope through the shared SDK with `module = cache`. Events use matched route templates, status,
+duration, outcome and fixed error classes; they never carry URLs, client keys or project
+identities. The cache-specific signals in `registry/cache-services.json` that the shared event
+contract cannot yet express, such as served bytes and hit ratio per protocol, are added through a
+coordinated change of that contract in `nddev-device-sync-observability`.
+
+## Deployment
+
+`compose.yaml` runs the image with a read-only root filesystem, no capabilities, a non-root user
+and the store directory as the only writable bind mount. The host port binds to loopback. The
+`compose.collector.yaml` overlay switches the container log driver to the Fluent collector of the
+observability deployment, which is the canonical event transport. Host values, capacity and the
+store directory live in the private estate.
+
+## Increments
+
+1. Toolchain downloads: rustup distribution, Flutter storage, python-build-standalone releases,
+   Playwright browsers, Gradle and Go distributions.
+2. crates.io sparse index and crate files.
+3. npm registry for Bun and npm.
+4. PyPI simple index for uv.
+5. Go module proxy, checksum database and toolchain modules.
+6. pub hosted repository.
+7. Maven Central, Google Maven and the Gradle Plugin Portal.
+8. OCI pull-through and BuildKit cache references.
+9. Shared build caches with CI-only writes.
+10. Registry admission and the Rust registry generator.
+
+Each increment is accepted with its real protocol client against the deployed service.
