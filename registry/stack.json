@@ -1,0 +1,6396 @@
+{
+ "schema": 1,
+ "name": "NDS company technology stack",
+ "snapshot_date": "2026-10-25",
+ "generated_at": "2026-10-25T13:32:33Z",
+ "policy": {
+  "rule": "Only the latest stable upstream version is admitted; a lower version requires a recorded reason and a recheck date.",
+  "scopes": {
+   "core": "Product, platform and standards repositories adopting the stack.",
+   "experimental": "Hackathon and guild repositories: proxied by the cache, not bound by the single stack.",
+   "archive": "Archived repositories: not migrated."
+  }
+ },
+ "toolchains": [
+  {
+   "id": "rust",
+   "upstream_latest": "1.99.1",
+   "stack": "1.99.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "detail": "1.99.1 (58cf8f9c3 2026-10-13)",
+    "published": "2026-10-15"
+   },
+   "source": "https://static.rust-lang.org/dist/channel-rust-stable.toml",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "node",
+   "upstream_latest": "v26.12.1",
+   "stack": "26.12.1",
+   "status": "latest",
+   "scope": "core",
+   "note": "Node 26 is Current until it becomes Active LTS on 2026-10-28; Node 24 entered Maintenance on 2026-10-20. Node 26.12.1 bundles npm 11.20.0; standalone npm latest is 12.2.1.",
+   "upstream_detail": {
+    "published": "2026-10-21",
+    "latest_lts": "v24.22.1",
+    "lts_codename": "Krypton",
+    "lts_date": "2026-10-20",
+    "active_lts_lines": [],
+    "schedule_current_line": "v26"
+   },
+   "source": "https://nodejs.org/dist/index.json + nodejs/Release schedule.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "bun",
+   "upstream_latest": "bun-v1.4.4",
+   "stack": "1.4.4",
+   "status": "latest",
+   "scope": "core",
+   "note": "Primary JS/TS package manager and runtime per playbook-dev-devices.",
+   "upstream_detail": {
+    "published": "2026-10-22T10:11:32Z"
+   },
+   "source": "https://github.com/oven-sh/bun/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "python",
+   "upstream_latest": "3.15.1",
+   "stack": [
+    "3.15.1",
+    "3.14.9"
+   ],
+   "status": "latest+compat",
+   "scope": "core",
+   "reason": "Owner selects both lines. 3.15 is the latest; 3.14 is admitted for projects whose locked set does not resolve on 3.15. The core whole-set uv resolution succeeds on 3.14 and fails on 3.15 (ctranslate2/faster-whisper publish no cp315 wheels; livekit-agents requires <3.15).",
+   "upstream": [
+    "https://github.com/OpenNMT/CTranslate2/pull/2129"
+   ],
+   "removal_condition": "The 3.14 line stays while any core project needs it; re-run the core resolution on 3.15 after CTranslate2 publishes cp315 wheels and livekit-agents allows 3.15.",
+   "upstream_detail": {
+    "published": "2026-10-21",
+    "branches": {
+     "3.11": {
+      "latest": "3.11.17",
+      "status": "security"
+     },
+     "3.12": {
+      "latest": "3.12.15",
+      "status": "security"
+     },
+     "3.13": {
+      "latest": "3.13.17",
+      "status": "security"
+     },
+     "3.14": {
+      "latest": "3.14.9",
+      "status": "bugfix"
+     },
+     "3.15": {
+      "latest": "3.15.1",
+      "status": "bugfix"
+     }
+    },
+    "prerelease_branches": [
+     "3.16"
+    ]
+   },
+   "source": "https://www.python.org/api/v2/downloads/release/ + https://peps.python.org/api/release-cycle.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "uv",
+   "upstream_latest": "0.13.5",
+   "stack": "0.13.5",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-22T01:35:54Z"
+   },
+   "source": "https://github.com/astral-sh/uv/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "python-build-standalone",
+   "stack": "20261021",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "error": "string indices must be integers, not 'str'"
+   },
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "go",
+   "upstream_latest": "go1.27.3",
+   "stack": "go1.27.3",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "supported": [
+     "go1.27.3",
+     "go1.26.10"
+    ]
+   },
+   "source": "https://go.dev/dl/?mode=json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "flutter+dart",
+   "upstream_latest": "3.47.8",
+   "stack": "3.47.8",
+   "status": "latest",
+   "scope": "core",
+   "note": "Dart 3.13.7 bundled.",
+   "upstream_detail": {
+    "dart": "3.13.7",
+    "published": "2026-10-23T19:02:25.384067Z",
+    "archive": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.8-stable.tar.xz",
+    "sha256": "baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2"
+   },
+   "source": "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "typescript",
+   "upstream_latest": "7.0.2",
+   "stack": [
+    "7.0.2",
+    "6.0.3"
+   ],
+   "status": "latest+compat",
+   "scope": "core",
+   "reason": "Owner selects TypeScript 7 (native compiler) and the latest TypeScript 6 (JavaScript compiler API for typescript-eslint, openapi-typescript, @astrojs/check, svelte-language-server). The @typescript/typescript6 alias package currently publishes 6.0.2; alias npm:typescript@6.0.3 instead.",
+   "companion_upstream": [
+    "https://github.com/typescript-eslint/typescript-eslint/issues/10940",
+    "https://github.com/openapi-ts/openapi-typescript/issues/2841",
+    "https://github.com/withastro/astro/pull/17852"
+   ],
+   "companion_removal_condition": "typescript-eslint, openapi-typescript and @astrojs/check run on TypeScript 7.",
+   "upstream_detail": {
+    "tags": {
+     "rc": "7.0.1-rc",
+     "beta": "7.1.0-beta",
+     "next": "7.1.0-dev.20261025.1"
+    }
+   },
+   "source": "https://registry.npmjs.org/-/package/typescript/dist-tags",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "npm",
+   "upstream_latest": "12.2.1",
+   "stack": "12.2.1",
+   "status": "latest",
+   "scope": "core",
+   "note": "Fallback only; Node 26.12.1 bundles 11.20.0.",
+   "upstream_detail": {
+    "tags": {}
+   },
+   "source": "https://registry.npmjs.org/-/package/npm/dist-tags",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "pnpm",
+   "upstream_latest": "12.15.0",
+   "stack": "12.15.0",
+   "status": "latest",
+   "scope": "experimental-only",
+   "upstream_detail": {
+    "tags": {}
+   },
+   "source": "https://registry.npmjs.org/-/package/pnpm/dist-tags",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "just",
+   "upstream_latest": "1.59.0",
+   "stack": "1.59.0",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-15T06:41:04Z"
+   },
+   "source": "https://github.com/casey/just/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "mise",
+   "upstream_latest": "v2026.10.19",
+   "stack": "v2026.10.19",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-24T20:02:03Z"
+   },
+   "source": "https://github.com/jdx/mise/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "jdk",
+   "upstream_latest": "27.0.1+0",
+   "stack": [
+    "27.0.1",
+    "25.0.5"
+   ],
+   "status": "latest+lts",
+   "scope": "core",
+   "reason": "Owner selects the latest feature release and the latest LTS. Gradle runs on JDK 27 only from 9.8.0; with the Kotlin-compatible Gradle line use JDK 25. Kotlin 2.4.21 -jvm-target stops at 26 and Flutter 3.47.8 treats Java >=26 as newer-than-known, so Android/Flutter apps keep Java target 17.",
+   "note": "playbook-dev-devices installs JDK 27 and JDK 21 (jvm-lts); the LTS line it installs needs to move to 25.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "None for the two-line policy; the Java 17 app target follows Flutter/Kotlin support for newer targets.",
+   "upstream_detail": {
+    "latest_feature": 27,
+    "latest_lts": 25,
+    "available_lts": [
+     17,
+     21,
+     25
+    ],
+    "latest_lts_build": "25.0.5+8.0.LTS"
+   },
+   "source": "https://api.adoptium.net/v3/info/available_releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "gradle",
+   "upstream_latest": "9.8.2",
+   "stack": [
+    "9.8.2",
+    "9.7.1"
+   ],
+   "status": "latest+compat",
+   "scope": "core",
+   "reason": "Owner selects the latest Gradle and the newest Gradle fully supported by Kotlin Gradle Plugin 2.4.21 (Gradle 7.6.3-9.7.0; 9.7.1 is its bug-fix patch). Kotlin/Android builds use the compatible line.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "A Kotlin Gradle Plugin release that lists Gradle >=9.8 makes the latest line sufficient.",
+   "upstream_detail": {
+    "published": "20261019162926+0000"
+   },
+   "source": "https://services.gradle.org/versions/current",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "android-gradle-plugin",
+   "upstream_latest": "9.4.1",
+   "stack": [
+    "9.4.1",
+    "9.3.3"
+   ],
+   "status": "latest+compat",
+   "scope": "core",
+   "reason": "The owner's Gradle rule applied to AGP: the latest release and the newest release fully supported by Kotlin Gradle Plugin 2.4.21 (AGP 8.5.2-9.3.1; 9.3.3 is a bug-fix patch). AGP 9.4 requires Gradle >=9.6.0.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "A Kotlin Gradle Plugin release that lists AGP >=9.4.",
+   "source": "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/maven-metadata.xml",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "kotlin",
+   "upstream_latest": "2.4.21",
+   "stack": "2.4.21",
+   "status": "latest",
+   "scope": "core",
+   "note": "org.jetbrains.kotlin.plugin.compose must equal 2.4.21.",
+   "source": "https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/maven-metadata.xml",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "android-sdk",
+   "stack": "platform android-37.0 (compileSdk/targetSdk 37), build-tools 37.0.0 (set buildToolsVersion explicitly; AGP default is 36.0.0), cmdline-tools 23.0, NDK 30.0.16248370",
+   "status": "held",
+   "scope": "core",
+   "reason": "Upstream latest platform is 37.2 (minor API); AGP 9.3 documents API 37 and Flutter reads compileSdk as an integer; 37.1/37.2 unverified. NDK r30 is the latest LTS and already used by a core repo, but AGP 9.x and Flutter 3.47.8 default to 28.2.13676358 (fallback).",
+   "removal_condition": "AGP and Flutter document support for minor API platforms (37.1/37.2) and NDK r30.",
+   "upstream_detail": {
+    "platform_api": "37.2",
+    "build_tools": "37.0.0",
+    "ndk": "30.0.16248370",
+    "cmdline_tools": "23.0",
+    "cmake": "4.1.2"
+   },
+   "source": "https://dl.google.com/android/repository/repository2-3.xml (channel-0 stable)",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "dotnet",
+   "upstream_latest": "10.0.402",
+   "stack": "10.0.402",
+   "status": "latest",
+   "scope": "ci-standard-profiles",
+   "upstream_detail": {
+    "channel": "10.0",
+    "release_type": "lts",
+    "latest_lts_sdk": "10.0.402"
+   },
+   "source": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cmake",
+   "upstream_latest": "v4.4.4",
+   "stack": "v4.4.4",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-02T16:18:25Z"
+   },
+   "source": "https://github.com/Kitware/CMake/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "llvm",
+   "upstream_latest": "llvmorg-23.1.4",
+   "stack": "llvmorg-23.1.4",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-20T13:03:13Z"
+   },
+   "source": "https://github.com/llvm/llvm-project/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "gcc",
+   "upstream_latest": "16.2.0",
+   "stack": "16.2.0",
+   "status": "latest",
+   "scope": "core",
+   "source": "https://gcc.gnu.org/pub/gcc/releases/",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "swift",
+   "upstream_latest": "6.4.1",
+   "stack": "6.4.1",
+   "status": "latest",
+   "scope": "ci-standard-profiles",
+   "upstream_detail": {
+    "published": "2026-10-12"
+   },
+   "source": "https://www.swift.org/api/v1/install/releases.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "ruby",
+   "upstream_latest": "4.0.9",
+   "stack": "4.0.9",
+   "status": "latest",
+   "scope": "ci-standard-profiles",
+   "source": "https://cache.ruby-lang.org/pub/ruby/index.txt",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "maven",
+   "upstream_latest": "3.10.0",
+   "stack": "3.10.0",
+   "status": "latest",
+   "scope": "ci-standard-profiles",
+   "source": "Maven Central org/apache/maven/apache-maven",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "qt",
+   "stack": "6.12.0",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "note": "see download.qt.io"
+   },
+   "source": "https://download.qt.io/official_releases/qt/6.12/",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "gdb",
+   "stack": "18.1",
+   "status": "latest",
+   "scope": "core",
+   "source": "https://ftp.gnu.org/gnu/gdb/",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "playwright",
+   "upstream_latest": "1.64.1",
+   "stack": "1.64.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "browsers": {
+     "chromium": "156.0.8078.4",
+     "chromium-headless-shell": "156.0.8078.4",
+     "firefox": "157.0",
+     "webkit": "27.2",
+     "ffmpeg": "1013",
+     "winldd": "1007",
+     "android": "1001"
+    }
+   },
+   "source": "microsoft/playwright v1.64.1 packages/playwright-core/browsers.json",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "docker-engine",
+   "upstream_latest": "docker-v29.9.2",
+   "stack": "docker-v29.9.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-20T20:51:17Z"
+   },
+   "source": "https://github.com/moby/moby/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "buildx",
+   "upstream_latest": "v0.38.1",
+   "stack": "v0.38.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-20T22:09:11Z"
+   },
+   "source": "https://github.com/docker/buildx/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "compose",
+   "upstream_latest": "v5.6.1",
+   "stack": "v5.6.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-21T07:54:18Z"
+   },
+   "source": "https://github.com/docker/compose/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "buildkit",
+   "upstream_latest": "dockerfile/1.28.0-labs",
+   "stack": "v0.34.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-07T23:38:41Z"
+   },
+   "source": "https://github.com/moby/buildkit/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "containerd",
+   "upstream_latest": "v2.4.2",
+   "stack": "v2.4.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-13T22:35:06Z"
+   },
+   "source": "https://github.com/containerd/containerd/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "sccache",
+   "upstream_latest": "0.19.0",
+   "stack": "0.19.0",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.91.0"
+   },
+   "source": "https://index.crates.io/sc/ca/sccache",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "ccache",
+   "upstream_latest": "v4.14.2",
+   "stack": "v4.14.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "published": "2026-10-18T12:05:11Z"
+   },
+   "source": "https://github.com/ccache/ccache/releases",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-nextest",
+   "upstream_latest": "0.9.149",
+   "stack": "0.9.149",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.91"
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-nextest",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-deny",
+   "upstream_latest": "0.20.2",
+   "stack": "0.20.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.88.0"
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-deny",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-audit",
+   "upstream_latest": "0.22.2",
+   "stack": "0.22.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.88"
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-audit",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-llvm-cov",
+   "upstream_latest": "0.9.1",
+   "stack": "0.9.1",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.87"
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-llvm-cov",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "wasm-bindgen-cli",
+   "upstream_latest": "0.2.129",
+   "stack": "0.2.129",
+   "status": "latest",
+   "scope": "core",
+   "note": "Must equal the wasm-bindgen crate (0.2.129).",
+   "upstream_detail": {
+    "rust_version": "1.86"
+   },
+   "source": "https://index.crates.io/wa/sm/wasm-bindgen-cli",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "wasm-pack",
+   "upstream_latest": "0.15.0",
+   "stack": "0.15.0",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": null
+   },
+   "source": "https://index.crates.io/wa/sm/wasm-pack",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "flutter_rust_bridge_codegen",
+   "upstream_latest": "2.13.0",
+   "stack": "2.13.0",
+   "status": "latest",
+   "scope": "core",
+   "note": "Must equal crate flutter_rust_bridge 2.13.0 and pub flutter_rust_bridge 2.13.0.",
+   "upstream_detail": {
+    "rust_version": "1.74.0"
+   },
+   "source": "https://index.crates.io/fl/ut/flutter_rust_bridge_codegen",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "sqlx-cli",
+   "upstream_latest": "0.9.0",
+   "stack": "0.9.0",
+   "status": "latest",
+   "scope": "core",
+   "note": "Must equal crate sqlx 0.9.0.",
+   "upstream_detail": {
+    "rust_version": "1.94.0"
+   },
+   "source": "https://index.crates.io/sq/lx/sqlx-cli",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-machete",
+   "upstream_latest": "0.9.2",
+   "stack": "0.9.2",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": null
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-machete",
+   "verified_at": "2026-10-25T12:49:53Z"
+  },
+  {
+   "id": "cargo-shear",
+   "upstream_latest": "1.14.0",
+   "stack": "1.14.0",
+   "status": "latest",
+   "scope": "core",
+   "upstream_detail": {
+    "rust_version": "1.95"
+   },
+   "source": "https://index.crates.io/ca/rg/cargo-shear",
+   "verified_at": "2026-10-25T12:49:53Z"
+  }
+ ],
+ "packages": {
+  "npm": {
+   "@actions/languageserver": {
+    "latest": "0.3.61",
+    "stack": "0.3.61",
+    "status": "latest",
+    "engines": {
+     "node": ">= 20"
+    },
+    "source": "https://registry.npmjs.org/@actions/languageserver/latest"
+   },
+   "@ansible/ansible-language-server": {
+    "latest": "26.6.0",
+    "stack": "26.6.0",
+    "status": "latest",
+    "engines": {
+     "npm": ">=7.11.2",
+     "node": ">=24.0"
+    },
+    "source": "https://registry.npmjs.org/@ansible/ansible-language-server/latest"
+   },
+   "@anthropic-ai/sdk": {
+    "latest": "1.3.0",
+    "stack": "1.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@anthropic-ai/sdk/latest"
+   },
+   "@astrojs/check": {
+    "latest": "0.9.12",
+    "stack": "0.9.12",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@astrojs/check/latest"
+   },
+   "@astrojs/language-server": {
+    "latest": "2.17.3",
+    "stack": "2.17.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@astrojs/language-server/latest"
+   },
+   "@astrojs/react": {
+    "latest": "7.1.1",
+    "stack": "7.1.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.23.4"
+    },
+    "source": "https://registry.npmjs.org/@astrojs/react/latest"
+   },
+   "@axe-core/playwright": {
+    "latest": "4.14.0",
+    "stack": "4.14.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/@axe-core/playwright/latest"
+   },
+   "@babel/core": {
+    "latest": "8.0.9",
+    "stack": "8.0.9",
+    "status": "latest",
+    "engines": {
+     "node": "^22.18.0 || >=24.11.0"
+    },
+    "source": "https://registry.npmjs.org/@babel/core/latest"
+   },
+   "@babel/parser": {
+    "latest": "8.0.8",
+    "stack": "8.0.8",
+    "status": "latest",
+    "engines": {
+     "node": "^22.18.0 || >=24.11.0"
+    },
+    "source": "https://registry.npmjs.org/@babel/parser/latest"
+   },
+   "@base-ui/react": {
+    "latest": "1.9.0",
+    "stack": "1.9.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=14.0.0"
+    },
+    "source": "https://registry.npmjs.org/@base-ui/react/latest"
+   },
+   "@biomejs/biome": {
+    "latest": "2.6.3",
+    "stack": "2.6.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=14.21.3"
+    },
+    "source": "https://registry.npmjs.org/@biomejs/biome/latest"
+   },
+   "@datadog/datadog-ci": {
+    "latest": "5.25.0",
+    "stack": "5.25.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/@datadog/datadog-ci/latest"
+   },
+   "@dprint/json": {
+    "latest": "0.25.2",
+    "stack": "0.25.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@dprint/json/latest"
+   },
+   "@dprint/linux-x64-glibc": {
+    "latest": "0.64.3",
+    "stack": "0.64.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@dprint/linux-x64-glibc/latest"
+   },
+   "@eslint-react/eslint-plugin": {
+    "latest": "5.28.8",
+    "stack": "5.28.8",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19.0"
+    },
+    "source": "https://registry.npmjs.org/@eslint-react/eslint-plugin/latest"
+   },
+   "@eslint/eslintrc": {
+    "latest": "3.3.7",
+    "stack": "3.3.7",
+    "status": "latest",
+    "engines": {
+     "node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+    },
+    "source": "https://registry.npmjs.org/@eslint/eslintrc/latest"
+   },
+   "@eslint/js": {
+    "latest": "10.0.1",
+    "stack": "10.0.1",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || ^22.13.0 || >=24"
+    },
+    "source": "https://registry.npmjs.org/@eslint/js/latest"
+   },
+   "@firebase/rules-unit-testing": {
+    "latest": "6.0.0",
+    "stack": "6.0.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=24.12.0"
+    },
+    "source": "https://registry.npmjs.org/@firebase/rules-unit-testing/latest"
+   },
+   "@fontsource-variable/geist": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource-variable/geist/latest"
+   },
+   "@fontsource-variable/inter": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource-variable/inter/latest"
+   },
+   "@fontsource-variable/onest": {
+    "latest": "5.3.1",
+    "stack": "5.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource-variable/onest/latest"
+   },
+   "@fontsource-variable/tiktok-sans": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource-variable/tiktok-sans/latest"
+   },
+   "@fontsource/ibm-plex-sans": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource/ibm-plex-sans/latest"
+   },
+   "@fontsource/ibm-plex-sans-arabic": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource/ibm-plex-sans-arabic/latest"
+   },
+   "@fontsource/inter": {
+    "latest": "5.3.0",
+    "stack": "5.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource/inter/latest"
+   },
+   "@fontsource/noto-sans-sc": {
+    "latest": "5.3.1",
+    "stack": "5.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@fontsource/noto-sans-sc/latest"
+   },
+   "@happy-dom/global-registrator": {
+    "latest": "21.0.4",
+    "stack": "21.0.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/@happy-dom/global-registrator/latest"
+   },
+   "@hello-pangea/dnd": {
+    "latest": "18.0.1",
+    "stack": "18.0.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@hello-pangea/dnd/latest"
+   },
+   "@hey-api/client-axios": {
+    "latest": "0.9.1",
+    "stack": "0.9.1",
+    "status": "replace",
+    "reason": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated).",
+    "source": "https://registry.npmjs.org/@hey-api/client-axios/latest"
+   },
+   "@hey-api/client-fetch": {
+    "latest": "0.13.1",
+    "stack": "0.13.1",
+    "status": "replace",
+    "reason": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated).",
+    "source": "https://registry.npmjs.org/@hey-api/client-fetch/latest"
+   },
+   "@hey-api/openapi-ts": {
+    "latest": "0.99.0",
+    "stack": "0.99.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.18.0"
+    },
+    "source": "https://registry.npmjs.org/@hey-api/openapi-ts/latest"
+   },
+   "@hookform/resolvers": {
+    "latest": "6.0.0",
+    "stack": "6.0.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@hookform/resolvers/latest"
+   },
+   "@livekit/components-core": {
+    "latest": "0.12.15",
+    "stack": "0.12.15",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/@livekit/components-core/latest"
+   },
+   "@livekit/components-react": {
+    "latest": "2.9.24",
+    "stack": "2.9.24",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/@livekit/components-react/latest"
+   },
+   "@livekit/components-styles": {
+    "latest": "1.2.0",
+    "stack": "1.2.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/@livekit/components-styles/latest"
+   },
+   "@mediapipe/tasks-vision": {
+    "latest": "1.1.1",
+    "stack": "1.1.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@mediapipe/tasks-vision/latest"
+   },
+   "@msw/playwright": {
+    "latest": "0.7.0",
+    "stack": "0.7.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.0.0"
+    },
+    "source": "https://registry.npmjs.org/@msw/playwright/latest"
+   },
+   "@next/bundle-analyzer": {
+    "latest": "16.4.3",
+    "stack": "16.4.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@next/bundle-analyzer/latest"
+   },
+   "@next/eslint-plugin-next": {
+    "latest": "16.4.3",
+    "stack": "16.4.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@next/eslint-plugin-next/latest"
+   },
+   "@opencode/cli": {
+    "latest": "2.1.4",
+    "stack": "2.1.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@opencode/cli/latest"
+   },
+   "@openobserve/browser-rum": {
+    "latest": "0.4.3",
+    "stack": "0.4.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@openobserve/browser-rum/latest"
+   },
+   "@opentelemetry/api": {
+    "latest": "1.10.0",
+    "stack": "1.10.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=8.0.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/api/latest"
+   },
+   "@opentelemetry/api-logs": {
+    "latest": "0.223.0",
+    "stack": "0.223.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=8.0.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/api-logs/latest"
+   },
+   "@opentelemetry/exporter-logs-otlp-http": {
+    "latest": "0.300.0",
+    "stack": "0.300.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.15.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-http/latest"
+   },
+   "@opentelemetry/instrumentation": {
+    "latest": "0.300.0",
+    "stack": "0.300.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "0.223.0",
+      "reason": "@vercel/otel 2.1.3 peers >=0.200.0 <0.300.0.",
+      "upstream": [
+       "https://github.com/vercel/otel/pull/223"
+      ],
+      "removal_condition": "@vercel/otel releases OpenTelemetry JS SDK 3.x support.",
+      "project_count": 6
+     }
+    ],
+    "engines": {
+     "node": ">=22.15.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/instrumentation/latest"
+   },
+   "@opentelemetry/resources": {
+    "latest": "3.0.0",
+    "stack": "3.0.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "2.12.0",
+      "reason": "@vercel/otel 2.1.3 peers ^2.",
+      "upstream": [
+       "https://github.com/vercel/otel/pull/223"
+      ],
+      "removal_condition": "@vercel/otel releases OpenTelemetry JS SDK 3.x support.",
+      "project_count": 6
+     }
+    ],
+    "engines": {
+     "node": ">=22.15.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/resources/latest"
+   },
+   "@opentelemetry/sdk-logs": {
+    "latest": "3.0.0",
+    "stack": "3.0.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "0.223.0",
+      "reason": "@vercel/otel 2.1.3 peers <0.300.0.",
+      "upstream": [
+       "https://github.com/vercel/otel/pull/223"
+      ],
+      "removal_condition": "@vercel/otel releases OpenTelemetry JS SDK 3.x support.",
+      "project_count": 6
+     }
+    ],
+    "engines": {
+     "node": ">=22.15.0"
+    },
+    "source": "https://registry.npmjs.org/@opentelemetry/sdk-logs/latest"
+   },
+   "@payloadcms/db-postgres": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@payloadcms/db-postgres/latest"
+   },
+   "@payloadcms/email-nodemailer": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.23.4 || >=24.22.1"
+    },
+    "source": "https://registry.npmjs.org/@payloadcms/email-nodemailer/latest"
+   },
+   "@payloadcms/next": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.23.4 || >=24.22.1"
+    },
+    "source": "https://registry.npmjs.org/@payloadcms/next/latest"
+   },
+   "@payloadcms/richtext-lexical": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.23.4 || >=24.22.1"
+    },
+    "source": "https://registry.npmjs.org/@payloadcms/richtext-lexical/latest"
+   },
+   "@payloadcms/translations": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@payloadcms/translations/latest"
+   },
+   "@payloadcms/ui": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.23.4 || >=24.22.1"
+    },
+    "source": "https://registry.npmjs.org/@payloadcms/ui/latest"
+   },
+   "@playwright/test": {
+    "latest": "1.64.1",
+    "stack": "1.64.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/@playwright/test/latest"
+   },
+   "@radix-ui/react-accordion": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-accordion/latest"
+   },
+   "@radix-ui/react-alert-dialog": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-alert-dialog/latest"
+   },
+   "@radix-ui/react-aspect-ratio": {
+    "latest": "1.2.0",
+    "stack": "1.2.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-aspect-ratio/latest"
+   },
+   "@radix-ui/react-avatar": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-avatar/latest"
+   },
+   "@radix-ui/react-checkbox": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-checkbox/latest"
+   },
+   "@radix-ui/react-collapsible": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-collapsible/latest"
+   },
+   "@radix-ui/react-context-menu": {
+    "latest": "2.4.1",
+    "stack": "2.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-context-menu/latest"
+   },
+   "@radix-ui/react-dialog": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-dialog/latest"
+   },
+   "@radix-ui/react-dropdown-menu": {
+    "latest": "2.2.1",
+    "stack": "2.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-dropdown-menu/latest"
+   },
+   "@radix-ui/react-hover-card": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-hover-card/latest"
+   },
+   "@radix-ui/react-label": {
+    "latest": "2.1.17",
+    "stack": "2.1.17",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-label/latest"
+   },
+   "@radix-ui/react-menubar": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-menubar/latest"
+   },
+   "@radix-ui/react-navigation-menu": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-navigation-menu/latest"
+   },
+   "@radix-ui/react-popover": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-popover/latest"
+   },
+   "@radix-ui/react-progress": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-progress/latest"
+   },
+   "@radix-ui/react-radio-group": {
+    "latest": "1.5.1",
+    "stack": "1.5.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-radio-group/latest"
+   },
+   "@radix-ui/react-scroll-area": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-scroll-area/latest"
+   },
+   "@radix-ui/react-select": {
+    "latest": "2.4.1",
+    "stack": "2.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-select/latest"
+   },
+   "@radix-ui/react-separator": {
+    "latest": "1.2.0",
+    "stack": "1.2.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-separator/latest"
+   },
+   "@radix-ui/react-slider": {
+    "latest": "1.6.1",
+    "stack": "1.6.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-slider/latest"
+   },
+   "@radix-ui/react-slot": {
+    "latest": "1.5.0",
+    "stack": "1.5.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-slot/latest"
+   },
+   "@radix-ui/react-switch": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-switch/latest"
+   },
+   "@radix-ui/react-tabs": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-tabs/latest"
+   },
+   "@radix-ui/react-toast": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-toast/latest"
+   },
+   "@radix-ui/react-toggle": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-toggle/latest"
+   },
+   "@radix-ui/react-toggle-group": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-toggle-group/latest"
+   },
+   "@radix-ui/react-tooltip": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@radix-ui/react-tooltip/latest"
+   },
+   "@react-email/components": {
+    "latest": "1.0.12",
+    "stack": "1.0.12",
+    "status": "replace",
+    "reason": "Package marked no longer supported by npm.",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/@react-email/components/latest"
+   },
+   "@react-email/render": {
+    "latest": "2.1.1",
+    "stack": "2.1.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/@react-email/render/latest"
+   },
+   "@react-three/fiber": {
+    "latest": "9.8.2",
+    "stack": "9.8.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@react-three/fiber/latest"
+   },
+   "@rolldown/plugin-babel": {
+    "latest": "0.2.4",
+    "stack": "0.2.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0 || ^24.0.0"
+    },
+    "source": "https://registry.npmjs.org/@rolldown/plugin-babel/latest"
+   },
+   "@size-limit/file": {
+    "latest": "14.3.0",
+    "stack": "14.3.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.19.0 || ^24.5.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/@size-limit/file/latest"
+   },
+   "@stylelint/language-server": {
+    "latest": "1.1.1",
+    "stack": "1.1.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.17.0"
+    },
+    "source": "https://registry.npmjs.org/@stylelint/language-server/latest"
+   },
+   "@tailwindcss/language-server": {
+    "latest": "0.16.0",
+    "stack": "0.16.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=18.0.0"
+    },
+    "source": "https://registry.npmjs.org/@tailwindcss/language-server/latest"
+   },
+   "@tailwindcss/postcss": {
+    "latest": "4.3.3",
+    "stack": "4.3.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tailwindcss/postcss/latest"
+   },
+   "@tailwindcss/typography": {
+    "latest": "0.5.20",
+    "stack": "0.5.20",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tailwindcss/typography/latest"
+   },
+   "@tailwindcss/vite": {
+    "latest": "4.3.3",
+    "stack": "4.3.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tailwindcss/vite/latest"
+   },
+   "@tanstack/eslint-plugin-query": {
+    "latest": "5.104.5",
+    "stack": "5.104.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tanstack/eslint-plugin-query/latest"
+   },
+   "@tanstack/eslint-plugin-router": {
+    "latest": "1.162.0",
+    "stack": "1.162.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tanstack/eslint-plugin-router/latest"
+   },
+   "@tanstack/react-form": {
+    "latest": "1.33.5",
+    "stack": "1.33.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tanstack/react-form/latest"
+   },
+   "@tanstack/react-query": {
+    "latest": "5.104.5",
+    "stack": "5.104.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tanstack/react-query/latest"
+   },
+   "@tanstack/react-router": {
+    "latest": "1.170.46",
+    "stack": "1.170.46",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19"
+    },
+    "source": "https://registry.npmjs.org/@tanstack/react-router/latest"
+   },
+   "@tanstack/react-start": {
+    "latest": "1.169.4",
+    "stack": "1.169.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/@tanstack/react-start/latest"
+   },
+   "@tanstack/react-table": {
+    "latest": "9.3.1",
+    "stack": "9.3.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/@tanstack/react-table/latest"
+   },
+   "@tanstack/router-generator": {
+    "latest": "1.167.46",
+    "stack": "1.167.46",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19"
+    },
+    "source": "https://registry.npmjs.org/@tanstack/router-generator/latest"
+   },
+   "@tanstack/router-plugin": {
+    "latest": "1.168.48",
+    "stack": "1.168.48",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19"
+    },
+    "source": "https://registry.npmjs.org/@tanstack/router-plugin/latest"
+   },
+   "@terrazzo/parser": {
+    "latest": "2.10.0",
+    "stack": "2.10.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@terrazzo/parser/latest"
+   },
+   "@testing-library/dom": {
+    "latest": "10.4.2",
+    "stack": "10.4.2",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/@testing-library/dom/latest"
+   },
+   "@testing-library/jest-dom": {
+    "latest": "7.0.1",
+    "stack": "7.0.1",
+    "status": "latest",
+    "engines": {
+     "npm": ">=6",
+     "node": ">=22",
+     "yarn": ">=1"
+    },
+    "source": "https://registry.npmjs.org/@testing-library/jest-dom/latest"
+   },
+   "@testing-library/react": {
+    "latest": "16.3.3",
+    "stack": "16.3.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/@testing-library/react/latest"
+   },
+   "@testing-library/user-event": {
+    "latest": "14.6.8",
+    "stack": "14.6.8",
+    "status": "latest",
+    "engines": {
+     "npm": ">=6",
+     "node": ">=12"
+    },
+    "source": "https://registry.npmjs.org/@testing-library/user-event/latest"
+   },
+   "@tiptap/extension-image": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-image/latest"
+   },
+   "@tiptap/extension-link": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-link/latest"
+   },
+   "@tiptap/extension-placeholder": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-placeholder/latest"
+   },
+   "@tiptap/extension-subscript": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-subscript/latest"
+   },
+   "@tiptap/extension-superscript": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-superscript/latest"
+   },
+   "@tiptap/extension-table": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-table/latest"
+   },
+   "@tiptap/extension-text-align": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-text-align/latest"
+   },
+   "@tiptap/extension-underline": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/extension-underline/latest"
+   },
+   "@tiptap/pm": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/pm/latest"
+   },
+   "@tiptap/react": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/react/latest"
+   },
+   "@tiptap/starter-kit": {
+    "latest": "3.32.0",
+    "stack": "3.32.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@tiptap/starter-kit/latest"
+   },
+   "@types/babel__core": {
+    "latest": "7.20.5",
+    "stack": "7.20.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/babel__core/latest"
+   },
+   "@types/bun": {
+    "latest": "1.4.4",
+    "stack": "1.4.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/bun/latest"
+   },
+   "@types/fontkit": {
+    "latest": "2.0.9",
+    "stack": "2.0.9",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/fontkit/latest"
+   },
+   "@types/leaflet": {
+    "latest": "1.9.22",
+    "stack": "1.9.22",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/leaflet/latest"
+   },
+   "@types/node": {
+    "latest": "26.6.5",
+    "stack": "26.6.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/node/latest"
+   },
+   "@types/nodemailer": {
+    "latest": "8.0.2",
+    "stack": "8.0.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/nodemailer/latest"
+   },
+   "@types/qrcode": {
+    "latest": "1.5.6",
+    "stack": "1.5.6",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/qrcode/latest"
+   },
+   "@types/react": {
+    "latest": "19.3.0",
+    "stack": "19.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/react/latest"
+   },
+   "@types/react-dom": {
+    "latest": "19.3.0",
+    "stack": "19.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/react-dom/latest"
+   },
+   "@types/sanitize-html": {
+    "latest": "2.16.2",
+    "stack": "2.16.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/sanitize-html/latest"
+   },
+   "@types/three": {
+    "latest": "0.186.0",
+    "stack": "0.186.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@types/three/latest"
+   },
+   "@usebruno/cli": {
+    "latest": "4.3.0",
+    "stack": "4.3.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@usebruno/cli/latest"
+   },
+   "@vercel/otel": {
+    "latest": "2.1.3",
+    "stack": "2.1.3",
+    "status": "latest",
+    "engines": {
+     "node": "^18.19.0 || >=20.6.0"
+    },
+    "source": "https://registry.npmjs.org/@vercel/otel/latest"
+   },
+   "@vite-pwa/assets-generator": {
+    "latest": "2.0.0",
+    "stack": "2.0.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19.0"
+    },
+    "source": "https://registry.npmjs.org/@vite-pwa/assets-generator/latest"
+   },
+   "@vitejs/plugin-react": {
+    "latest": "6.1.2",
+    "stack": "6.1.2",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || >=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/@vitejs/plugin-react/latest"
+   },
+   "@vitejs/plugin-react-swc": {
+    "latest": "4.3.3",
+    "stack": "4.3.3",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || >=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/@vitejs/plugin-react-swc/latest"
+   },
+   "@vitest/coverage-v8": {
+    "latest": "5.0.5",
+    "stack": "5.0.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@vitest/coverage-v8/latest"
+   },
+   "@vitest/ui": {
+    "latest": "5.0.5",
+    "stack": "5.0.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@vitest/ui/latest"
+   },
+   "@yandex/smart-captcha": {
+    "latest": "2.9.1",
+    "stack": "2.9.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@yandex/smart-captcha/latest"
+   },
+   "@yandex/ymaps3-types": {
+    "latest": "1.0.21703254",
+    "stack": "1.0.21703254",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/@yandex/ymaps3-types/latest"
+   },
+   "astro": {
+    "latest": "7.4.2",
+    "stack": "7.4.2",
+    "status": "latest",
+    "engines": {
+     "npm": ">=9.6.5",
+     "node": ">=22.23.4",
+     "pnpm": ">=7.1.0"
+    },
+    "source": "https://registry.npmjs.org/astro/latest"
+   },
+   "autoprefixer": {
+    "latest": "10.6.1",
+    "stack": "10.6.1",
+    "status": "latest",
+    "engines": {
+     "node": "^10 || ^12 || >=14"
+    },
+    "source": "https://registry.npmjs.org/autoprefixer/latest"
+   },
+   "axios": {
+    "latest": "1.20.0",
+    "stack": "1.20.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/axios/latest"
+   },
+   "babel-plugin-react-compiler": {
+    "latest": "1.0.0",
+    "stack": "1.0.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/babel-plugin-react-compiler/latest"
+   },
+   "bash-language-server": {
+    "latest": "5.8.1",
+    "stack": "5.8.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/bash-language-server/latest"
+   },
+   "braces": {
+    "latest": "3.0.3",
+    "stack": "3.0.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=8"
+    },
+    "source": "https://registry.npmjs.org/braces/latest"
+   },
+   "class-variance-authority": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/class-variance-authority/latest"
+   },
+   "clsx": {
+    "latest": "2.1.1",
+    "stack": "2.1.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=6"
+    },
+    "source": "https://registry.npmjs.org/clsx/latest"
+   },
+   "cmdk": {
+    "latest": "1.1.1",
+    "stack": "1.1.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/cmdk/latest"
+   },
+   "cn": {
+    "latest": "0.5.0",
+    "stack": "0.5.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22"
+    },
+    "source": "https://registry.npmjs.org/cn/latest"
+   },
+   "czg": {
+    "latest": "1.14.0",
+    "stack": "1.14.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=v12.20.0"
+    },
+    "source": "https://registry.npmjs.org/czg/latest"
+   },
+   "date-fns": {
+    "latest": "4.4.0",
+    "stack": "4.4.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/date-fns/latest"
+   },
+   "dependency-cruiser": {
+    "latest": "18.7.0",
+    "stack": "18.7.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22||^24||>=26"
+    },
+    "source": "https://registry.npmjs.org/dependency-cruiser/latest"
+   },
+   "dockerfile-language-server-nodejs": {
+    "latest": "0.15.0",
+    "stack": "0.15.0",
+    "status": "latest",
+    "engines": {
+     "node": "*"
+    },
+    "source": "https://registry.npmjs.org/dockerfile-language-server-nodejs/latest"
+   },
+   "dotenv": {
+    "latest": "18.0.9",
+    "stack": "18.0.9",
+    "status": "latest",
+    "engines": {
+     "node": ">=12"
+    },
+    "source": "https://registry.npmjs.org/dotenv/latest"
+   },
+   "embla-carousel-react": {
+    "latest": "8.6.0",
+    "stack": "8.6.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/embla-carousel-react/latest"
+   },
+   "emmet-language-server": {
+    "latest": "0.1.3",
+    "stack": "0.1.3",
+    "status": "latest",
+    "engines": {
+     "node": "*"
+    },
+    "source": "https://registry.npmjs.org/emmet-language-server/latest"
+   },
+   "eslint": {
+    "latest": "10.13.0",
+    "stack": "10.13.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "9.39.5",
+      "reason": "eslint-config-next 16.4.3 (latest) depends on eslint-plugin-react 7.37, eslint-plugin-import 2.32 and eslint-plugin-jsx-a11y 6.10, whose latest releases peer eslint <=9.",
+      "upstream": [
+       "https://github.com/vercel/next.js/pull/91710",
+       "https://github.com/vercel/next.js/issues/89764",
+       "https://github.com/jsx-eslint/eslint-plugin-react/issues/3977",
+       "https://github.com/jsx-eslint/eslint-plugin-jsx-a11y/issues/1075",
+       "https://github.com/import-js/eslint-plugin-import/issues/3292"
+      ],
+      "removal_condition": "eslint-config-next and its bundled plugins release peer ranges that include ESLint 10.",
+      "project_count": 6
+     }
+    ],
+    "engines": {
+     "node": "^20.19.0 || ^22.13.0 || >=24"
+    },
+    "source": "https://registry.npmjs.org/eslint/latest"
+   },
+   "eslint-config-next": {
+    "latest": "16.4.3",
+    "stack": "16.4.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/eslint-config-next/latest"
+   },
+   "eslint-import-resolver-typescript": {
+    "latest": "4.4.5",
+    "stack": "4.4.5",
+    "status": "latest",
+    "engines": {
+     "node": "^16.17.0 || >=18.6.0"
+    },
+    "source": "https://registry.npmjs.org/eslint-import-resolver-typescript/latest"
+   },
+   "eslint-plugin-astro": {
+    "latest": "3.2.1",
+    "stack": "3.2.1",
+    "status": "latest",
+    "engines": {
+     "node": "^22.22.3 || ^24.16.0 || >=26.3.0"
+    },
+    "source": "https://registry.npmjs.org/eslint-plugin-astro/latest"
+   },
+   "eslint-plugin-import-x": {
+    "latest": "4.17.1",
+    "stack": "4.17.1",
+    "status": "latest",
+    "engines": {
+     "node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+    },
+    "source": "https://registry.npmjs.org/eslint-plugin-import-x/latest"
+   },
+   "eslint-plugin-jsx-a11y": {
+    "latest": "6.10.2",
+    "stack": "6.10.2",
+    "status": "latest",
+    "engines": {
+     "node": ">=4.0"
+    },
+    "source": "https://registry.npmjs.org/eslint-plugin-jsx-a11y/latest"
+   },
+   "eslint-plugin-react-hooks": {
+    "latest": "7.1.1",
+    "stack": "7.1.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/eslint-plugin-react-hooks/latest"
+   },
+   "eslint-plugin-react-refresh": {
+    "latest": "0.5.7",
+    "stack": "0.5.7",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/eslint-plugin-react-refresh/latest"
+   },
+   "fake-indexeddb": {
+    "latest": "6.2.6",
+    "stack": "6.2.6",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/fake-indexeddb/latest"
+   },
+   "firebase": {
+    "latest": "13.1.0",
+    "stack": "13.1.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/firebase/latest"
+   },
+   "firebase-admin": {
+    "latest": "14.5.0",
+    "stack": "14.5.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22"
+    },
+    "source": "https://registry.npmjs.org/firebase-admin/latest"
+   },
+   "firebase-functions": {
+    "latest": "7.4.0",
+    "stack": "7.4.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=18.0.0"
+    },
+    "source": "https://registry.npmjs.org/firebase-functions/latest"
+   },
+   "firebase-tools": {
+    "latest": "15.34.1",
+    "stack": "15.34.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0 || >=22.0.0 || >=24.0.0"
+    },
+    "source": "https://registry.npmjs.org/firebase-tools/latest"
+   },
+   "fontkit": {
+    "latest": "2.0.4",
+    "stack": "2.0.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/fontkit/latest"
+   },
+   "framer-motion": {
+    "latest": "14.6.0",
+    "stack": "14.6.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/framer-motion/latest"
+   },
+   "globals": {
+    "latest": "17.13.0",
+    "stack": "17.13.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/globals/latest"
+   },
+   "graphql": {
+    "latest": "17.0.2",
+    "stack": "17.0.2",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "16.14.2",
+      "reason": "payload/@payloadcms/next 3.92.0 peer graphql ^16.8.1.",
+      "upstream": [
+       "https://github.com/payloadcms/payload/pull/18206",
+       "https://github.com/payloadcms/payload/issues/18432"
+      ],
+      "removal_condition": "payload and @payloadcms/next peer graphql ^17.",
+      "project_count": 1
+     }
+    ],
+    "engines": {
+     "node": "^22.0.0 || ^24.0.0 || ^25.0.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/graphql/latest"
+   },
+   "graphql-language-service-cli": {
+    "latest": "3.5.0",
+    "stack": "3.5.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/graphql-language-service-cli/latest"
+   },
+   "gsap": {
+    "latest": "3.15.0",
+    "stack": "3.15.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/gsap/latest"
+   },
+   "happy-dom": {
+    "latest": "21.0.4",
+    "stack": "21.0.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/happy-dom/latest"
+   },
+   "highlight.js": {
+    "latest": "11.12.0",
+    "stack": "11.12.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=12.0.0"
+    },
+    "source": "https://registry.npmjs.org/highlight.js/latest"
+   },
+   "html-to-image": {
+    "latest": "1.11.13",
+    "stack": "1.11.13",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/html-to-image/latest"
+   },
+   "html5-qrcode": {
+    "latest": "2.3.8",
+    "stack": "2.3.8",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/html5-qrcode/latest"
+   },
+   "i18next": {
+    "latest": "26.5.10",
+    "stack": "26.5.10",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/i18next/latest"
+   },
+   "i18next-browser-languagedetector": {
+    "latest": "8.2.2",
+    "stack": "8.2.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/i18next-browser-languagedetector/latest"
+   },
+   "idb": {
+    "latest": "8.0.4",
+    "stack": "8.0.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/idb/latest"
+   },
+   "input-otp": {
+    "latest": "1.5.0",
+    "stack": "1.5.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/input-otp/latest"
+   },
+   "intl-messageformat": {
+    "latest": "12.1.4",
+    "stack": "12.1.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/intl-messageformat/latest"
+   },
+   "isomorphic-dompurify": {
+    "latest": "4.6.0",
+    "stack": "4.6.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/isomorphic-dompurify/latest"
+   },
+   "jest": {
+    "latest": "30.5.2",
+    "stack": "30.5.2",
+    "status": "latest",
+    "engines": {
+     "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+    },
+    "source": "https://registry.npmjs.org/jest/latest"
+   },
+   "jest-environment-jsdom": {
+    "latest": "30.5.2",
+    "stack": "30.5.2",
+    "status": "latest",
+    "engines": {
+     "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+    },
+    "source": "https://registry.npmjs.org/jest-environment-jsdom/latest"
+   },
+   "jsdom": {
+    "latest": "30.1.3",
+    "stack": "30.1.3",
+    "status": "latest",
+    "engines": {
+     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/jsdom/latest"
+   },
+   "jsonc-parser": {
+    "latest": "3.3.1",
+    "stack": "3.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/jsonc-parser/latest"
+   },
+   "knip": {
+    "latest": "6.43.0",
+    "stack": "6.43.0",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || >=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/knip/latest"
+   },
+   "leaflet": {
+    "latest": "1.9.4",
+    "stack": "1.9.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/leaflet/latest"
+   },
+   "livekit-client": {
+    "latest": "2.23.0",
+    "stack": "2.23.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/livekit-client/latest"
+   },
+   "lucide-react": {
+    "latest": "1.61.0",
+    "stack": "1.61.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/lucide-react/latest"
+   },
+   "markdown-it": {
+    "latest": "15.0.3",
+    "stack": "15.0.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/markdown-it/latest"
+   },
+   "markdown-link-check": {
+    "latest": "3.15.0",
+    "stack": "3.15.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/markdown-link-check/latest"
+   },
+   "markdownlint": {
+    "latest": "0.42.0",
+    "stack": "0.42.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22"
+    },
+    "source": "https://registry.npmjs.org/markdownlint/latest"
+   },
+   "markdownlint-cli2": {
+    "latest": "0.24.0",
+    "stack": "0.24.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22"
+    },
+    "source": "https://registry.npmjs.org/markdownlint-cli2/latest"
+   },
+   "msw": {
+    "latest": "3.0.3",
+    "stack": "3.0.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/msw/latest"
+   },
+   "next": {
+    "latest": "16.4.3",
+    "stack": "16.4.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.9.0"
+    },
+    "source": "https://registry.npmjs.org/next/latest"
+   },
+   "next-intl": {
+    "latest": "4.14.9",
+    "stack": "4.14.9",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/next-intl/latest"
+   },
+   "next-themes": {
+    "latest": "0.4.6",
+    "stack": "0.4.6",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/next-themes/latest"
+   },
+   "nodemailer": {
+    "latest": "10.2.1",
+    "stack": "10.2.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/nodemailer/latest"
+   },
+   "openapi-fetch": {
+    "latest": "0.17.0",
+    "stack": "0.17.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/openapi-fetch/latest"
+   },
+   "openapi-typescript": {
+    "latest": "7.13.0",
+    "stack": "7.13.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/openapi-typescript/latest"
+   },
+   "oxlint": {
+    "latest": "1.89.0",
+    "stack": "1.89.0",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || >=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/oxlint/latest"
+   },
+   "parse5": {
+    "latest": "8.0.1",
+    "stack": "8.0.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/parse5/latest"
+   },
+   "payload": {
+    "latest": "3.92.0",
+    "stack": "3.92.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.23.4 || >=24.22.1"
+    },
+    "source": "https://registry.npmjs.org/payload/latest"
+   },
+   "pdfjs-dist": {
+    "latest": "6.4.299",
+    "stack": "6.4.299",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.13.0 || >=24"
+    },
+    "source": "https://registry.npmjs.org/pdfjs-dist/latest"
+   },
+   "picomatch": {
+    "latest": "4.0.7",
+    "stack": "4.0.7",
+    "status": "latest",
+    "engines": {
+     "node": ">=12"
+    },
+    "source": "https://registry.npmjs.org/picomatch/latest"
+   },
+   "playwright": {
+    "latest": "1.64.1",
+    "stack": "1.64.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/playwright/latest"
+   },
+   "playwriter": {
+    "latest": "0.9.0",
+    "stack": "0.9.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/playwriter/latest"
+   },
+   "postcss": {
+    "latest": "8.5.31",
+    "stack": "8.5.31",
+    "status": "latest",
+    "engines": {
+     "node": "^10 || ^12 || >=14"
+    },
+    "source": "https://registry.npmjs.org/postcss/latest"
+   },
+   "postcss-load-config": {
+    "latest": "6.0.1",
+    "stack": "6.0.1",
+    "status": "latest",
+    "engines": {
+     "node": ">= 18"
+    },
+    "source": "https://registry.npmjs.org/postcss-load-config/latest"
+   },
+   "prettier": {
+    "latest": "3.9.10",
+    "stack": "3.9.10",
+    "status": "latest",
+    "engines": {
+     "node": ">=14"
+    },
+    "source": "https://registry.npmjs.org/prettier/latest"
+   },
+   "prettier-plugin-astro": {
+    "latest": "1.1.2",
+    "stack": "1.1.2",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/prettier-plugin-astro/latest"
+   },
+   "prettier-plugin-tailwindcss": {
+    "latest": "0.8.1",
+    "stack": "0.8.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19"
+    },
+    "source": "https://registry.npmjs.org/prettier-plugin-tailwindcss/latest"
+   },
+   "pusher-js": {
+    "latest": "8.6.0",
+    "stack": "8.6.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/pusher-js/latest"
+   },
+   "qr-scanner": {
+    "latest": "1.4.2",
+    "stack": "1.4.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/qr-scanner/latest"
+   },
+   "qrcode": {
+    "latest": "1.5.4",
+    "stack": "1.5.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=10.13.0"
+    },
+    "source": "https://registry.npmjs.org/qrcode/latest"
+   },
+   "quicktype-core": {
+    "latest": "26.0.0",
+    "stack": "26.0.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/quicktype-core/latest"
+   },
+   "ra-data-simple-rest": {
+    "latest": "5.15.5",
+    "stack": "5.15.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/ra-data-simple-rest/latest"
+   },
+   "radix-ui": {
+    "latest": "1.8.1",
+    "stack": "1.8.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/radix-ui/latest"
+   },
+   "react": {
+    "latest": "19.3.1",
+    "stack": "19.3.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=0.10.0"
+    },
+    "source": "https://registry.npmjs.org/react/latest"
+   },
+   "react-admin": {
+    "latest": "5.15.5",
+    "stack": "5.15.5",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-admin/latest"
+   },
+   "react-day-picker": {
+    "latest": "10.0.2",
+    "stack": "10.0.2",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/react-day-picker/latest"
+   },
+   "react-dom": {
+    "latest": "19.3.1",
+    "stack": "19.3.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-dom/latest"
+   },
+   "react-dropzone": {
+    "latest": "20.1.4",
+    "stack": "20.1.4",
+    "status": "latest",
+    "engines": {
+     "node": ">= 22"
+    },
+    "source": "https://registry.npmjs.org/react-dropzone/latest"
+   },
+   "react-hook-form": {
+    "latest": "7.91.0",
+    "stack": "7.91.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=18.0.0"
+    },
+    "source": "https://registry.npmjs.org/react-hook-form/latest"
+   },
+   "react-i18next": {
+    "latest": "17.1.8",
+    "stack": "17.1.8",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-i18next/latest"
+   },
+   "react-leaflet": {
+    "latest": "5.0.0",
+    "stack": "5.0.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-leaflet/latest"
+   },
+   "react-markdown": {
+    "latest": "10.1.0",
+    "stack": "10.1.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-markdown/latest"
+   },
+   "react-resizable-panels": {
+    "latest": "4.15.0",
+    "stack": "4.15.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/react-resizable-panels/latest"
+   },
+   "react-router-dom": {
+    "latest": "7.18.4",
+    "stack": "7.18.4",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.0.0"
+    },
+    "source": "https://registry.npmjs.org/react-router-dom/latest"
+   },
+   "recharts": {
+    "latest": "3.10.1",
+    "stack": "3.10.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=18"
+    },
+    "source": "https://registry.npmjs.org/recharts/latest"
+   },
+   "rehype-highlight": {
+    "latest": "7.0.2",
+    "stack": "7.0.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/rehype-highlight/latest"
+   },
+   "remark-gfm": {
+    "latest": "4.0.1",
+    "stack": "4.0.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/remark-gfm/latest"
+   },
+   "resend-cli": {
+    "latest": "2.26.0",
+    "stack": "2.26.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22"
+    },
+    "source": "https://registry.npmjs.org/resend-cli/latest"
+   },
+   "sanitize-html": {
+    "latest": "2.18.1",
+    "stack": "2.18.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/sanitize-html/latest"
+   },
+   "schema-dts": {
+    "latest": "2.1.0",
+    "stack": "2.1.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/schema-dts/latest"
+   },
+   "server-only": {
+    "latest": "0.0.1",
+    "stack": "0.0.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/server-only/latest"
+   },
+   "sharp": {
+    "latest": "0.35.5",
+    "stack": "0.35.5",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.9.0"
+    },
+    "source": "https://registry.npmjs.org/sharp/latest"
+   },
+   "size-limit": {
+    "latest": "14.3.0",
+    "stack": "14.3.0",
+    "status": "latest",
+    "engines": {
+     "node": "^22.19.0 || ^24.5.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/size-limit/latest"
+   },
+   "sonner": {
+    "latest": "2.0.8",
+    "stack": "2.0.8",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/sonner/latest"
+   },
+   "srvx": {
+    "latest": "1.0.7",
+    "stack": "1.0.7",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.16.0"
+    },
+    "source": "https://registry.npmjs.org/srvx/latest"
+   },
+   "stripe": {
+    "latest": "23.0.1",
+    "stack": "23.0.1",
+    "status": "latest",
+    "engines": {
+     "node": ">=20"
+    },
+    "source": "https://registry.npmjs.org/stripe/latest"
+   },
+   "stylelint": {
+    "latest": "17.16.0",
+    "stack": "17.16.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19.0"
+    },
+    "source": "https://registry.npmjs.org/stylelint/latest"
+   },
+   "subset-font": {
+    "latest": "2.9.0",
+    "stack": "2.9.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/subset-font/latest"
+   },
+   "svelte-language-server": {
+    "latest": "0.18.5",
+    "stack": "0.18.5",
+    "status": "latest",
+    "engines": {
+     "node": ">= 18.0.0"
+    },
+    "source": "https://registry.npmjs.org/svelte-language-server/latest"
+   },
+   "tailwind-merge": {
+    "latest": "3.7.0",
+    "stack": "3.7.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/tailwind-merge/latest"
+   },
+   "tailwindcss": {
+    "latest": "4.3.3",
+    "stack": "4.3.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/tailwindcss/latest"
+   },
+   "tailwindcss-animate": {
+    "latest": "1.0.7",
+    "stack": "1.0.7",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/tailwindcss-animate/latest"
+   },
+   "three": {
+    "latest": "0.186.1",
+    "stack": "0.186.1",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/three/latest"
+   },
+   "tinyglobby": {
+    "latest": "0.2.17",
+    "stack": "0.2.17",
+    "status": "latest",
+    "engines": {
+     "node": ">=12.0.0"
+    },
+    "source": "https://registry.npmjs.org/tinyglobby/latest"
+   },
+   "tsx": {
+    "latest": "4.23.15",
+    "stack": "4.23.15",
+    "status": "latest",
+    "engines": {
+     "node": ">=18.0.0"
+    },
+    "source": "https://registry.npmjs.org/tsx/latest"
+   },
+   "tw-animate-css": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/tw-animate-css/latest"
+   },
+   "type-coverage": {
+    "latest": "2.30.4",
+    "stack": "2.30.4",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/type-coverage/latest"
+   },
+   "typescript": {
+    "latest": "7.0.2",
+    "stack": "7.0.2",
+    "status": "latest",
+    "engines": {
+     "node": ">=16.20.0"
+    },
+    "source": "https://registry.npmjs.org/typescript/latest"
+   },
+   "typescript-eslint": {
+    "latest": "8.72.0",
+    "stack": "8.72.0",
+    "status": "latest",
+    "engines": {
+     "node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+    },
+    "source": "https://registry.npmjs.org/typescript-eslint/latest"
+   },
+   "undici": {
+    "latest": "8.12.3",
+    "stack": "8.12.3",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.19.0"
+    },
+    "source": "https://registry.npmjs.org/undici/latest"
+   },
+   "vaul": {
+    "latest": "1.1.2",
+    "stack": "1.1.2",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/vaul/latest"
+   },
+   "vercel": {
+    "latest": "65.2.0",
+    "stack": "65.2.0",
+    "status": "latest",
+    "engines": {
+     "node": ">= 20"
+    },
+    "source": "https://registry.npmjs.org/vercel/latest"
+   },
+   "vite": {
+    "latest": "8.3.5",
+    "stack": "8.3.5",
+    "status": "latest",
+    "engines": {
+     "node": "^20.19.0 || >=22.12.0"
+    },
+    "source": "https://registry.npmjs.org/vite/latest"
+   },
+   "vite-plugin-pwa": {
+    "latest": "2.0.0",
+    "stack": "2.0.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=20.19.0"
+    },
+    "source": "https://registry.npmjs.org/vite-plugin-pwa/latest"
+   },
+   "vitest": {
+    "latest": "5.0.5",
+    "stack": "5.0.5",
+    "status": "latest",
+    "engines": {
+     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+    },
+    "source": "https://registry.npmjs.org/vitest/latest"
+   },
+   "vscode-langservers-extracted": {
+    "latest": "4.10.0",
+    "stack": "4.10.0",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/vscode-langservers-extracted/latest"
+   },
+   "web-vitals": {
+    "latest": "6.2.3",
+    "stack": "6.2.3",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/web-vitals/latest"
+   },
+   "wrangler": {
+    "latest": "4.152.0",
+    "stack": "4.152.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.0.0"
+    },
+    "source": "https://registry.npmjs.org/wrangler/latest"
+   },
+   "yaml": {
+    "latest": "2.9.1",
+    "stack": "2.9.1",
+    "status": "latest",
+    "engines": {
+     "node": ">= 14.6"
+    },
+    "source": "https://registry.npmjs.org/yaml/latest"
+   },
+   "yaml-language-server": {
+    "latest": "2.0.0",
+    "stack": "2.0.0",
+    "status": "latest",
+    "engines": {
+     "node": ">=22.13.0"
+    },
+    "source": "https://registry.npmjs.org/yaml-language-server/latest"
+   },
+   "zod": {
+    "latest": "4.6.7",
+    "stack": "4.6.7",
+    "status": "latest",
+    "source": "https://registry.npmjs.org/zod/latest"
+   },
+   "zustand": {
+    "latest": "5.0.16",
+    "stack": "5.0.16",
+    "status": "latest",
+    "engines": {
+     "node": ">=12.20.0"
+    },
+    "source": "https://registry.npmjs.org/zustand/latest"
+   }
+  },
+  "pypi": {
+   "aioboto3": {
+    "latest": "15.5.0",
+    "stack": "15.5.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/aioboto3/json"
+   },
+   "aiobotocore": {
+    "latest": "3.10.0",
+    "stack": "3.10.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "2.25.1",
+      "reason": "Pinned exactly by aioboto3 15.5.0.",
+      "upstream": [
+       "https://github.com/terricain/aioboto3/issues/398"
+      ],
+      "removal_condition": "Same as boto3.",
+      "project_count": 1
+     }
+    ],
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/aiobotocore/json"
+   },
+   "aiosmtplib": {
+    "latest": "5.1.3",
+    "stack": "5.1.3",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/aiosmtplib/json"
+   },
+   "aiosqlite": {
+    "latest": "0.22.1",
+    "stack": "0.22.1",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/aiosqlite/json"
+   },
+   "alembic": {
+    "latest": "1.20.1",
+    "stack": "1.20.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/alembic/json"
+   },
+   "anyio": {
+    "latest": "4.15.1",
+    "stack": "4.15.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/anyio/json"
+   },
+   "apscheduler": {
+    "latest": "3.11.3",
+    "stack": "3.11.3",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/apscheduler/json"
+   },
+   "aqtinstall": {
+    "latest": "3.3.0",
+    "stack": "3.3.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/aqtinstall/json"
+   },
+   "argon2-cffi": {
+    "latest": "25.1.0",
+    "stack": "25.1.0",
+    "status": "latest",
+    "reason": "Latest. Conditional: miniopy-async would force <24.",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/argon2-cffi/json"
+   },
+   "asgiref": {
+    "latest": "3.13.0",
+    "stack": "3.13.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/asgiref/json"
+   },
+   "asyncpg": {
+    "latest": "0.32.0",
+    "stack": "0.32.0",
+    "status": "latest",
+    "requires_python": ">=3.9.0",
+    "source": "https://pypi.org/pypi/asyncpg/json"
+   },
+   "attrs": {
+    "latest": "26.1.0",
+    "stack": "26.1.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/attrs/json"
+   },
+   "backports-zstd": {
+    "latest": "1.8.0",
+    "stack": "1.8.0",
+    "status": "latest",
+    "requires_python": "<3.14,>=3.10",
+    "source": "https://pypi.org/pypi/backports-zstd/json"
+   },
+   "bandit": {
+    "latest": "1.9.4",
+    "stack": "1.9.4",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/bandit/json"
+   },
+   "basedpyright": {
+    "latest": "1.40.2",
+    "stack": "1.40.2",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/basedpyright/json"
+   },
+   "bcrypt": {
+    "latest": "5.0.0",
+    "stack": "5.0.0",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/bcrypt/json"
+   },
+   "beautifulsoup4": {
+    "latest": "4.15.0",
+    "stack": "4.15.0",
+    "status": "latest",
+    "requires_python": ">=3.7.0",
+    "source": "https://pypi.org/pypi/beautifulsoup4/json"
+   },
+   "bleach": {
+    "latest": "6.4.0",
+    "stack": "6.4.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/bleach/json"
+   },
+   "boto3": {
+    "latest": "1.43.118",
+    "stack": "1.43.118",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "1.40.61",
+      "reason": "aioboto3 15.5.0 (latest) pins aiobotocore 2.25.1, which requires boto3 <1.40.62 (one core project).",
+      "upstream": [
+       "https://github.com/terricain/aioboto3/issues/398",
+       "https://github.com/terricain/aioboto3/issues/403"
+      ],
+      "removal_condition": "aioboto3 releases with aiobotocore 3.x, or the affected project replaces aioboto3.",
+      "project_count": 1
+     }
+    ],
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/boto3/json"
+   },
+   "brotli": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "source": "https://pypi.org/pypi/brotli/json"
+   },
+   "brotlicffi": {
+    "latest": "1.2.1.0",
+    "stack": "1.2.1.0",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/brotlicffi/json"
+   },
+   "bs4": {
+    "latest": "0.0.2",
+    "stack": "0.0.2",
+    "status": "latest",
+    "source": "https://pypi.org/pypi/bs4/json"
+   },
+   "certifi": {
+    "latest": "2026.10.23",
+    "stack": "2026.10.23",
+    "status": "latest",
+    "reason": "Latest. Conditional: miniopy-async 1.23.5 would force 2025.11.12 (stale CA bundle); remove miniopy-async instead.",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/certifi/json"
+   },
+   "cffi": {
+    "latest": "2.1.1",
+    "stack": "2.1.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/cffi/json"
+   },
+   "charset-normalizer": {
+    "latest": "3.5.2",
+    "stack": "3.5.2",
+    "status": "latest",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/charset-normalizer/json"
+   },
+   "colorama": {
+    "latest": "0.4.6",
+    "stack": "0.4.6",
+    "status": "latest",
+    "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7",
+    "source": "https://pypi.org/pypi/colorama/json"
+   },
+   "coverage": {
+    "latest": "7.17.0",
+    "stack": "7.17.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/coverage/json"
+   },
+   "cryptography": {
+    "latest": "50.0.2",
+    "stack": "50.0.2",
+    "status": "latest",
+    "requires_python": "!=3.9.0,!=3.9.1,>=3.9",
+    "source": "https://pypi.org/pypi/cryptography/json"
+   },
+   "defusedxml": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+    "source": "https://pypi.org/pypi/defusedxml/json"
+   },
+   "dj-rest-auth": {
+    "latest": "7.2.0",
+    "stack": "7.2.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/dj-rest-auth/json"
+   },
+   "django": {
+    "latest": "6.1.2",
+    "stack": "6.1.2",
+    "status": "latest",
+    "requires_python": ">=3.12",
+    "source": "https://pypi.org/pypi/django/json"
+   },
+   "django-allauth": {
+    "latest": "65.20.1",
+    "stack": "65.20.1",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/django-allauth/json"
+   },
+   "django-cors-headers": {
+    "latest": "4.9.0",
+    "stack": "4.9.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/django-cors-headers/json"
+   },
+   "django-environ": {
+    "latest": "0.14.0",
+    "stack": "0.14.0",
+    "status": "latest",
+    "requires_python": "<4,>=3.9",
+    "source": "https://pypi.org/pypi/django-environ/json"
+   },
+   "django-filter": {
+    "latest": "26.2",
+    "stack": "26.2",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/django-filter/json"
+   },
+   "djangorestframework": {
+    "latest": "3.18.3",
+    "stack": "3.18.3",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/djangorestframework/json"
+   },
+   "djangorestframework-simplejwt": {
+    "latest": "5.5.1",
+    "stack": "5.5.1",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/djangorestframework-simplejwt/json"
+   },
+   "email-validator": {
+    "latest": "2.3.0",
+    "stack": "2.3.0",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/email-validator/json"
+   },
+   "exchangelib": {
+    "latest": "5.6.0",
+    "stack": "5.6.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/exchangelib/json"
+   },
+   "faker": {
+    "latest": "40.43.0",
+    "stack": "40.43.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/faker/json"
+   },
+   "fakeredis": {
+    "latest": "2.40.0",
+    "stack": "2.40.0",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/fakeredis/json"
+   },
+   "fastapi": {
+    "latest": "0.162.0",
+    "stack": "0.162.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/fastapi/json"
+   },
+   "fastapi-mail": {
+    "latest": "1.6.8",
+    "stack": "1.6.8",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/fastapi-mail/json"
+   },
+   "faster-whisper": {
+    "latest": "1.2.1",
+    "stack": "1.2.1",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/faster-whisper/json"
+   },
+   "ffmpeg-python": {
+    "latest": "0.2.0",
+    "stack": "0.2.0",
+    "status": "latest",
+    "requires_python": "",
+    "source": "https://pypi.org/pypi/ffmpeg-python/json"
+   },
+   "firebase-admin": {
+    "latest": "7.7.0",
+    "stack": "7.7.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/firebase-admin/json"
+   },
+   "fonttools": {
+    "latest": "4.67.0",
+    "stack": "4.67.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/fonttools/json"
+   },
+   "google-auth": {
+    "latest": "2.62.0",
+    "stack": "2.62.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/google-auth/json"
+   },
+   "greenlet": {
+    "latest": "3.5.6",
+    "stack": "3.5.6",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/greenlet/json"
+   },
+   "growthbook": {
+    "latest": "3.2.2",
+    "stack": "3.2.2",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/growthbook/json"
+   },
+   "gunicorn": {
+    "latest": "26.2.0",
+    "stack": "26.2.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/gunicorn/json"
+   },
+   "h2": {
+    "latest": "4.4.1",
+    "stack": "4.4.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/h2/json"
+   },
+   "hatchling": {
+    "latest": "1.32.4",
+    "stack": "1.32.4",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/hatchling/json"
+   },
+   "html2text": {
+    "latest": "2025.4.15",
+    "stack": "2025.4.15",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/html2text/json"
+   },
+   "httpx": {
+    "latest": "0.28.1",
+    "stack": "0.28.1",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/httpx/json"
+   },
+   "humanize": {
+    "latest": "4.16.0",
+    "stack": "4.16.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/humanize/json"
+   },
+   "hypothesis": {
+    "latest": "6.170.9",
+    "stack": "6.170.9",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/hypothesis/json"
+   },
+   "idna": {
+    "latest": "3.20",
+    "stack": "3.20",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/idna/json"
+   },
+   "import-linter": {
+    "latest": "2.15",
+    "stack": "2.15",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/import-linter/json"
+   },
+   "inflate64": {
+    "latest": "1.0.4",
+    "stack": "1.0.4",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/inflate64/json"
+   },
+   "iniconfig": {
+    "latest": "2.3.1",
+    "stack": "2.3.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/iniconfig/json"
+   },
+   "jinja2": {
+    "latest": "3.1.6",
+    "stack": "3.1.6",
+    "status": "latest",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/jinja2/json"
+   },
+   "jsonschema": {
+    "latest": "4.26.0",
+    "stack": "4.26.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/jsonschema/json"
+   },
+   "jsonschema-specifications": {
+    "latest": "2025.9.1",
+    "stack": "2025.9.1",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/jsonschema-specifications/json"
+   },
+   "livekit-agents": {
+    "latest": "1.8.9",
+    "stack": "1.8.9",
+    "status": "latest",
+    "requires_python": "<3.15,>=3.10",
+    "source": "https://pypi.org/pypi/livekit-agents/json"
+   },
+   "livekit-api": {
+    "latest": "1.2.2",
+    "stack": "1.2.2",
+    "status": "latest",
+    "requires_python": ">=3.9.0",
+    "source": "https://pypi.org/pypi/livekit-api/json"
+   },
+   "livekit-plugins-silero": {
+    "latest": "1.8.9",
+    "stack": "1.8.9",
+    "status": "latest",
+    "requires_python": ">=3.10.0",
+    "source": "https://pypi.org/pypi/livekit-plugins-silero/json"
+   },
+   "lxml": {
+    "latest": "6.1.3",
+    "stack": "6.1.3",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/lxml/json"
+   },
+   "mako": {
+    "latest": "1.4.3",
+    "stack": "1.4.3",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/mako/json"
+   },
+   "markdown": {
+    "latest": "3.11.2",
+    "stack": "3.11.2",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/markdown/json"
+   },
+   "markdown-it-py": {
+    "latest": "4.2.0",
+    "stack": "4.2.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/markdown-it-py/json"
+   },
+   "meilisearch-python-sdk": {
+    "latest": "8.0.1",
+    "stack": "8.0.1",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/meilisearch-python-sdk/json"
+   },
+   "minio": {
+    "latest": "7.2.20",
+    "stack": "7.2.20",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/minio/json"
+   },
+   "miniopy-async": {
+    "latest": "1.23.5",
+    "stack": "replace",
+    "status": "replace",
+    "reason": "Stale and MinIO-specific; use an S3 client against RustFS.",
+    "requires_python": "<4.0,>=3.10",
+    "source": "https://pypi.org/pypi/miniopy-async/json"
+   },
+   "modal": {
+    "latest": "1.6.2",
+    "stack": "1.6.2",
+    "status": "latest",
+    "requires_python": "<3.16,>=3.10",
+    "source": "https://pypi.org/pypi/modal/json"
+   },
+   "msgpack": {
+    "latest": "1.2.3",
+    "stack": "1.2.3",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/msgpack/json"
+   },
+   "multivolumefile": {
+    "latest": "0.2.3",
+    "stack": "0.2.3",
+    "status": "latest",
+    "requires_python": ">=3.6",
+    "source": "https://pypi.org/pypi/multivolumefile/json"
+   },
+   "mutmut": {
+    "latest": "3.8.0",
+    "stack": "3.8.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/mutmut/json"
+   },
+   "mypy": {
+    "latest": "2.4.0",
+    "stack": "2.4.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/mypy/json"
+   },
+   "nh3": {
+    "latest": "0.3.7",
+    "stack": "0.3.7",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/nh3/json"
+   },
+   "olefile": {
+    "latest": "0.47",
+    "stack": "0.47",
+    "status": "latest",
+    "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+    "source": "https://pypi.org/pypi/olefile/json"
+   },
+   "openpyxl": {
+    "latest": "3.1.5",
+    "stack": "3.1.5",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/openpyxl/json"
+   },
+   "opentelemetry-api": {
+    "latest": "1.45.1",
+    "stack": "1.45.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-api/json"
+   },
+   "opentelemetry-exporter-otlp-proto-grpc": {
+    "latest": "1.45.1",
+    "stack": "1.45.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-exporter-otlp-proto-grpc/json"
+   },
+   "opentelemetry-instrumentation-asyncpg": {
+    "latest": "0.66b1",
+    "stack": "0.66b1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-instrumentation-asyncpg/json"
+   },
+   "opentelemetry-instrumentation-fastapi": {
+    "latest": "0.66b1",
+    "stack": "0.66b1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-instrumentation-fastapi/json"
+   },
+   "opentelemetry-instrumentation-httpx": {
+    "latest": "0.66b1",
+    "stack": "0.66b1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-instrumentation-httpx/json"
+   },
+   "opentelemetry-instrumentation-redis": {
+    "latest": "0.66b1",
+    "stack": "0.66b1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-instrumentation-redis/json"
+   },
+   "opentelemetry-instrumentation-sqlalchemy": {
+    "latest": "0.66b1",
+    "stack": "0.66b1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-instrumentation-sqlalchemy/json"
+   },
+   "opentelemetry-sdk": {
+    "latest": "1.45.1",
+    "stack": "1.45.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/opentelemetry-sdk/json"
+   },
+   "packaging": {
+    "latest": "26.3",
+    "stack": "26.3",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/packaging/json"
+   },
+   "passlib": {
+    "latest": "1.7.4",
+    "stack": "1.7.4",
+    "status": "latest",
+    "requires_python": "",
+    "source": "https://pypi.org/pypi/passlib/json"
+   },
+   "patch-ng": {
+    "latest": "1.19.1",
+    "stack": "1.19.1",
+    "status": "latest",
+    "requires_python": ">=3.6",
+    "source": "https://pypi.org/pypi/patch-ng/json"
+   },
+   "pdfplumber": {
+    "latest": "0.11.10",
+    "stack": "0.11.10",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/pdfplumber/json"
+   },
+   "pillow": {
+    "latest": "13.0.0",
+    "stack": "13.0.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/pillow/json"
+   },
+   "pillow-heif": {
+    "latest": "1.8.1",
+    "stack": "1.8.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pillow-heif/json"
+   },
+   "pip-audit": {
+    "latest": "2.10.1",
+    "stack": "2.10.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pip-audit/json"
+   },
+   "piper-tts": {
+    "latest": "1.8.0",
+    "stack": "1.8.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/piper-tts/json"
+   },
+   "playwright": {
+    "latest": "1.64.1",
+    "stack": "1.64.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/playwright/json"
+   },
+   "pluggy": {
+    "latest": "1.7.0",
+    "stack": "1.7.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pluggy/json"
+   },
+   "pre-commit": {
+    "latest": "4.7.0",
+    "stack": "4.7.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/pre-commit/json"
+   },
+   "prometheus-fastapi-instrumentator": {
+    "latest": "8.1.0",
+    "stack": "8.1.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/prometheus-fastapi-instrumentator/json"
+   },
+   "psutil": {
+    "latest": "7.2.2",
+    "stack": "7.2.2",
+    "status": "latest",
+    "requires_python": ">=3.6",
+    "source": "https://pypi.org/pypi/psutil/json"
+   },
+   "psycopg2-binary": {
+    "latest": "2.9.13",
+    "stack": "2.9.13",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/psycopg2-binary/json"
+   },
+   "pwdlib": {
+    "latest": "0.3.1",
+    "stack": "0.3.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pwdlib/json"
+   },
+   "py7zr": {
+    "latest": "1.1.4",
+    "stack": "1.1.4",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/py7zr/json"
+   },
+   "pyasn1": {
+    "latest": "0.6.4",
+    "stack": "0.6.4",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/pyasn1/json"
+   },
+   "pybcj": {
+    "latest": "1.0.8",
+    "stack": "1.0.8",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pybcj/json"
+   },
+   "pycparser": {
+    "latest": "3.12",
+    "stack": "3.12",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/pycparser/json"
+   },
+   "pycryptodome": {
+    "latest": "4.2.0",
+    "stack": "4.2.0",
+    "status": "latest",
+    "reason": "Latest. Conditional: miniopy-async would force <4.",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/pycryptodome/json"
+   },
+   "pycryptodomex": {
+    "latest": "3.24.1",
+    "stack": "3.24.1",
+    "status": "latest",
+    "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7",
+    "source": "https://pypi.org/pypi/pycryptodomex/json"
+   },
+   "pydantic": {
+    "latest": "2.14.1",
+    "stack": "2.14.1",
+    "status": "latest",
+    "reason": "Latest in core; aiogram 3.31.0 (experimental only) needs <2.14.",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pydantic/json"
+   },
+   "pydantic-settings": {
+    "latest": "2.16.1",
+    "stack": "2.16.1",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/pydantic-settings/json"
+   },
+   "pygments": {
+    "latest": "2.21.0",
+    "stack": "2.21.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/pygments/json"
+   },
+   "pyjwt": {
+    "latest": "2.15.1",
+    "stack": "2.15.1",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/pyjwt/json"
+   },
+   "pyotp": {
+    "latest": "2.10.0",
+    "stack": "2.10.0",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/pyotp/json"
+   },
+   "pypdf": {
+    "latest": "6.21.2",
+    "stack": "6.21.2",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/pypdf/json"
+   },
+   "pypdfium2": {
+    "latest": "5.14.0",
+    "stack": "5.14.0",
+    "status": "latest",
+    "requires_python": ">=3.6",
+    "source": "https://pypi.org/pypi/pypdfium2/json"
+   },
+   "pyppmd": {
+    "latest": "1.3.1",
+    "stack": "1.3.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pyppmd/json"
+   },
+   "pyright": {
+    "latest": "1.1.414",
+    "stack": "1.1.414",
+    "status": "latest",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/pyright/json"
+   },
+   "pytest": {
+    "latest": "9.1.1",
+    "stack": "9.1.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pytest/json"
+   },
+   "pytest-asyncio": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/pytest-asyncio/json"
+   },
+   "pytest-cov": {
+    "latest": "7.1.0",
+    "stack": "7.1.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/pytest-cov/json"
+   },
+   "python-docx": {
+    "latest": "1.2.0",
+    "stack": "1.2.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/python-docx/json"
+   },
+   "python-frontmatter": {
+    "latest": "1.3.0",
+    "stack": "1.3.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/python-frontmatter/json"
+   },
+   "python-magic": {
+    "latest": "0.4.27",
+    "stack": "0.4.27",
+    "status": "latest",
+    "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+    "source": "https://pypi.org/pypi/python-magic/json"
+   },
+   "python-multipart": {
+    "latest": "0.0.32",
+    "stack": "0.0.32",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/python-multipart/json"
+   },
+   "python-pptx": {
+    "latest": "1.0.2",
+    "stack": "1.0.2",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/python-pptx/json"
+   },
+   "python-slugify": {
+    "latest": "9.1.3",
+    "stack": "9.1.3",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/python-slugify/json"
+   },
+   "pyyaml": {
+    "latest": "6.0.3",
+    "stack": "6.0.3",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/pyyaml/json"
+   },
+   "redis": {
+    "latest": "8.1.0",
+    "stack": "8.1.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/redis/json"
+   },
+   "referencing": {
+    "latest": "0.37.0",
+    "stack": "0.37.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/referencing/json"
+   },
+   "reportlab": {
+    "latest": "5.1.0",
+    "stack": "5.1.0",
+    "status": "latest",
+    "requires_python": "<4,>=3.9",
+    "source": "https://pypi.org/pypi/reportlab/json"
+   },
+   "requests": {
+    "latest": "2.34.2",
+    "stack": "2.34.2",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/requests/json"
+   },
+   "resend": {
+    "latest": "2.50.0",
+    "stack": "2.50.0",
+    "status": "latest",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/resend/json"
+   },
+   "rpds-py": {
+    "latest": "2026.9.1",
+    "stack": "2026.9.1",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/rpds-py/json"
+   },
+   "ruff": {
+    "latest": "0.17.2",
+    "stack": "0.17.2",
+    "status": "latest",
+    "requires_python": ">=3.7",
+    "source": "https://pypi.org/pypi/ruff/json"
+   },
+   "semantic-version": {
+    "latest": "2.10.0",
+    "stack": "2.10.0",
+    "status": "latest",
+    "requires_python": ">=2.7",
+    "source": "https://pypi.org/pypi/semantic-version/json"
+   },
+   "semgrep": {
+    "latest": "1.182.1",
+    "stack": "1.182.1",
+    "status": "isolated-tool",
+    "reason": "Install as an isolated tool (uv tool); it pins click, jsonschema, mcp and OpenTelemetry exactly.",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/semgrep/json"
+   },
+   "slowapi": {
+    "latest": "0.1.10",
+    "stack": "0.1.10",
+    "status": "latest",
+    "requires_python": "<4.0,>=3.7",
+    "source": "https://pypi.org/pypi/slowapi/json"
+   },
+   "soupsieve": {
+    "latest": "3.0.4",
+    "stack": "3.0.4",
+    "status": "latest",
+    "requires_python": ">=3.11.5",
+    "source": "https://pypi.org/pypi/soupsieve/json"
+   },
+   "sqlalchemy": {
+    "latest": "2.1.6",
+    "stack": "2.1.6",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/sqlalchemy/json"
+   },
+   "sqlparse": {
+    "latest": "0.6.0",
+    "stack": "0.6.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/sqlparse/json"
+   },
+   "starlette": {
+    "latest": "1.10.0",
+    "stack": "1.10.0",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/starlette/json"
+   },
+   "stripe": {
+    "latest": "16.0.0",
+    "stack": "16.0.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/stripe/json"
+   },
+   "striprtf": {
+    "latest": "0.0.35",
+    "stack": "0.0.35",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/striprtf/json"
+   },
+   "structlog": {
+    "latest": "26.1.0",
+    "stack": "26.1.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/structlog/json"
+   },
+   "tenacity": {
+    "latest": "9.2.1",
+    "stack": "9.2.1",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/tenacity/json"
+   },
+   "texttable": {
+    "latest": "1.7.2",
+    "stack": "1.7.2",
+    "status": "latest",
+    "source": "https://pypi.org/pypi/texttable/json"
+   },
+   "types-requests": {
+    "latest": "2.33.0.20261006",
+    "stack": "2.33.0.20261006",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/types-requests/json"
+   },
+   "typing-extensions": {
+    "latest": "4.16.0",
+    "stack": "4.16.0",
+    "status": "latest",
+    "requires_python": ">=3.9",
+    "source": "https://pypi.org/pypi/typing-extensions/json"
+   },
+   "urllib3": {
+    "latest": "2.8.0",
+    "stack": "2.8.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/urllib3/json"
+   },
+   "uv-build": {
+    "latest": "0.13.5",
+    "stack": "0.13.5",
+    "status": "latest",
+    "requires_python": ">=3.8",
+    "source": "https://pypi.org/pypi/uv-build/json"
+   },
+   "uvicorn": {
+    "latest": "0.54.0",
+    "stack": "0.54.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/uvicorn/json"
+   },
+   "weasyprint": {
+    "latest": "70.0",
+    "stack": "70.0",
+    "status": "latest",
+    "requires_python": ">=3.10",
+    "source": "https://pypi.org/pypi/weasyprint/json"
+   },
+   "xlrd": {
+    "latest": "2.0.2",
+    "stack": "2.0.2",
+    "status": "latest",
+    "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,>=2.7",
+    "source": "https://pypi.org/pypi/xlrd/json"
+   },
+   "xlwt": {
+    "latest": "1.3.0",
+    "stack": "1.3.0",
+    "status": "latest",
+    "requires_python": "",
+    "source": "https://pypi.org/pypi/xlwt/json"
+   },
+   "zizmor": {
+    "latest": "1.31.1",
+    "stack": "1.31.1",
+    "status": "latest",
+    "requires_python": ">=3.11",
+    "source": "https://pypi.org/pypi/zizmor/json"
+   }
+  },
+  "crates": {
+   "age": {
+    "latest": "0.12.1",
+    "stack": "0.12.1",
+    "status": "latest",
+    "rust_version": "1.74",
+    "source": "https://index.crates.io/3/a/age"
+   },
+   "ammonia": {
+    "latest": "4.2.4",
+    "stack": "4.2.4",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/am/mo/ammonia"
+   },
+   "android-native-keyring-store": {
+    "latest": "1.0.0",
+    "stack": "1.0.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/an/dr/android-native-keyring-store"
+   },
+   "android_log-sys": {
+    "latest": "0.3.2",
+    "stack": "0.3.2",
+    "status": "latest",
+    "source": "https://index.crates.io/an/dr/android_log-sys"
+   },
+   "anyhow": {
+    "latest": "1.0.104",
+    "stack": "1.0.104",
+    "status": "latest",
+    "rust_version": "1.68",
+    "source": "https://index.crates.io/an/yh/anyhow"
+   },
+   "apple-native-keyring-store": {
+    "latest": "1.0.2",
+    "stack": "1.0.2",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ap/pl/apple-native-keyring-store"
+   },
+   "arboard": {
+    "latest": "3.7.0",
+    "stack": "3.7.0",
+    "status": "latest",
+    "rust_version": "1.71.0",
+    "source": "https://index.crates.io/ar/bo/arboard"
+   },
+   "argon2": {
+    "latest": "0.6.0",
+    "stack": "0.6.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ar/go/argon2"
+   },
+   "ashpd": {
+    "latest": "0.13.13",
+    "stack": "0.13.13",
+    "status": "latest",
+    "rust_version": "1.87",
+    "source": "https://index.crates.io/as/hp/ashpd"
+   },
+   "async-stream": {
+    "latest": "0.3.6",
+    "stack": "0.3.6",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/as/yn/async-stream"
+   },
+   "async-trait": {
+    "latest": "0.1.92",
+    "stack": "0.1.92",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/as/yn/async-trait"
+   },
+   "aws-config": {
+    "latest": "1.13.0",
+    "stack": "1.13.0",
+    "status": "latest",
+    "rust_version": "1.94.1",
+    "source": "https://index.crates.io/aw/s-/aws-config"
+   },
+   "aws-sdk-s3": {
+    "latest": "1.155.0",
+    "stack": "1.155.0",
+    "status": "latest",
+    "rust_version": "1.94.1",
+    "source": "https://index.crates.io/aw/s-/aws-sdk-s3"
+   },
+   "axum": {
+    "latest": "0.8.9",
+    "stack": "0.8.9",
+    "status": "latest",
+    "rust_version": "1.80",
+    "source": "https://index.crates.io/ax/um/axum"
+   },
+   "axum-server": {
+    "latest": "0.8.0",
+    "stack": "0.8.0",
+    "status": "latest",
+    "rust_version": "1.82",
+    "source": "https://index.crates.io/ax/um/axum-server"
+   },
+   "base16ct": {
+    "latest": "1.0.0",
+    "stack": "1.0.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ba/se/base16ct"
+   },
+   "base64": {
+    "latest": "0.23.1",
+    "stack": "0.23.1",
+    "status": "latest",
+    "rust_version": "1.71.0",
+    "source": "https://index.crates.io/ba/se/base64"
+   },
+   "blake3": {
+    "latest": "1.8.7",
+    "stack": "1.8.7",
+    "status": "latest",
+    "source": "https://index.crates.io/bl/ak/blake3"
+   },
+   "bytes": {
+    "latest": "1.12.1",
+    "stack": "1.12.1",
+    "status": "latest",
+    "rust_version": "1.57",
+    "source": "https://index.crates.io/by/te/bytes"
+   },
+   "calamine": {
+    "latest": "0.37.0",
+    "stack": "0.37.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/ca/la/calamine"
+   },
+   "cap-std": {
+    "latest": "4.0.3",
+    "stack": "4.0.3",
+    "status": "latest",
+    "source": "https://index.crates.io/ca/p-/cap-std"
+   },
+   "cfb": {
+    "latest": "0.15.0",
+    "stack": "0.15.0",
+    "status": "latest",
+    "rust_version": "1.74",
+    "source": "https://index.crates.io/3/c/cfb"
+   },
+   "chardetng": {
+    "latest": "1.0.0",
+    "stack": "1.0.0",
+    "status": "latest",
+    "rust_version": "1.40",
+    "source": "https://index.crates.io/ch/ar/chardetng"
+   },
+   "chrono": {
+    "latest": "0.4.45",
+    "stack": "0.4.45",
+    "status": "latest",
+    "rust_version": "1.62.0",
+    "source": "https://index.crates.io/ch/ro/chrono"
+   },
+   "chrono-tz": {
+    "latest": "0.10.4",
+    "stack": "0.10.4",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/ch/ro/chrono-tz"
+   },
+   "clap": {
+    "latest": "4.6.7",
+    "stack": "4.6.7",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/cl/ap/clap"
+   },
+   "crc32fast": {
+    "latest": "1.5.3",
+    "stack": "1.5.3",
+    "status": "latest",
+    "rust_version": "1.63",
+    "source": "https://index.crates.io/cr/c3/crc32fast"
+   },
+   "csv": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "rust_version": "1.73",
+    "source": "https://index.crates.io/3/c/csv"
+   },
+   "data-encoding": {
+    "latest": "2.11.1",
+    "stack": "2.11.1",
+    "status": "latest",
+    "rust_version": "1.48",
+    "source": "https://index.crates.io/da/ta/data-encoding"
+   },
+   "ed25519-dalek": {
+    "latest": "3.0.0",
+    "stack": "3.0.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ed/25/ed25519-dalek"
+   },
+   "egui": {
+    "latest": "0.37.0",
+    "stack": "0.37.0",
+    "status": "latest",
+    "rust_version": "1.95",
+    "source": "https://index.crates.io/eg/ui/egui"
+   },
+   "egui-wgpu": {
+    "latest": "0.37.0",
+    "stack": "0.37.0",
+    "status": "latest",
+    "rust_version": "1.95",
+    "source": "https://index.crates.io/eg/ui/egui-wgpu"
+   },
+   "egui-winit": {
+    "latest": "0.37.0",
+    "stack": "0.37.0",
+    "status": "latest",
+    "rust_version": "1.95",
+    "source": "https://index.crates.io/eg/ui/egui-winit"
+   },
+   "encoding_rs": {
+    "latest": "0.8.42",
+    "stack": "0.8.42",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/en/co/encoding_rs"
+   },
+   "errno": {
+    "latest": "0.3.14",
+    "stack": "0.3.14",
+    "status": "latest",
+    "rust_version": "1.56",
+    "source": "https://index.crates.io/er/rn/errno"
+   },
+   "fast_image_resize": {
+    "latest": "6.1.0",
+    "stack": "6.1.0",
+    "status": "latest",
+    "rust_version": "1.87.0",
+    "source": "https://index.crates.io/fa/st/fast_image_resize"
+   },
+   "fastcdc": {
+    "latest": "5.0.0",
+    "stack": "5.0.0",
+    "status": "latest",
+    "source": "https://index.crates.io/fa/st/fastcdc"
+   },
+   "file-format": {
+    "latest": "0.29.0",
+    "stack": "0.29.0",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/fi/le/file-format"
+   },
+   "flate2": {
+    "latest": "1.1.10",
+    "stack": "1.1.10",
+    "status": "latest",
+    "rust_version": "1.67.0",
+    "source": "https://index.crates.io/fl/at/flate2"
+   },
+   "flutter_rust_bridge": {
+    "latest": "2.13.0",
+    "stack": "2.13.0",
+    "status": "latest",
+    "rust_version": "1.70.0",
+    "source": "https://index.crates.io/fl/ut/flutter_rust_bridge"
+   },
+   "futures": {
+    "latest": "0.3.34",
+    "stack": "0.3.34",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/fu/tu/futures"
+   },
+   "futures-util": {
+    "latest": "0.3.34",
+    "stack": "0.3.34",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/fu/tu/futures-util"
+   },
+   "getrandom": {
+    "latest": "0.4.3",
+    "stack": "0.4.3",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ge/tr/getrandom"
+   },
+   "gio": {
+    "latest": "0.22.10",
+    "stack": "0.22.10",
+    "status": "latest",
+    "rust_version": "1.92",
+    "source": "https://index.crates.io/3/g/gio"
+   },
+   "gix": {
+    "latest": "0.90.0",
+    "stack": "0.90.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/3/g/gix"
+   },
+   "glib": {
+    "latest": "0.22.10",
+    "stack": "0.22.10",
+    "status": "latest",
+    "rust_version": "1.92",
+    "source": "https://index.crates.io/gl/ib/glib"
+   },
+   "gloo-timers": {
+    "latest": "0.4.0",
+    "stack": "0.4.0",
+    "status": "latest",
+    "rust_version": "1.82",
+    "source": "https://index.crates.io/gl/oo/gloo-timers"
+   },
+   "harfrust": {
+    "latest": "0.15.0",
+    "stack": "0.15.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ha/rf/harfrust"
+   },
+   "hayro": {
+    "latest": "0.8.0",
+    "stack": "0.8.0",
+    "status": "latest",
+    "rust_version": "1.92",
+    "source": "https://index.crates.io/ha/yr/hayro"
+   },
+   "hex": {
+    "latest": "0.4.3",
+    "stack": "0.4.3",
+    "status": "latest",
+    "source": "https://index.crates.io/3/h/hex"
+   },
+   "hmac": {
+    "latest": "0.13.0",
+    "stack": "0.13.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/hm/ac/hmac"
+   },
+   "html5ever": {
+    "latest": "0.40.1",
+    "stack": "0.40.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ht/ml/html5ever"
+   },
+   "http": {
+    "latest": "1.5.0",
+    "stack": "1.5.0",
+    "status": "latest",
+    "rust_version": "1.57.0",
+    "source": "https://index.crates.io/ht/tp/http"
+   },
+   "http-body-util": {
+    "latest": "0.1.5",
+    "stack": "0.1.5",
+    "status": "latest",
+    "rust_version": "1.61",
+    "source": "https://index.crates.io/ht/tp/http-body-util"
+   },
+   "httparse": {
+    "latest": "1.10.1",
+    "stack": "1.10.1",
+    "status": "latest",
+    "source": "https://index.crates.io/ht/tp/httparse"
+   },
+   "httpdate": {
+    "latest": "1.0.3",
+    "stack": "1.0.3",
+    "status": "latest",
+    "rust_version": "1.56",
+    "source": "https://index.crates.io/ht/tp/httpdate"
+   },
+   "httpsig": {
+    "latest": "0.0.26",
+    "stack": "0.0.26",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/ht/tp/httpsig"
+   },
+   "hyper": {
+    "latest": "1.12.0",
+    "stack": "1.12.0",
+    "status": "latest",
+    "rust_version": "1.63",
+    "source": "https://index.crates.io/hy/pe/hyper"
+   },
+   "hyper-util": {
+    "latest": "0.1.21",
+    "stack": "0.1.21",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/hy/pe/hyper-util"
+   },
+   "image": {
+    "latest": "0.25.10",
+    "stack": "0.25.10",
+    "status": "latest",
+    "rust_version": "1.88.0",
+    "source": "https://index.crates.io/im/ag/image"
+   },
+   "imageproc": {
+    "latest": "0.27.0",
+    "stack": "0.27.0",
+    "status": "latest",
+    "rust_version": "1.87.0",
+    "source": "https://index.crates.io/im/ag/imageproc"
+   },
+   "imagesize": {
+    "latest": "0.15.0",
+    "stack": "0.15.0",
+    "status": "latest",
+    "source": "https://index.crates.io/im/ag/imagesize"
+   },
+   "infer": {
+    "latest": "0.22.0",
+    "stack": "0.22.0",
+    "status": "latest",
+    "rust_version": "1.74",
+    "source": "https://index.crates.io/in/fe/infer"
+   },
+   "iroh": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "rust_version": "1.91",
+    "source": "https://index.crates.io/ir/oh/iroh"
+   },
+   "iroh-base": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "rust_version": "1.91",
+    "source": "https://index.crates.io/ir/oh/iroh-base"
+   },
+   "iroh-relay": {
+    "latest": "1.4.1",
+    "stack": "1.4.1",
+    "status": "latest",
+    "rust_version": "1.91",
+    "source": "https://index.crates.io/ir/oh/iroh-relay"
+   },
+   "jni": {
+    "latest": "0.22.4",
+    "stack": "0.22.4",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/3/j/jni"
+   },
+   "jpeg-encoder": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "rust_version": "1.87",
+    "source": "https://index.crates.io/jp/eg/jpeg-encoder"
+   },
+   "js-sys": {
+    "latest": "0.3.106",
+    "stack": "0.3.106",
+    "status": "latest",
+    "rust_version": "1.81",
+    "source": "https://index.crates.io/js/-s/js-sys"
+   },
+   "jsonschema": {
+    "latest": "0.60.1",
+    "stack": "0.60.1",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/js/on/jsonschema"
+   },
+   "keyring-core": {
+    "latest": "1.0.1",
+    "stack": "1.0.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ke/yr/keyring-core"
+   },
+   "krilla": {
+    "latest": "0.8.2",
+    "stack": "0.8.2",
+    "status": "latest",
+    "rust_version": "1.92",
+    "source": "https://index.crates.io/kr/il/krilla"
+   },
+   "landlock": {
+    "latest": "0.4.7",
+    "stack": "0.4.7",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/la/nd/landlock"
+   },
+   "lettre": {
+    "latest": "0.11.23",
+    "stack": "0.11.23",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/le/tt/lettre"
+   },
+   "libc": {
+    "latest": "0.2.191",
+    "stack": "0.2.191",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/li/bc/libc"
+   },
+   "libproc": {
+    "latest": "0.14.11",
+    "stack": "0.14.11",
+    "status": "latest",
+    "rust_version": "1.72",
+    "source": "https://index.crates.io/li/bp/libproc"
+   },
+   "libsecret": {
+    "latest": "0.9.0",
+    "stack": "0.9.0",
+    "status": "latest",
+    "rust_version": "1.92.0",
+    "source": "https://index.crates.io/li/bs/libsecret"
+   },
+   "log": {
+    "latest": "0.4.34",
+    "stack": "0.4.34",
+    "status": "latest",
+    "rust_version": "1.71.0",
+    "source": "https://index.crates.io/3/l/log"
+   },
+   "lol_html": {
+    "latest": "3.0.2",
+    "stack": "3.0.2",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/lo/l_/lol_html"
+   },
+   "memmap2": {
+    "latest": "0.9.12",
+    "stack": "0.9.12",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/me/mm/memmap2"
+   },
+   "mime": {
+    "latest": "0.3.17",
+    "stack": "0.3.17",
+    "status": "latest",
+    "source": "https://index.crates.io/mi/me/mime"
+   },
+   "mime_guess": {
+    "latest": "2.0.5",
+    "stack": "2.0.5",
+    "status": "latest",
+    "source": "https://index.crates.io/mi/me/mime_guess"
+   },
+   "moxcms": {
+    "latest": "0.9.1",
+    "stack": "0.9.1",
+    "status": "latest",
+    "rust_version": "1.89.0",
+    "source": "https://index.crates.io/mo/xc/moxcms"
+   },
+   "n0-watcher": {
+    "latest": "1.0.1",
+    "stack": "1.0.1",
+    "status": "latest",
+    "rust_version": "1.91",
+    "source": "https://index.crates.io/n0/-w/n0-watcher"
+   },
+   "nix": {
+    "latest": "0.31.3",
+    "stack": "0.31.3",
+    "status": "latest",
+    "rust_version": "1.69",
+    "source": "https://index.crates.io/3/n/nix"
+   },
+   "noq": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/3/n/noq"
+   },
+   "noq-proto": {
+    "latest": "1.4.0",
+    "stack": "1.4.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/no/q-/noq-proto"
+   },
+   "objc2": {
+    "latest": "0.6.5",
+    "stack": "0.6.5",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/ob/jc/objc2"
+   },
+   "objc2-app-kit": {
+    "latest": "0.3.2",
+    "stack": "0.3.2",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/ob/jc/objc2-app-kit"
+   },
+   "objc2-foundation": {
+    "latest": "0.3.2",
+    "stack": "0.3.2",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/ob/jc/objc2-foundation"
+   },
+   "openh264": {
+    "latest": "0.9.9",
+    "stack": "0.9.9",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/op/en/openh264"
+   },
+   "openh264-sys2": {
+    "latest": "0.9.9",
+    "stack": "0.9.9",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/op/en/openh264-sys2"
+   },
+   "opentelemetry": {
+    "latest": "0.33.1",
+    "stack": "0.33.1",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/op/en/opentelemetry"
+   },
+   "opentelemetry-appender-tracing": {
+    "latest": "0.33.1",
+    "stack": "0.33.1",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/op/en/opentelemetry-appender-tracing"
+   },
+   "opentelemetry-otlp": {
+    "latest": "0.33.1",
+    "stack": "0.33.1",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/op/en/opentelemetry-otlp"
+   },
+   "opentelemetry-proto": {
+    "latest": "0.33.1",
+    "stack": "0.33.1",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/op/en/opentelemetry-proto"
+   },
+   "opentelemetry_sdk": {
+    "latest": "0.33.1",
+    "stack": "0.33.1",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/op/en/opentelemetry_sdk"
+   },
+   "opus": {
+    "latest": "0.4.0",
+    "stack": "0.4.0",
+    "status": "latest",
+    "source": "https://index.crates.io/op/us/opus"
+   },
+   "password-hash": {
+    "latest": "0.6.1",
+    "stack": "0.6.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/pa/ss/password-hash"
+   },
+   "percent-encoding": {
+    "latest": "2.3.2",
+    "stack": "2.3.2",
+    "status": "latest",
+    "rust_version": "1.51",
+    "source": "https://index.crates.io/pe/rc/percent-encoding"
+   },
+   "pipewire": {
+    "latest": "0.10.1",
+    "stack": "0.10.1",
+    "status": "latest",
+    "rust_version": "1.80",
+    "source": "https://index.crates.io/pi/pe/pipewire"
+   },
+   "png": {
+    "latest": "0.18.1",
+    "stack": "0.18.1",
+    "status": "latest",
+    "rust_version": "1.73",
+    "source": "https://index.crates.io/3/p/png"
+   },
+   "pollster": {
+    "latest": "1.0.1",
+    "stack": "1.0.1",
+    "status": "latest",
+    "rust_version": "1.69",
+    "source": "https://index.crates.io/po/ll/pollster"
+   },
+   "postcard": {
+    "latest": "1.1.3",
+    "stack": "1.1.3",
+    "status": "latest",
+    "source": "https://index.crates.io/po/st/postcard"
+   },
+   "process-wrap": {
+    "latest": "10.0.1",
+    "stack": "10.0.1",
+    "status": "latest",
+    "rust_version": "1.87.0",
+    "source": "https://index.crates.io/pr/oc/process-wrap"
+   },
+   "proptest": {
+    "latest": "1.12.0",
+    "stack": "1.12.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/pr/op/proptest"
+   },
+   "prost": {
+    "latest": "0.14.4",
+    "stack": "0.14.4",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/pr/os/prost"
+   },
+   "pulldown-cmark": {
+    "latest": "0.13.5",
+    "stack": "0.13.5",
+    "status": "latest",
+    "rust_version": "1.71.1",
+    "source": "https://index.crates.io/pu/ll/pulldown-cmark"
+   },
+   "qrcode": {
+    "latest": "0.14.1",
+    "stack": "0.14.1",
+    "status": "latest",
+    "rust_version": "1.67.1",
+    "source": "https://index.crates.io/qr/co/qrcode"
+   },
+   "quick-xml": {
+    "latest": "0.42.0",
+    "stack": "0.42.0",
+    "status": "latest",
+    "rust_version": "1.86",
+    "source": "https://index.crates.io/qu/ic/quick-xml"
+   },
+   "rand": {
+    "latest": "0.10.3",
+    "stack": "0.10.3",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ra/nd/rand"
+   },
+   "ravif": {
+    "latest": "0.13.0",
+    "stack": "0.13.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ra/vi/ravif"
+   },
+   "rcgen": {
+    "latest": "0.14.10",
+    "stack": "0.14.10",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/rc/ge/rcgen"
+   },
+   "rclip-rtf": {
+    "latest": "0.1.0",
+    "stack": "0.1.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/rc/li/rclip-rtf"
+   },
+   "redb": {
+    "latest": "4.4.0",
+    "stack": "4.4.0",
+    "status": "latest",
+    "rust_version": "1.90",
+    "source": "https://index.crates.io/re/db/redb"
+   },
+   "regex": {
+    "latest": "1.13.1",
+    "stack": "1.13.1",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/re/ge/regex"
+   },
+   "reis": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "rust_version": "1.71.1",
+    "source": "https://index.crates.io/re/is/reis"
+   },
+   "reqwest": {
+    "latest": "0.13.5",
+    "stack": "0.13.5",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/re/qw/reqwest"
+   },
+   "ring": {
+    "latest": "0.17.14",
+    "stack": "0.17.14",
+    "status": "latest",
+    "rust_version": "1.66.0",
+    "source": "https://index.crates.io/ri/ng/ring"
+   },
+   "rmcp": {
+    "latest": "3.7.0",
+    "stack": "3.7.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/rm/cp/rmcp"
+   },
+   "rusqlite": {
+    "latest": "0.41.0",
+    "stack": "0.41.0",
+    "status": "latest",
+    "rust_version": "1.89.0",
+    "source": "https://index.crates.io/ru/sq/rusqlite"
+   },
+   "russh": {
+    "latest": "0.64.1",
+    "stack": "0.64.1",
+    "status": "latest",
+    "rust_version": "1.89",
+    "source": "https://index.crates.io/ru/ss/russh"
+   },
+   "rust_xlsxwriter": {
+    "latest": "0.101.0",
+    "stack": "0.101.0",
+    "status": "latest",
+    "rust_version": "1.88.0",
+    "source": "https://index.crates.io/ru/st/rust_xlsxwriter"
+   },
+   "rustc-hash": {
+    "latest": "2.1.3",
+    "stack": "2.1.3",
+    "status": "latest",
+    "rust_version": "1.77",
+    "source": "https://index.crates.io/ru/st/rustc-hash"
+   },
+   "rustix": {
+    "latest": "1.1.5",
+    "stack": "1.1.5",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/ru/st/rustix"
+   },
+   "rustls": {
+    "latest": "0.23.46",
+    "stack": "0.23.46",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/ru/st/rustls"
+   },
+   "rustls-pki-types": {
+    "latest": "1.15.1",
+    "stack": "1.15.1",
+    "status": "latest",
+    "rust_version": "1.60",
+    "source": "https://index.crates.io/ru/st/rustls-pki-types"
+   },
+   "rustls-platform-verifier": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ru/st/rustls-platform-verifier"
+   },
+   "schemars": {
+    "latest": "1.2.3",
+    "stack": "1.2.3",
+    "status": "latest",
+    "rust_version": "1.74",
+    "source": "https://index.crates.io/sc/he/schemars"
+   },
+   "seccompiler": {
+    "latest": "0.5.0",
+    "stack": "0.5.0",
+    "status": "latest",
+    "source": "https://index.crates.io/se/cc/seccompiler"
+   },
+   "secrecy": {
+    "latest": "0.10.3",
+    "stack": "0.10.3",
+    "status": "latest",
+    "rust_version": "1.60",
+    "source": "https://index.crates.io/se/cr/secrecy"
+   },
+   "semver": {
+    "latest": "1.0.28",
+    "stack": "1.0.28",
+    "status": "latest",
+    "rust_version": "1.68",
+    "source": "https://index.crates.io/se/mv/semver"
+   },
+   "serde": {
+    "latest": "1.0.229",
+    "stack": "1.0.229",
+    "status": "latest",
+    "rust_version": "1.56",
+    "source": "https://index.crates.io/se/rd/serde"
+   },
+   "serde_json": {
+    "latest": "1.0.154",
+    "stack": "1.0.154",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/se/rd/serde_json"
+   },
+   "serde_urlencoded": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "source": "https://index.crates.io/se/rd/serde_urlencoded"
+   },
+   "sha2": {
+    "latest": "0.11.1",
+    "stack": "0.11.1",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/sh/a2/sha2"
+   },
+   "snap": {
+    "latest": "1.1.2",
+    "stack": "1.1.2",
+    "status": "latest",
+    "source": "https://index.crates.io/sn/ap/snap"
+   },
+   "socket2": {
+    "latest": "0.6.5",
+    "stack": "0.6.5",
+    "status": "latest",
+    "rust_version": "1.70",
+    "source": "https://index.crates.io/so/ck/socket2"
+   },
+   "sqlite-wasm-rs": {
+    "latest": "0.6.2",
+    "stack": "0.6.2",
+    "status": "latest",
+    "rust_version": "1.81.0",
+    "source": "https://index.crates.io/sq/li/sqlite-wasm-rs"
+   },
+   "sqlite-wasm-vfs": {
+    "latest": "0.3.0",
+    "stack": "0.3.0",
+    "status": "latest",
+    "rust_version": "1.81.0",
+    "source": "https://index.crates.io/sq/li/sqlite-wasm-vfs"
+   },
+   "sqlx": {
+    "latest": "0.9.0",
+    "stack": "0.9.0",
+    "status": "latest",
+    "rust_version": "1.94.0",
+    "source": "https://index.crates.io/sq/lx/sqlx"
+   },
+   "ssimulacra2": {
+    "latest": "0.5.1",
+    "stack": "0.5.1",
+    "status": "latest",
+    "rust_version": "1.65.0",
+    "source": "https://index.crates.io/ss/im/ssimulacra2"
+   },
+   "subtle": {
+    "latest": "2.6.1",
+    "stack": "2.6.1",
+    "status": "latest",
+    "source": "https://index.crates.io/su/bt/subtle"
+   },
+   "tar": {
+    "latest": "0.4.46",
+    "stack": "0.4.46",
+    "status": "latest",
+    "rust_version": "1.63",
+    "source": "https://index.crates.io/3/t/tar"
+   },
+   "tempfile": {
+    "latest": "3.27.0",
+    "stack": "3.27.0",
+    "status": "latest",
+    "rust_version": "1.63",
+    "source": "https://index.crates.io/te/mp/tempfile"
+   },
+   "thiserror": {
+    "latest": "2.0.21",
+    "stack": "2.0.21",
+    "status": "latest",
+    "rust_version": "1.77",
+    "source": "https://index.crates.io/th/is/thiserror"
+   },
+   "time": {
+    "latest": "0.3.55",
+    "stack": "0.3.55",
+    "status": "latest",
+    "rust_version": "1.88.0",
+    "source": "https://index.crates.io/ti/me/time"
+   },
+   "tokio": {
+    "latest": "1.54.1",
+    "stack": "1.54.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/to/ki/tokio"
+   },
+   "tokio-rustls": {
+    "latest": "0.26.6",
+    "stack": "0.26.6",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/to/ki/tokio-rustls"
+   },
+   "tokio-stream": {
+    "latest": "0.1.19",
+    "stack": "0.1.19",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/to/ki/tokio-stream"
+   },
+   "tokio-util": {
+    "latest": "0.7.20",
+    "stack": "0.7.20",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/to/ki/tokio-util"
+   },
+   "toml": {
+    "latest": "1.1.8+spec-1.1.0",
+    "stack": "1.1.8+spec-1.1.0",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/to/ml/toml"
+   },
+   "tonic": {
+    "latest": "0.14.6",
+    "stack": "0.14.6",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/to/ni/tonic"
+   },
+   "tower": {
+    "latest": "0.5.3",
+    "stack": "0.5.3",
+    "status": "latest",
+    "rust_version": "1.64.0",
+    "source": "https://index.crates.io/to/we/tower"
+   },
+   "tower-http": {
+    "latest": "0.7.1",
+    "stack": "0.7.1",
+    "status": "latest",
+    "rust_version": "1.65",
+    "source": "https://index.crates.io/to/we/tower-http"
+   },
+   "tracing": {
+    "latest": "0.1.44",
+    "stack": "0.1.44",
+    "status": "latest",
+    "rust_version": "1.65.0",
+    "source": "https://index.crates.io/tr/ac/tracing"
+   },
+   "tracing-opentelemetry": {
+    "latest": "0.34.0",
+    "stack": "0.34.0",
+    "status": "latest",
+    "rust_version": "1.75.0",
+    "source": "https://index.crates.io/tr/ac/tracing-opentelemetry"
+   },
+   "tracing-subscriber": {
+    "latest": "0.3.23",
+    "stack": "0.3.23",
+    "status": "latest",
+    "rust_version": "1.65.0",
+    "source": "https://index.crates.io/tr/ac/tracing-subscriber"
+   },
+   "tsify": {
+    "latest": "0.5.8",
+    "stack": "0.5.8",
+    "status": "latest",
+    "source": "https://index.crates.io/ts/if/tsify"
+   },
+   "turmoil": {
+    "latest": "0.7.2",
+    "stack": "0.7.2",
+    "status": "latest",
+    "source": "https://index.crates.io/tu/rm/turmoil"
+   },
+   "unicode-normalization": {
+    "latest": "0.1.26",
+    "stack": "0.1.26",
+    "status": "latest",
+    "rust_version": "1.36",
+    "source": "https://index.crates.io/un/ic/unicode-normalization"
+   },
+   "unicode-segmentation": {
+    "latest": "1.13.3",
+    "stack": "1.13.3",
+    "status": "latest",
+    "rust_version": "1.85.0",
+    "source": "https://index.crates.io/un/ic/unicode-segmentation"
+   },
+   "url": {
+    "latest": "2.5.8",
+    "stack": "2.5.8",
+    "status": "latest",
+    "rust_version": "1.63",
+    "source": "https://index.crates.io/3/u/url"
+   },
+   "utoipa": {
+    "latest": "6.0.0",
+    "stack": "6.0.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/ut/oi/utoipa"
+   },
+   "utoipa-axum": {
+    "latest": "0.3.0",
+    "stack": "0.3.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/ut/oi/utoipa-axum"
+   },
+   "uuid": {
+    "latest": "1.29.0",
+    "stack": "1.29.0",
+    "status": "latest",
+    "rust_version": "1.89.0",
+    "source": "https://index.crates.io/uu/id/uuid"
+   },
+   "validator": {
+    "latest": "0.21.0",
+    "stack": "0.21.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/va/li/validator"
+   },
+   "wasm-bindgen": {
+    "latest": "0.2.129",
+    "stack": "0.2.129",
+    "status": "latest",
+    "rust_version": "1.81",
+    "source": "https://index.crates.io/wa/sm/wasm-bindgen"
+   },
+   "wasm-bindgen-futures": {
+    "latest": "0.4.79",
+    "stack": "0.4.79",
+    "status": "latest",
+    "rust_version": "1.81",
+    "source": "https://index.crates.io/wa/sm/wasm-bindgen-futures"
+   },
+   "wasm-bindgen-test": {
+    "latest": "0.3.79",
+    "stack": "0.3.79",
+    "status": "latest",
+    "rust_version": "1.81",
+    "source": "https://index.crates.io/wa/sm/wasm-bindgen-test"
+   },
+   "web-sys": {
+    "latest": "0.3.106",
+    "stack": "0.3.106",
+    "status": "latest",
+    "rust_version": "1.81",
+    "source": "https://index.crates.io/we/b-/web-sys"
+   },
+   "web-time": {
+    "latest": "1.1.0",
+    "stack": "1.1.0",
+    "status": "latest",
+    "rust_version": "1.60",
+    "source": "https://index.crates.io/we/b-/web-time"
+   },
+   "webauthn-rs": {
+    "latest": "0.5.5",
+    "stack": "0.5.5",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/we/ba/webauthn-rs"
+   },
+   "webp": {
+    "latest": "0.3.1",
+    "stack": "0.3.1",
+    "status": "latest",
+    "source": "https://index.crates.io/we/bp/webp"
+   },
+   "webpki-roots": {
+    "latest": "1.0.11",
+    "stack": "1.0.11",
+    "status": "latest",
+    "rust_version": "1.71",
+    "source": "https://index.crates.io/we/bp/webpki-roots"
+   },
+   "wgpu": {
+    "latest": "30.0.1",
+    "stack": "30.0.1",
+    "status": "latest",
+    "rust_version": "1.87.0",
+    "source": "https://index.crates.io/wg/pu/wgpu"
+   },
+   "windows-native-keyring-store": {
+    "latest": "1.1.0",
+    "stack": "1.1.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/wi/nd/windows-native-keyring-store"
+   },
+   "winit": {
+    "latest": "0.30.13",
+    "stack": "0.30.13",
+    "status": "latest",
+    "rust_version": "1.70.0",
+    "source": "https://index.crates.io/wi/ni/winit"
+   },
+   "x11rb": {
+    "latest": "0.14.0",
+    "stack": "0.14.0",
+    "status": "latest",
+    "rust_version": "1.68",
+    "source": "https://index.crates.io/x1/1r/x11rb"
+   },
+   "zeroize": {
+    "latest": "1.9.1",
+    "stack": "1.9.1",
+    "status": "latest",
+    "rust_version": "1.85",
+    "source": "https://index.crates.io/ze/ro/zeroize"
+   },
+   "zip": {
+    "latest": "9.1.0",
+    "stack": "9.1.0",
+    "status": "latest",
+    "rust_version": "1.88",
+    "source": "https://index.crates.io/3/z/zip"
+   }
+  },
+  "pub": {
+   "analyzer": {
+    "latest": "14.6.0",
+    "stack": "14.6.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.13.0"
+    },
+    "source": "https://pub.dev/api/packages/analyzer"
+   },
+   "barcode_widget": {
+    "latest": "2.0.4",
+    "stack": "2.0.4",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=2.12.0 <4.0.0",
+     "flutter": ">=1.16.0"
+    },
+    "source": "https://pub.dev/api/packages/barcode_widget"
+   },
+   "build_runner": {
+    "latest": "2.17.1",
+    "stack": "2.17.1",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0"
+    },
+    "source": "https://pub.dev/api/packages/build_runner"
+   },
+   "built_collection": {
+    "latest": "5.1.2",
+    "stack": "5.1.2",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0"
+    },
+    "source": "https://pub.dev/api/packages/built_collection"
+   },
+   "built_value": {
+    "latest": "8.13.0",
+    "stack": "8.13.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/built_value"
+   },
+   "built_value_generator": {
+    "latest": "8.13.0",
+    "stack": "8.13.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.6.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/built_value_generator"
+   },
+   "cached_network_image": {
+    "latest": "4.0.5",
+    "stack": "4.0.5",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0",
+     "flutter": ">=3.44.0"
+    },
+    "source": "https://pub.dev/api/packages/cached_network_image"
+   },
+   "clock": {
+    "latest": "1.1.3",
+    "stack": "1.1.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.4.0"
+    },
+    "source": "https://pub.dev/api/packages/clock"
+   },
+   "code_assets": {
+    "latest": "2.1.0",
+    "stack": "2.1.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/code_assets"
+   },
+   "connectivity_plus": {
+    "latest": "7.3.2",
+    "stack": "7.3.2",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.2.0 <4.0.0",
+     "flutter": ">=3.7.0"
+    },
+    "source": "https://pub.dev/api/packages/connectivity_plus"
+   },
+   "cross_file": {
+    "latest": "0.4.0",
+    "stack": "0.4.0",
+    "status": "latest+exception",
+    "exceptions": [
+     {
+      "version": "0.3.5+5",
+      "reason": "file_picker 13.2.0 (latest) requires cross_file ^0.3.5+4.",
+      "upstream": [
+       "https://github.com/vicajilau/flutter_file_picker/pull/2236",
+       "https://github.com/vicajilau/flutter_file_picker/issues/2224"
+      ],
+      "removal_condition": "file_picker 14 (cross_file 0.4) is released.",
+      "project_count": 1
+     }
+    ],
+    "environment": {
+     "sdk": "^3.11.0",
+     "flutter": ">=3.41.0"
+    },
+    "source": "https://pub.dev/api/packages/cross_file"
+   },
+   "crypto": {
+    "latest": "3.0.7",
+    "stack": "3.0.7",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.4.0"
+    },
+    "source": "https://pub.dev/api/packages/crypto"
+   },
+   "cupertino_icons": {
+    "latest": "2.0.0",
+    "stack": "2.0.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0"
+    },
+    "source": "https://pub.dev/api/packages/cupertino_icons"
+   },
+   "device_info_plus": {
+    "latest": "13.3.0",
+    "stack": "13.3.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0",
+     "flutter": ">=3.38.1"
+    },
+    "source": "https://pub.dev/api/packages/device_info_plus"
+   },
+   "dio": {
+    "latest": "5.11.1",
+    "stack": "5.11.1",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=2.18.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/dio"
+   },
+   "drift": {
+    "latest": "2.35.3",
+    "stack": "2.35.3",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/drift"
+   },
+   "drift_dev": {
+    "latest": "2.35.2",
+    "stack": "2.35.2",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/drift_dev"
+   },
+   "drift_flutter": {
+    "latest": "0.3.1",
+    "stack": "0.3.1",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/drift_flutter"
+   },
+   "fake_async": {
+    "latest": "1.3.3",
+    "stack": "1.3.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.3.0"
+    },
+    "source": "https://pub.dev/api/packages/fake_async"
+   },
+   "file_picker": {
+    "latest": "13.2.0",
+    "stack": "13.2.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/file_picker"
+   },
+   "firebase_core": {
+    "latest": "5.1.0",
+    "stack": "5.1.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.6.0",
+     "flutter": ">=3.27.0"
+    },
+    "source": "https://pub.dev/api/packages/firebase_core"
+   },
+   "firebase_messaging": {
+    "latest": "17.0.1",
+    "stack": "17.0.1",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.6.0",
+     "flutter": ">=3.27.0"
+    },
+    "source": "https://pub.dev/api/packages/firebase_messaging"
+   },
+   "flutter": {
+    "latest": "sdk",
+    "stack": "sdk",
+    "status": "latest",
+    "source": "flutter-sdk"
+   },
+   "flutter_cache_manager": {
+    "latest": "3.4.5",
+    "stack": "3.4.5",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.8.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_cache_manager"
+   },
+   "flutter_launcher_icons": {
+    "latest": "0.14.4",
+    "stack": "0.14.4",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_launcher_icons"
+   },
+   "flutter_lints": {
+    "latest": "6.0.0",
+    "stack": "6.0.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.8.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_lints"
+   },
+   "flutter_localizations": {
+    "latest": "sdk",
+    "stack": "sdk",
+    "status": "latest",
+    "source": "flutter-sdk"
+   },
+   "flutter_map": {
+    "latest": "8.3.2",
+    "stack": "8.3.2",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.6.0 <4.0.0",
+     "flutter": ">=3.27.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_map"
+   },
+   "flutter_map_vector_tiles": {
+    "latest": "2.10.1",
+    "stack": "2.10.1",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.6.0 <4.0.0",
+     "flutter": ">=3.27.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_map_vector_tiles"
+   },
+   "flutter_native_splash": {
+    "latest": "2.4.8",
+    "stack": "2.4.8",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0",
+     "flutter": ">=2.5.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_native_splash"
+   },
+   "flutter_riverpod": {
+    "latest": "3.4.3",
+    "stack": "3.4.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0",
+     "flutter": ">=3.0.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_riverpod"
+   },
+   "flutter_rust_bridge": {
+    "latest": "2.13.0",
+    "stack": "2.13.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.9.2 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_rust_bridge"
+   },
+   "flutter_rust_bridge_hooks": {
+    "latest": "2.13.0",
+    "stack": "2.13.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.9.2 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_rust_bridge_hooks"
+   },
+   "flutter_secure_storage": {
+    "latest": "11.2.0",
+    "stack": "11.2.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.8.0 <4.0.0",
+     "flutter": ">=3.19.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_secure_storage"
+   },
+   "flutter_svg": {
+    "latest": "2.3.0",
+    "stack": "2.3.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.9.0",
+     "flutter": ">=3.35.0"
+    },
+    "source": "https://pub.dev/api/packages/flutter_svg"
+   },
+   "flutter_test": {
+    "latest": "sdk",
+    "stack": "sdk",
+    "status": "latest",
+    "source": "flutter-sdk"
+   },
+   "geolocator": {
+    "latest": "14.1.2",
+    "stack": "14.1.2",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.5.0",
+     "flutter": ">=2.8.0"
+    },
+    "source": "https://pub.dev/api/packages/geolocator"
+   },
+   "go_router": {
+    "latest": "18.1.1",
+    "stack": "18.1.1",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0",
+     "flutter": ">=3.44.0"
+    },
+    "source": "https://pub.dev/api/packages/go_router"
+   },
+   "html": {
+    "latest": "0.15.7",
+    "stack": "0.15.7",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.6.0"
+    },
+    "source": "https://pub.dev/api/packages/html"
+   },
+   "http": {
+    "latest": "1.6.0",
+    "stack": "1.6.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.4.0"
+    },
+    "source": "https://pub.dev/api/packages/http"
+   },
+   "integration_test": {
+    "latest": "sdk",
+    "stack": "sdk",
+    "status": "latest",
+    "source": "flutter-sdk"
+   },
+   "internet_connection_checker_plus": {
+    "latest": "3.1.2",
+    "stack": "3.1.2",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=2.15.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/internet_connection_checker_plus"
+   },
+   "intl": {
+    "latest": "0.20.3",
+    "stack": "0.20.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.9.0"
+    },
+    "source": "https://pub.dev/api/packages/intl"
+   },
+   "latlong2": {
+    "latest": "0.10.1",
+    "stack": "0.10.1",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/latlong2"
+   },
+   "local_auth": {
+    "latest": "3.0.2",
+    "stack": "3.0.2",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.10.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/local_auth"
+   },
+   "logging": {
+    "latest": "1.3.0",
+    "stack": "1.3.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.4.0"
+    },
+    "source": "https://pub.dev/api/packages/logging"
+   },
+   "map_launcher": {
+    "latest": "7.0.0",
+    "stack": "7.0.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0",
+     "flutter": ">=3.41.0"
+    },
+    "source": "https://pub.dev/api/packages/map_launcher"
+   },
+   "mobile_scanner": {
+    "latest": "7.4.2",
+    "stack": "7.4.2",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.7.0",
+     "flutter": ">=3.29.0"
+    },
+    "source": "https://pub.dev/api/packages/mobile_scanner"
+   },
+   "no_screenshot": {
+    "latest": "2.0.1",
+    "stack": "2.0.1",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.12.0 <4.0.0",
+     "flutter": ">=3.44.0"
+    },
+    "source": "https://pub.dev/api/packages/no_screenshot"
+   },
+   "one_of": {
+    "latest": "1.5.0",
+    "stack": "1.5.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=2.12.0 <3.0.0"
+    },
+    "source": "https://pub.dev/api/packages/one_of"
+   },
+   "one_of_serializer": {
+    "latest": "1.5.0",
+    "stack": "1.5.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=2.12.0 <3.0.0"
+    },
+    "source": "https://pub.dev/api/packages/one_of_serializer"
+   },
+   "package_info_plus": {
+    "latest": "10.2.2",
+    "stack": "10.2.2",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0",
+     "flutter": ">=3.38.1"
+    },
+    "source": "https://pub.dev/api/packages/package_info_plus"
+   },
+   "path_parsing": {
+    "latest": "1.1.0",
+    "stack": "1.1.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.3.0"
+    },
+    "source": "https://pub.dev/api/packages/path_parsing"
+   },
+   "path_provider": {
+    "latest": "2.1.6",
+    "stack": "2.1.6",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.10.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/path_provider"
+   },
+   "path_provider_platform_interface": {
+    "latest": "2.1.3",
+    "stack": "2.1.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.10.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/path_provider_platform_interface"
+   },
+   "pigeon": {
+    "latest": "29.0.11",
+    "stack": "29.0.11",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0"
+    },
+    "source": "https://pub.dev/api/packages/pigeon"
+   },
+   "riverpod_annotation": {
+    "latest": "4.0.7",
+    "stack": "4.0.7",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0"
+    },
+    "source": "https://pub.dev/api/packages/riverpod_annotation"
+   },
+   "riverpod_generator": {
+    "latest": "4.0.9",
+    "stack": "4.0.9",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0"
+    },
+    "source": "https://pub.dev/api/packages/riverpod_generator"
+   },
+   "screen_brightness": {
+    "latest": "2.1.11",
+    "stack": "2.1.11",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0",
+     "flutter": ">=3.0.0"
+    },
+    "source": "https://pub.dev/api/packages/screen_brightness"
+   },
+   "shared_preferences": {
+    "latest": "2.5.6",
+    "stack": "2.5.6",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0",
+     "flutter": ">=3.41.0"
+    },
+    "source": "https://pub.dev/api/packages/shared_preferences"
+   },
+   "shared_preferences_platform_interface": {
+    "latest": "2.4.2",
+    "stack": "2.4.2",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.9.0",
+     "flutter": ">=3.35.0"
+    },
+    "source": "https://pub.dev/api/packages/shared_preferences_platform_interface"
+   },
+   "sqlite3": {
+    "latest": "3.8.0",
+    "stack": "3.8.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.10.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/sqlite3"
+   },
+   "test": {
+    "latest": "1.33.0",
+    "stack": "1.33.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0"
+    },
+    "source": "https://pub.dev/api/packages/test"
+   },
+   "url_launcher": {
+    "latest": "6.3.3",
+    "stack": "6.3.3",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.11.0",
+     "flutter": ">=3.41.0"
+    },
+    "source": "https://pub.dev/api/packages/url_launcher"
+   },
+   "uuid": {
+    "latest": "4.6.0",
+    "stack": "4.6.0",
+    "status": "latest",
+    "environment": {
+     "sdk": ">=3.0.0 <4.0.0"
+    },
+    "source": "https://pub.dev/api/packages/uuid"
+   },
+   "video_player": {
+    "latest": "2.14.1",
+    "stack": "2.14.1",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.12.0",
+     "flutter": ">=3.44.0"
+    },
+    "source": "https://pub.dev/api/packages/video_player"
+   },
+   "video_player_platform_interface": {
+    "latest": "6.9.0",
+    "stack": "6.9.0",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.10.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/video_player_platform_interface"
+   },
+   "webview_flutter": {
+    "latest": "4.14.1",
+    "stack": "4.14.1",
+    "status": "latest",
+    "environment": {
+     "sdk": "^3.10.0",
+     "flutter": ">=3.38.0"
+    },
+    "source": "https://pub.dev/api/packages/webview_flutter"
+   }
+  },
+  "go": {
+   "github.com/actions/scaleset": {
+    "latest": "v0.5.0",
+    "stack": "v0.5.0",
+    "status": "latest",
+    "source": "https://proxy.golang.org/github.com/actions/scaleset/@latest"
+   },
+   "github.com/dlclark/regexp2": {
+    "latest": "v1.12.0",
+    "stack": "v1.12.0",
+    "status": "latest",
+    "source": "https://proxy.golang.org/github.com/dlclark/regexp2/@latest"
+   },
+   "github.com/google/uuid": {
+    "latest": "v1.6.0",
+    "stack": "v1.6.0",
+    "status": "latest",
+    "source": "https://proxy.golang.org/github.com/google/uuid/@latest"
+   },
+   "github.com/santhosh-tekuri/jsonschema/v6": {
+    "latest": "v6.0.3",
+    "stack": "v6.0.3",
+    "status": "latest",
+    "source": "https://proxy.golang.org/github.com/santhosh-tekuri/jsonschema/v6/@latest"
+   },
+   "github.com/spf13/cobra": {
+    "latest": "v1.10.2",
+    "stack": "v1.10.2",
+    "status": "latest",
+    "source": "https://proxy.golang.org/github.com/spf13/cobra/@latest"
+   },
+   "go.yaml.in/yaml/v4": {
+    "latest": "v4.0.0-rc.6",
+    "stack": "v4.0.0-rc.6",
+    "status": "latest",
+    "source": "https://proxy.golang.org/go.yaml.in/yaml/v4/@latest"
+   },
+   "golang.org/x/mod": {
+    "latest": "v0.42.0",
+    "stack": "v0.42.0",
+    "status": "latest",
+    "source": "https://proxy.golang.org/golang.org/x/mod/@latest"
+   },
+   "modernc.org/sqlite": {
+    "latest": "v1.61.0",
+    "stack": "v1.61.0",
+    "status": "latest",
+    "source": "https://proxy.golang.org/modernc.org/sqlite/@latest"
+   }
+  }
+ },
+ "github_actions": {
+  "DavidAnson/markdownlint-cli2-action": {
+   "latest": "v24.2.0",
+   "sha": "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff",
+   "core_refs": null
+  },
+  "actions-rust-lang/setup-rust-toolchain": {
+   "latest": "v2.0.0",
+   "sha": "ecabd13d1c56bd1345c230e542e9144811ad706f",
+   "core_refs": null
+  },
+  "actions/attest": {
+   "latest": "v4.2.2",
+   "sha": "1e69f48acb82d1966a394da916b4c1698aa569d6",
+   "core_refs": null
+  },
+  "actions/attest-build-provenance": {
+   "latest": "v4.2.2",
+   "sha": "4d101475d8b20a2381f78447822ac1eab6504dd8",
+   "core_refs": null
+  },
+  "actions/cache": {
+   "latest": "v6.1.0",
+   "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+   "core_refs": null
+  },
+  "actions/checkout": {
+   "latest": "v7.0.1",
+   "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+   "core_refs": null
+  },
+  "actions/dependency-review-action": {
+   "latest": "v5.0.0",
+   "sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+   "core_refs": null
+  },
+  "actions/download-artifact": {
+   "latest": "v8.0.2",
+   "sha": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+   "core_refs": null
+  },
+  "actions/github-script": {
+   "latest": "v9.0.0",
+   "sha": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
+   "core_refs": null
+  },
+  "actions/labeler": {
+   "latest": "v7.0.0",
+   "sha": "bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13",
+   "core_refs": null
+  },
+  "actions/setup-dotnet": {
+   "latest": "v6.0.0",
+   "sha": "a98b56852c35b8e3190ac28c8c2271da59106c68",
+   "core_refs": null
+  },
+  "actions/setup-go": {
+   "latest": "v7.0.0",
+   "sha": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+   "core_refs": null
+  },
+  "actions/setup-java": {
+   "latest": "v6.1.0",
+   "sha": "b843ebf9b913146b38da2eaa7aeddf76074ae1ad",
+   "core_refs": null
+  },
+  "actions/setup-node": {
+   "latest": "v7.1.0",
+   "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+   "core_refs": null
+  },
+  "actions/setup-python": {
+   "latest": "v7.1.0",
+   "sha": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+   "core_refs": null
+  },
+  "actions/stale": {
+   "latest": "v11.0.0",
+   "sha": "4391f3da665fdf50b6810c1a66712fb9ba21aa93",
+   "core_refs": null
+  },
+  "actions/upload-artifact": {
+   "latest": "v7.0.2",
+   "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+   "core_refs": null
+  },
+  "amannn/action-semantic-pull-request": {
+   "latest": "v6.1.1",
+   "sha": "48f256284bd46cdaab1048c3721360e808335d50",
+   "core_refs": null
+  },
+  "anchore/scan-action": {
+   "latest": "v7.4.2",
+   "sha": "27805bf3b4e84b4a5c980df22ed233c00390a439",
+   "core_refs": null
+  },
+  "android-actions/setup-android": {
+   "latest": "v4.0.4",
+   "sha": "be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd",
+   "core_refs": null
+  },
+  "aquasecurity/trivy-action": {
+   "latest": "v0.36.0",
+   "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+   "core_refs": null
+  },
+  "astral-sh/setup-uv": {
+   "latest": "v10.3.2",
+   "sha": "07a047e608db84b3d8c06cd9a7c7dcc9c355c18e",
+   "core_refs": null
+  },
+  "benchmark-action/github-action-benchmark": {
+   "latest": "v1.22.2",
+   "sha": "4322e5726e6334590d251fc4f92bec0efafc45dc",
+   "core_refs": null
+  },
+  "bridgecrewio/checkov-action": {
+   "latest": "v12.3135.0",
+   "sha": "99bb2caf247dfd9f03cf984373bc6043d4e32ebf",
+   "core_refs": null,
+   "note": "tags only; no GitHub releases since 2022"
+  },
+  "codecov/codecov-action": {
+   "latest": "v7.1.1",
+   "sha": "303a32d7a59b442fa8d48b6a1cc6825c09c847a5",
+   "core_refs": null
+  },
+  "coverallsapp/github-action": {
+   "latest": "v2.3.8",
+   "sha": "8d6379e14d29928660c4ba802d8e85393440b329",
+   "core_refs": null
+  },
+  "crate-ci/typos": {
+   "latest": "v1.51.1",
+   "sha": "7f9d0819ca1c008ade73f4b41fa9d258d48f605b",
+   "core_refs": null
+  },
+  "docker/build-push-action": {
+   "latest": "v7.4.0",
+   "sha": "c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+   "core_refs": null
+  },
+  "docker/login-action": {
+   "latest": "v4.7.0",
+   "sha": "81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
+   "core_refs": null
+  },
+  "docker/setup-buildx-action": {
+   "latest": "v4.4.1",
+   "sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
+   "core_refs": null
+  },
+  "docker/setup-compose-action": {
+   "latest": "v2.4.0",
+   "sha": "54042514f505b273907334ae2b9cdbb9a0213c1a",
+   "core_refs": null
+  },
+  "docker/setup-docker-action": {
+   "latest": "v5.6.0",
+   "sha": "7ec28a010822b4626af4874f9448a4b05ac6f3e5",
+   "core_refs": null
+  },
+  "dtolnay/rust-toolchain": {
+   "latest": "v1",
+   "sha": "683b588c487a69d01f6c6ddf40f036ff682cc2c8",
+   "core_refs": null
+  },
+  "extractions/setup-just": {
+   "latest": "v4",
+   "sha": "53165ef7e734c5c07cb06b3c8e7b647c5aa16db3",
+   "core_refs": null
+  },
+  "github/codeql-action": {
+   "latest": "v4.39.1",
+   "sha": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+   "core_refs": null
+  },
+  "google/clusterfuzzlite": {
+   "latest": null,
+   "sha": null,
+   "core_refs": null
+  },
+  "gradle/actions": {
+   "latest": "v6.4.0",
+   "sha": "3f5f9adaf7d9fecd50b5935e54106014257a94e6",
+   "core_refs": null
+  },
+  "hashicorp/setup-terraform": {
+   "latest": "v4.0.1",
+   "sha": "dfe3c3f87815947d99a8997f908cb6525fc44e9e",
+   "core_refs": null
+  },
+  "hendrikmuhs/ccache-action": {
+   "latest": "v1.2.24",
+   "sha": "f09c25b45002a07be2955cbe52e8cee55643f89d",
+   "core_refs": null
+  },
+  "lycheeverse/lychee-action": {
+   "latest": "v2.9.0",
+   "sha": "e7477775783ea5526144ba13e8db5eec57747ce8",
+   "core_refs": null
+  },
+  "opentofu/setup-opentofu": {
+   "latest": "v2.0.2",
+   "sha": "a1320f892987e89d278cc92dc5adc984fb93aca4",
+   "core_refs": null
+  },
+  "ossf/scorecard-action": {
+   "latest": "v2.5.0",
+   "sha": "fa7117db83c52d787ae5a89f350999701505d78e",
+   "core_refs": null
+  },
+  "oven-sh/setup-bun": {
+   "latest": "v2.2.0",
+   "sha": "0c5077e51419868618aeaa5fe8019c62421857d6",
+   "core_refs": null
+  },
+  "pypa/gh-action-pypi-publish": {
+   "latest": "v1.14.3",
+   "sha": "7245906fb61fa33a13554f9d5fb856fe61758086",
+   "core_refs": null
+  },
+  "r-lib/actions": {
+   "latest": "v2",
+   "sha": "f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05",
+   "core_refs": null
+  },
+  "ruby/setup-ruby": {
+   "latest": "v1.335.0",
+   "sha": "7f797815d8adceb1c412e7abefdd1ab4abc47a5f",
+   "core_refs": null
+  },
+  "runs-on/cache": {
+   "latest": "v5.0.7",
+   "sha": "88d90644011a3a9957fd141a106f5a94f9794203",
+   "core_refs": null
+  },
+  "rust-lang/crates-io-auth-action": {
+   "latest": "v1.0.6",
+   "sha": "3268eb413133e2960fa4ae0e963ca76380c54cd9",
+   "core_refs": null
+  },
+  "step-security/harden-runner": {
+   "latest": "v2.22.2",
+   "sha": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2",
+   "core_refs": null
+  },
+  "subosito/flutter-action": {
+   "latest": "v2.23.0",
+   "sha": "1a449444c387b1966244ae4d4f8c696479add0b2",
+   "core_refs": null
+  },
+  "swift-actions/setup-swift": {
+   "latest": "v2.4.0",
+   "sha": "7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a",
+   "core_refs": null
+  },
+  "taiki-e/install-action": {
+   "latest": "v2.87.31",
+   "sha": "1e29709c0ec63babbe8f266397a465f29a825f91",
+   "core_refs": null
+  },
+  "trufflesecurity/trufflehog": {
+   "latest": "v3.99.7",
+   "sha": "31ce31ee1abbcc7dc8eee5764c17121c3044c8b2",
+   "core_refs": null
+  },
+  "wagoid/commitlint-github-action": {
+   "latest": "v6.2.1",
+   "sha": "b948419dd99f3fd78a6548d48f94e3df7f6bf3ed",
+   "core_refs": null
+  },
+  "webfactory/ssh-agent": {
+   "latest": "v0.10.0",
+   "sha": "e83874834305fe9a4a2997156cb26c5de65a8555",
+   "core_refs": null
+  }
+ },
+ "container_images": {
+  "python": {
+   "stack_tag": "3.14.9-slim-trixie",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "node": {
+   "stack_tag": "26.12.1-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "oven/bun": {
+   "stack_tag": "1.4.4-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "rust": {
+   "stack_tag": "1.99.1-slim-trixie",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "golang": {
+   "stack_tag": "1.27.3-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "postgres": {
+   "stack_tag": "18.6-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "redis": {
+   "stack_tag": "8.10.2-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "nginx": {
+   "stack_tag": "1.31.8-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "caddy": {
+   "stack_tag": "2.11.7-alpine",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "debian": {
+   "stack_tag": "trixie-slim",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "alpine": {
+   "stack_tag": "3.24.3",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "rustfs/rustfs": {
+   "stack_tag": "1.0.3",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "axllent/mailpit": {
+   "stack_tag": "v1.32.0",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "timberio/vector": {
+   "stack_tag": "0.60.0-debian",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "openobserve/openobserve": {
+   "stack_tag": "v1.1.2",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "ghcr.io/astral-sh/uv": {
+   "stack_tag": "0.13.5-python3.14-trixie-slim",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "gcr.io/distroless/static-debian13": {
+   "stack_tag": "nonroot",
+   "verified": "manifest HTTP 200 on 2026-10-25"
+  },
+  "gcr.io/distroless/cc-debian13": {
+   "stack_tag": "nonroot",
+   "verified": "tag from registry listing"
+  },
+  "qdrant/qdrant": {
+   "stack_tag": "v1.20.0",
+   "verified": "tag from registry listing"
+  },
+  "getmeili/meilisearch": {
+   "stack_tag": "v1.55.0",
+   "verified": "tag from registry listing"
+  },
+  "clamav/clamav": {
+   "stack_tag": "1.5.4-debian13-slim",
+   "verified": "tag from registry listing"
+  },
+  "certbot/certbot": {
+   "stack_tag": "v5.8.0",
+   "verified": "tag from registry listing"
+  },
+  "cloudflare/cloudflared": {
+   "stack_tag": "2026.10.3",
+   "verified": "tag from registry listing"
+  },
+  "maximhq/bifrost": {
+   "stack_tag": "v2.3.2",
+   "verified": "tag from registry listing"
+  }
+ },
+ "replacements": {
+  "npm:@hey-api/client-fetch": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated).",
+  "npm:@hey-api/client-axios": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated).",
+  "npm:@react-email/components": "Package marked no longer supported by npm.",
+  "pypi:miniopy-async": "Stale and MinIO-specific; use an S3 client against RustFS.",
+  "image:minio": "minio/minio GitHub repository archived; RustFS is already used by the company stack."
+ },
+ "workspace_rules": [
+  {
+   "id": "sqlite-links",
+   "rule": "Do not combine sqlx 0.9.x with rusqlite 0.41.x / sqlite-wasm-rs 0.6.x in one Cargo workspace: sqlx-sqlite bounds libsqlite3-sys <0.38 and Cargo enforces links=\"sqlite3\" even for sqlx's optional sqlite backend. A shared workspace must use rusqlite 0.39.0 + sqlite-wasm-rs 0.5.5.",
+   "verified": "cargo generate-lockfile probe with all crates =latest failed; succeeded with rusqlite 0.39.0 + sqlite-wasm-rs 0.5.5",
+   "upstream": [],
+   "removal_condition": "sqlx (now transact-rs/sqlx) releases with a libsqlite3-sys bound that includes the version used by the latest rusqlite. No upstream issue found."
+  }
+ ],
+ "compatibility_checks": [
+  {
+   "id": "npm-peers",
+   "method": "latest manifest peerDependencies vs latest of each peer (npm semver)",
+   "result": "16 required peer conflicts; holds recorded"
+  },
+  {
+   "id": "npm-engines",
+   "method": "engines.node of every latest package vs Node 26.12.1 and 24.22.1",
+   "result": "0 issues"
+  },
+  {
+   "id": "pypi-pairwise",
+   "method": "requires_dist of latest vs latest set (packaging)",
+   "result": "19 base conflicts"
+  },
+  {
+   "id": "pypi-wheels",
+   "method": "PyPI wheel tags for cp314/cp315",
+   "result": "11 gaps (cp315 mostly)"
+  },
+  {
+   "id": "pypi-core-resolve",
+   "method": "uv pip compile, all core direct deps ==latest, iterative relaxation, py3.14 manylinux_2_28",
+   "result": "resolves on 3.14.9 with holds; fails on 3.15.1"
+  },
+  {
+   "id": "crates-resolve",
+   "method": "cargo generate-lockfile, all crates =latest, rust-version 1.99",
+   "result": "union resolves only with rusqlite 0.39.0 + sqlite-wasm-rs 0.5.5 (see workspace_rules); 149 crates appear in >1 semver-incompatible version"
+  },
+  {
+   "id": "android-jvm",
+   "method": "official compatibility tables (Kotlin v.list, AGP release notes, Gradle compatibility, flutter_tools@3.47.8)",
+   "result": "KGP 2.4.21 caps Gradle 9.7.0 / AGP 9.3.1 -> Gradle 9.7.1, AGP 9.3.3, JDK 25 runtime, Java 17 target"
+  },
+  {
+   "id": "crates-msrv",
+   "method": "sparse index rust_version of latest crates",
+   "result": "max 1.95 <= 1.99.1"
+  },
+  {
+   "id": "pub-constraints",
+   "method": "latest pubspec environment/dependency constraints vs Dart 3.13.7 / Flutter 3.47.8",
+   "result": "cross_file held; one_of <3.0.0 is auto-widened by Dart 3 pub"
+  },
+  {
+   "id": "images",
+   "method": "registry manifest/tag existence",
+   "result": "all stack tags present"
+  },
+  {
+   "id": "playbook-toolbox",
+   "method": "developer-toolbox.json vs latest GitHub release",
+   "result": "3 of 126 behind (mise, tealdeer, tombi)"
+  }
+ ],
+ "cache_services": {
+  "status": "design input; no cache service is implemented yet",
+  "evidence_levels": {
+   "verified": "checked against the primary source on the registry snapshot date",
+   "reported": "research result with a primary-source URL, not re-checked",
+   "unverified": "no primary source confirmed it"
+  },
+  "owner_constraints": [
+   "No paid or proprietary products. The cache is an NDS Rust implementation or reuses open-source components written in Rust.",
+   "Clients reach the cache only over the internal network, and every client authenticates with a key.",
+   "Consumers are owner devices and private self-hosted GitHub Actions runners. Public repositories keep free GitHub-hosted runners."
+  ],
+  "rust_components": [
+   {
+    "name": "sccache",
+    "repository": "https://github.com/mozilla/sccache",
+    "license": "Apache-2.0",
+    "role": "Rust/C/C++ compiler cache client with an S3-compatible backend",
+    "level": "verified"
+   },
+   {
+    "name": "RustFS",
+    "repository": "https://github.com/rustfs/rustfs",
+    "license": "Apache-2.0",
+    "role": "S3-compatible object store for build-cache and blob storage; already used by company stacks",
+    "level": "verified"
+   },
+   {
+    "name": "Kellnr",
+    "repository": "https://github.com/kellnr/kellnr",
+    "license": "Apache-2.0",
+    "role": "crates registry with an optional crates.io proxy mode",
+    "level": "reported",
+    "open_question": "Sparse-index proxy behaviour and checksum verification under the cache's key model."
+   },
+   {
+    "name": "Trow",
+    "repository": "https://github.com/trow-registry/trow",
+    "license": "Apache-2.0",
+    "role": "OCI registry advertising pull-through proxying of any registry",
+    "level": "reported",
+    "open_question": "Last release predates the snapshot by more than a year; multi-upstream proxy and push for BuildKit cache must be qualified before reuse."
+   }
+  ],
+  "module_protocols": [
+   {
+    "protocol": "npm registry (Bun and npm clients)",
+    "upstream": "https://registry.npmjs.org",
+    "client": "bunfig [install].registry or BUN_CONFIG_REGISTRY; .npmrc registry"
+   },
+   {
+    "protocol": "PyPI simple index and files (uv, pip)",
+    "upstream": "https://pypi.org/simple",
+    "client": "UV_DEFAULT_INDEX or [[tool.uv.index]] default = true"
+   },
+   {
+    "protocol": "crates.io sparse index and crate files",
+    "upstream": "https://index.crates.io",
+    "client": "[source.crates-io] replace-with a sparse+https registry; the replacement must be an exact mirror",
+    "reuse_candidate": "Kellnr"
+   },
+   {
+    "protocol": "Go module proxy, checksum database and golang.org/toolchain",
+    "upstream": "https://proxy.golang.org, https://sum.golang.org",
+    "client": "GOPROXY; GOSUMDB stays enabled"
+   },
+   {
+    "protocol": "pub hosted repository v2",
+    "upstream": "https://pub.dev",
+    "client": "PUB_HOSTED_URL",
+    "note": "archive_url values are absolute and may be signed, so a plain reverse proxy does not cache archives (reported)."
+   },
+   {
+    "protocol": "Maven repositories (Maven Central, Google Maven, Gradle Plugin Portal)",
+    "upstream": "https://repo1.maven.org/maven2, https://dl.google.com/dl/android/maven2, https://plugins.gradle.org/m2",
+    "client": "Gradle init script in ~/.gradle/init.d replacing repositories"
+   },
+   {
+    "protocol": "OCI distribution pull-through (docker.io, ghcr.io, gcr.io, cgr.dev) and pushed BuildKit cache refs",
+    "upstream": "registry endpoints",
+    "client": "Docker registry-mirrors for Docker Hub; containerd hosts.toml under /etc/docker/certs.d/<registry>/ for other registries; buildkitd.toml mirrors",
+    "reuse_candidate": "Trow"
+   },
+   {
+    "protocol": "Immutable HTTP downloads",
+    "upstream": "static.rust-lang.org, storage.googleapis.com/flutter_infra_release, python-build-standalone releases, cdn.playwright.dev, services.gradle.org distributions, GitHub release assets",
+    "client": "RUSTUP_DIST_SERVER and RUSTUP_UPDATE_ROOT; FLUTTER_STORAGE_BASE_URL; UV_PYTHON_INSTALL_MIRROR; PLAYWRIGHT_DOWNLOAD_HOST; Gradle distributionUrl with distributionSha256Sum; mise url_replacements and playbook-dev-devices artifact URLs"
+   },
+   {
+    "protocol": "Gradle HTTP build cache",
+    "upstream": "none (local store)",
+    "client": "settings.gradle(.kts) buildCache remote HttpBuildCache; CI pushes, devices load only"
+   }
+  ],
+  "constraints": [
+   {
+    "fact": "Docker registry-mirrors only mirror Docker Hub.",
+    "level": "verified",
+    "source": "https://docs.docker.com/docker-hub/image-library/mirror/"
+   },
+   {
+    "fact": "dockerd reads containerd hosts.toml from /etc/docker/certs.d/<registry>/ with the containerd image store.",
+    "level": "reported",
+    "source": "https://github.com/moby/moby/blob/master/daemon/hosts.go"
+   },
+   {
+    "fact": "Go toolchain auto-download goes through GOPROXY as module golang.org/toolchain and requires checksum database verification.",
+    "level": "reported",
+    "source": "https://go.dev/doc/toolchain"
+   },
+   {
+    "fact": "sccache Rust caching requires incremental compilation disabled and cannot cache bin, dylib, cdylib and proc-macro crates.",
+    "level": "verified",
+    "source": "https://github.com/mozilla/sccache/blob/v0.19.0/docs/Rust.md"
+   },
+   {
+    "fact": "sccache cross-machine Rust hits need identical absolute paths.",
+    "level": "reported",
+    "source": "https://github.com/mozilla/sccache/pull/2918"
+   },
+   {
+    "fact": "sccache with bazel-remote does not work (open issue).",
+    "level": "verified",
+    "source": "https://github.com/mozilla/sccache/issues/2278"
+   },
+   {
+    "fact": "Develocity/Gradle Build Cache Node is deprecated and unavailable after 2026-12-31.",
+    "level": "verified",
+    "source": "https://docs.develocity.ai/build-cache-node/"
+   },
+   {
+    "fact": "Android sdkmanager has HTTP/SOCKS proxy options but no mirror URL setting.",
+    "level": "reported",
+    "source": "https://developer.android.com/tools/sdkmanager"
+   },
+   {
+    "fact": "Several clients cannot send credentials to a mirror (rustup; likely Flutter storage and Playwright downloads).",
+    "level": "reported",
+    "source": "https://rust-lang.github.io/rustup/environment-variables.html"
+   },
+   {
+    "fact": "minio/minio GitHub repository is archived.",
+    "level": "verified",
+    "source": "https://github.com/minio/minio"
+   }
+  ],
+  "build_caches": {
+   "rust": "Devices keep the managed per-device Cargo build-dir. A shared sccache on RustFS is limited to CI release builds; CI writes, devices read only.",
+   "docker": "BuildKit type=registry cache refs pushed only by CI identities.",
+   "gradle": "HTTP build cache served by the module; CI pushes, devices load only.",
+   "c-cpp": "ccache remote storage through storage helpers, read-only for devices (reported)."
+  },
+  "security": [
+   "Serve only on the internal network with trusted TLS and per-client keys; clients that cannot send credentials are admitted by network identity only.",
+   "Shared build caches are writable only by CI identities; devices and pull-request jobs read only.",
+   "Untrusted pull-request code never receives cache write keys.",
+   "Private package names are never proxied to public upstreams."
+  ],
+  "size_budget_gb_estimate": {
+   "level": "unverified",
+   "oci_mirror": 60,
+   "buildkit_cache": 35,
+   "package_proxies": 73,
+   "immutable_downloads": 38,
+   "build_caches": 40,
+   "metadata_logs": 8,
+   "headroom": 46
+  }
+ },
+ "registry_note": "Project bindings and survey evidence are private estate data."
+}

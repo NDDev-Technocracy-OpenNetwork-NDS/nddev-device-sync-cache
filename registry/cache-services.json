@@ -1,0 +1,55 @@
+{
+ "status": "design input; no cache service is implemented yet",
+ "evidence_levels": {
+  "verified": "checked against the primary source on the registry snapshot date",
+  "reported": "research result with a primary-source URL, not re-checked",
+  "unverified": "no primary source confirmed it"
+ },
+ "owner_constraints": [
+  "No paid or proprietary products. The cache is an NDS Rust implementation or reuses open-source components written in Rust.",
+  "Clients reach the cache only over the internal network, and every client authenticates with a key.",
+  "Consumers are owner devices and private self-hosted GitHub Actions runners. Public repositories keep free GitHub-hosted runners."
+ ],
+ "rust_components": [
+  {"name": "sccache", "repository": "https://github.com/mozilla/sccache", "license": "Apache-2.0", "role": "Rust/C/C++ compiler cache client with an S3-compatible backend", "level": "verified"},
+  {"name": "RustFS", "repository": "https://github.com/rustfs/rustfs", "license": "Apache-2.0", "role": "S3-compatible object store for build-cache and blob storage; already used by company stacks", "level": "verified"},
+  {"name": "Kellnr", "repository": "https://github.com/kellnr/kellnr", "license": "Apache-2.0", "role": "crates registry with an optional crates.io proxy mode", "level": "reported", "open_question": "Sparse-index proxy behaviour and checksum verification under the cache's key model."},
+  {"name": "Trow", "repository": "https://github.com/trow-registry/trow", "license": "Apache-2.0", "role": "OCI registry advertising pull-through proxying of any registry", "level": "reported", "open_question": "Last release predates the snapshot by more than a year; multi-upstream proxy and push for BuildKit cache must be qualified before reuse."}
+ ],
+ "module_protocols": [
+  {"protocol": "npm registry (Bun and npm clients)", "upstream": "https://registry.npmjs.org", "client": "bunfig [install].registry or BUN_CONFIG_REGISTRY; .npmrc registry"},
+  {"protocol": "PyPI simple index and files (uv, pip)", "upstream": "https://pypi.org/simple", "client": "UV_DEFAULT_INDEX or [[tool.uv.index]] default = true"},
+  {"protocol": "crates.io sparse index and crate files", "upstream": "https://index.crates.io", "client": "[source.crates-io] replace-with a sparse+https registry; the replacement must be an exact mirror", "reuse_candidate": "Kellnr"},
+  {"protocol": "Go module proxy, checksum database and golang.org/toolchain", "upstream": "https://proxy.golang.org, https://sum.golang.org", "client": "GOPROXY; GOSUMDB stays enabled"},
+  {"protocol": "pub hosted repository v2", "upstream": "https://pub.dev", "client": "PUB_HOSTED_URL", "note": "archive_url values are absolute and may be signed, so a plain reverse proxy does not cache archives (reported)."},
+  {"protocol": "Maven repositories (Maven Central, Google Maven, Gradle Plugin Portal)", "upstream": "https://repo1.maven.org/maven2, https://dl.google.com/dl/android/maven2, https://plugins.gradle.org/m2", "client": "Gradle init script in ~/.gradle/init.d replacing repositories"},
+  {"protocol": "OCI distribution pull-through (docker.io, ghcr.io, gcr.io, cgr.dev) and pushed BuildKit cache refs", "upstream": "registry endpoints", "client": "Docker registry-mirrors for Docker Hub; containerd hosts.toml under /etc/docker/certs.d/<registry>/ for other registries; buildkitd.toml mirrors", "reuse_candidate": "Trow"},
+  {"protocol": "Immutable HTTP downloads", "upstream": "static.rust-lang.org, storage.googleapis.com/flutter_infra_release, python-build-standalone releases, cdn.playwright.dev, services.gradle.org distributions, GitHub release assets", "client": "RUSTUP_DIST_SERVER and RUSTUP_UPDATE_ROOT; FLUTTER_STORAGE_BASE_URL; UV_PYTHON_INSTALL_MIRROR; PLAYWRIGHT_DOWNLOAD_HOST; Gradle distributionUrl with distributionSha256Sum; mise url_replacements and playbook-dev-devices artifact URLs"},
+  {"protocol": "Gradle HTTP build cache", "upstream": "none (local store)", "client": "settings.gradle(.kts) buildCache remote HttpBuildCache; CI pushes, devices load only"}
+ ],
+ "constraints": [
+  {"fact": "Docker registry-mirrors only mirror Docker Hub.", "level": "verified", "source": "https://docs.docker.com/docker-hub/image-library/mirror/"},
+  {"fact": "dockerd reads containerd hosts.toml from /etc/docker/certs.d/<registry>/ with the containerd image store.", "level": "reported", "source": "https://github.com/moby/moby/blob/master/daemon/hosts.go"},
+  {"fact": "Go toolchain auto-download goes through GOPROXY as module golang.org/toolchain and requires checksum database verification.", "level": "reported", "source": "https://go.dev/doc/toolchain"},
+  {"fact": "sccache Rust caching requires incremental compilation disabled and cannot cache bin, dylib, cdylib and proc-macro crates.", "level": "verified", "source": "https://github.com/mozilla/sccache/blob/v0.19.0/docs/Rust.md"},
+  {"fact": "sccache cross-machine Rust hits need identical absolute paths.", "level": "reported", "source": "https://github.com/mozilla/sccache/pull/2918"},
+  {"fact": "sccache with bazel-remote does not work (open issue).", "level": "verified", "source": "https://github.com/mozilla/sccache/issues/2278"},
+  {"fact": "Develocity/Gradle Build Cache Node is deprecated and unavailable after 2026-12-31.", "level": "verified", "source": "https://docs.develocity.ai/build-cache-node/"},
+  {"fact": "Android sdkmanager has HTTP/SOCKS proxy options but no mirror URL setting.", "level": "reported", "source": "https://developer.android.com/tools/sdkmanager"},
+  {"fact": "Several clients cannot send credentials to a mirror (rustup; likely Flutter storage and Playwright downloads).", "level": "reported", "source": "https://rust-lang.github.io/rustup/environment-variables.html"},
+  {"fact": "minio/minio GitHub repository is archived.", "level": "verified", "source": "https://github.com/minio/minio"}
+ ],
+ "build_caches": {
+  "rust": "Devices keep the managed per-device Cargo build-dir. A shared sccache on RustFS is limited to CI release builds; CI writes, devices read only.",
+  "docker": "BuildKit type=registry cache refs pushed only by CI identities.",
+  "gradle": "HTTP build cache served by the module; CI pushes, devices load only.",
+  "c-cpp": "ccache remote storage through storage helpers, read-only for devices (reported)."
+ },
+ "security": [
+  "Serve only on the internal network with trusted TLS and per-client keys; clients that cannot send credentials are admitted by network identity only.",
+  "Shared build caches are writable only by CI identities; devices and pull-request jobs read only.",
+  "Untrusted pull-request code never receives cache write keys.",
+  "Private package names are never proxied to public upstreams."
+ ],
+ "size_budget_gb_estimate": {"level": "unverified", "oci_mirror": 60, "buildkit_cache": 35, "package_proxies": 73, "immutable_downloads": 38, "build_caches": 40, "metadata_logs": 8, "headroom": 46}
+}
