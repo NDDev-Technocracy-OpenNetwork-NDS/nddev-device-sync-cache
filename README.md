@@ -29,6 +29,7 @@ every other path before any upstream connection:
 | `/playwright/` | Playwright browser builds |
 | `/gradle/` | Gradle distributions and their checksums |
 | `/go/` | Go toolchain archives and their checksums |
+| `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
 
 Release artifacts are immutable after their first complete download. Channel and index documents
 are revalidated with their upstream validators and served stale when upstream fails.
@@ -55,8 +56,11 @@ docker compose -f compose.yaml -f compose.collector.yaml up --detach
 ```
 
 Devices and runners reach the loopback listener through `rds forward` of
-[remote-device-sync](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds);
-client settings for each tool are in `registry/cache-services.json`.
+[remote-device-sync](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds).
+[`contracts/clients.json`](contracts/clients.json) is the client contract: every live route, the
+setting that sends each tool through it relative to the forwarded base address, its known limits and
+whether a real client or only the route has been accepted. A test keeps it equal to the service
+route table. Clients keep their own digest and signature checks.
 
 ## Technology registry
 
@@ -97,7 +101,8 @@ observations append lines and existing lines are never rewritten.
 | `registry/decisions.json` | The only hand-edited registry input: lines, holds, exceptions, replacements and their references. |
 | `registry/stack.json` | Registry state derived from the decisions and official-source evidence. |
 | `registry/journal.jsonl` | Append-only events with UTC timestamps. |
-| `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
+| `contracts/clients.json` | Client contract of the live routes, validated by `contracts/clients.schema.json`. |
+| `registry/cache-services.json` | Cache design input for later increments: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
 
 ### Contracts
 

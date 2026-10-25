@@ -1,5 +1,5 @@
 {
- "status": "design input; no cache service is implemented yet",
+ "status": "design input for the later protocol increments; the toolchain download increment is live and contracts/clients.json is its client contract",
  "evidence_levels": {
   "verified": "checked against the primary source on the registry snapshot date",
   "reported": "research result with a primary-source URL, not re-checked",
@@ -84,7 +84,7 @@
   {
    "protocol": "Immutable HTTP downloads",
    "upstream": "static.rust-lang.org, storage.googleapis.com/flutter_infra_release, python-build-standalone releases, cdn.playwright.dev, services.gradle.org distributions, GitHub release assets",
-   "client": "RUSTUP_DIST_SERVER and RUSTUP_UPDATE_ROOT; FLUTTER_STORAGE_BASE_URL; UV_PYTHON_INSTALL_MIRROR; PLAYWRIGHT_DOWNLOAD_HOST; Gradle distributionUrl with distributionSha256Sum; mise url_replacements and playbook-dev-devices artifact URLs"
+   "client": "live routes and client settings in contracts/clients.json; mise url_replacements and playbook-dev-devices artifact URLs remain design input"
   },
   {
    "protocol": "Gradle HTTP build cache",

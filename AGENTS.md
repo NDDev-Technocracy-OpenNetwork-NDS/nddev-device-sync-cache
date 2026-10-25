@@ -23,7 +23,8 @@ The parent task is
 ## Service rules
 
 - The service proxies only the routes declared in `src/domain.rs`; a new upstream or redirect host
-  is a reviewed allowlist change with a real-socket test.
+  is a reviewed allowlist change with a real-socket test, and `contracts/clients.json` lists
+  exactly those routes; `tests/clients.rs` enforces the match.
 - Events go through the shared telemetry SDK with matched route templates and fixed error classes;
   they never carry URLs, client addresses, keys or project identities.
 - Tests use the real filesystem store and real local upstreams over sockets, never mocks of them.
