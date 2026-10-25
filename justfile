@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 set positional-arguments
 
 validator_version := "0.60.1"
+rust_toolchain := "1.99.1"
 tools := justfile_directory() / ".tools"
 validator := tools / "bin" / "jsonschema-cli"
 
@@ -9,9 +10,9 @@ validator := tools / "bin" / "jsonschema-cli"
 default:
     @just --list
 
-# Install the pinned Rust JSON Schema validator into .tools.
+# Install the pinned Rust JSON Schema validator into .tools with the pinned Rust toolchain.
 setup:
-    cargo install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
+    cargo +{{ rust_toolchain }} install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
 
 # Validate the schemas, the registry files and decisions-to-state consistency.
 check:
