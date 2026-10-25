@@ -1,0 +1,36 @@
+[package]
+name = "nddev-device-sync-cache"
+version = "0.0.1-alpha.1"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+authors = ["NDDev OpenNetwork"]
+homepage = "https://nddev.ai"
+repository = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache"
+build = "build.rs"
+publish = false
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
+bytes = "1.12"
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "586597486d67a48e190d1970653927d83beb687f" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
+rustix = { version = "1.1.5", features = ["fs"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.11.1"
+thiserror = "2.0"
+tokio = { version = "1.54.1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = { version = "0.7.20", features = ["io"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3.27"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "deny"
