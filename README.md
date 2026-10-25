@@ -102,6 +102,13 @@ serves, the client settings that redirect each tool, the Rust components conside
 the verified upstream constraints. Shared build caches accept writes only from CI identities;
 devices and pull-request jobs read only.
 
+The service is observable through the NDS pipeline: it emits the canonical event envelope through
+the shared telemetry SDK of
+[nddev-device-sync-observability](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability),
+exposes liveness, readiness and dependency health, and is accepted only after a real event reaches
+OpenObserve and an alert completes its lifecycle. The `observability` section of
+`registry/cache-services.json` lists its lifecycle events, signals, metric labels and alerts.
+
 ## Privacy boundary
 
 This public repository contains no private project names, device inventory, endpoints or
