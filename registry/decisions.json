@@ -56,13 +56,13 @@
     "6.0.3"
    ],
    "status": "latest+compat",
-   "companion_upstream": [
+   "reason": "Owner selects TypeScript 7 (native compiler) and the latest TypeScript 6 (JavaScript compiler API for typescript-eslint, openapi-typescript, @astrojs/check, svelte-language-server). The @typescript/typescript6 alias package currently publishes 6.0.2; alias npm:typescript@6.0.3 instead.",
+   "upstream": [
     "https://github.com/typescript-eslint/typescript-eslint/issues/10940",
     "https://github.com/openapi-ts/openapi-typescript/issues/2841",
     "https://github.com/withastro/astro/pull/17852"
    ],
-   "companion_removal_condition": "typescript-eslint, openapi-typescript and @astrojs/check run on TypeScript 7.",
-   "reason": "Owner selects TypeScript 7 (native compiler) and the latest TypeScript 6 (JavaScript compiler API for typescript-eslint, openapi-typescript, @astrojs/check, svelte-language-server). The @typescript/typescript6 alias package currently publishes 6.0.2; alias npm:typescript@6.0.3 instead."
+   "removal_condition": "The TypeScript 6 line stays until typescript-eslint, openapi-typescript and @astrojs/check run on TypeScript 7."
   },
   "npm": {
    "stack": "12.2.1",
@@ -83,24 +83,70 @@
    "status": "latest"
   },
   "jdk": {
-   "stack": "PENDING-AGENT",
-   "status": "pending"
+   "stack": [
+    "27.0.1",
+    "25.0.5"
+   ],
+   "status": "latest+lts",
+   "reason": "Owner selects the latest feature release and the latest LTS. Gradle runs on JDK 27 only from 9.8.0; with the Kotlin-compatible Gradle line use JDK 25. Kotlin 2.4.21 -jvm-target stops at 26 and Flutter 3.47.8 treats Java >=26 as newer-than-known, so Android/Flutter apps keep Java target 17.",
+   "note": "playbook-dev-devices installs JDK 27 and JDK 21 (jvm-lts); the LTS line it installs needs to move to 25.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "None for the two-line policy; the Java 17 app target follows Flutter/Kotlin support for newer targets.",
+   "source": [
+    "https://api.adoptium.net/v3/info/available_releases",
+    "https://docs.gradle.org/9.8.2/userguide/compatibility.html",
+    "https://kotlinlang.org/docs/compiler-reference.html"
+   ]
   },
   "gradle": {
-   "stack": "PENDING-AGENT",
-   "status": "pending"
+   "stack": [
+    "9.8.2",
+    "9.7.1"
+   ],
+   "status": "latest+compat",
+   "reason": "Owner selects the latest Gradle and the newest Gradle fully supported by Kotlin Gradle Plugin 2.4.21 (Gradle 7.6.3-9.7.0; 9.7.1 is its bug-fix patch). Kotlin/Android builds use the compatible line.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "A Kotlin Gradle Plugin release that lists Gradle >=9.8 makes the latest line sufficient.",
+   "source": [
+    "https://services.gradle.org/versions/current",
+    "https://kotlinlang.org/docs/gradle-configure-project.html#apply-the-plugin"
+   ]
   },
   "android-gradle-plugin": {
-   "stack": "PENDING-AGENT",
-   "status": "pending"
+   "stack": [
+    "9.4.1",
+    "9.3.3"
+   ],
+   "status": "latest+compat",
+   "reason": "The owner's Gradle rule applied to AGP: the latest release and the newest release fully supported by Kotlin Gradle Plugin 2.4.21 (AGP 8.5.2-9.3.1; 9.3.3 is a bug-fix patch). AGP 9.4 requires Gradle >=9.6.0.",
+   "upstream": [
+    "https://raw.githubusercontent.com/JetBrains/kotlin-web-site/master/docs/v.list"
+   ],
+   "removal_condition": "A Kotlin Gradle Plugin release that lists AGP >=9.4.",
+   "source": [
+    "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/maven-metadata.xml",
+    "https://developer.android.com/build/releases/about-agp"
+   ]
   },
   "kotlin": {
-   "stack": "PENDING-AGENT",
-   "status": "pending"
+   "stack": "2.4.21",
+   "status": "latest",
+   "note": "org.jetbrains.kotlin.plugin.compose must equal 2.4.21."
   },
   "android-sdk": {
-   "stack": "PENDING-AGENT",
-   "status": "pending"
+   "stack": "platform android-37.0 (compileSdk/targetSdk 37), build-tools 37.0.0 (set buildToolsVersion explicitly; AGP default is 36.0.0), cmdline-tools 23.0, NDK 30.0.16248370",
+   "status": "held",
+   "reason": "Upstream latest platform is 37.2 (minor API); AGP 9.3 documents API 37 and Flutter reads compileSdk as an integer; 37.1/37.2 unverified. NDK r30 is the latest LTS and already used by a core repo, but AGP 9.x and Flutter 3.47.8 default to 28.2.13676358 (fallback).",
+   "removal_condition": "AGP and Flutter document support for minor API platforms (37.1/37.2) and NDK r30.",
+   "source": [
+    "https://dl.google.com/android/repository/repository2-3.xml",
+    "https://developer.android.com/ndk/downloads",
+    "https://docs.flutter.dev/reference/supported-platforms"
+   ]
   },
   "dotnet": {
    "stack": "10.0.402",
@@ -342,26 +388,6 @@
     ],
     "removal_condition": "Same as boto3.",
     "project_count": 1
-   },
-   "miniopy-async": {
-    "stack": "replace",
-    "reason": "Latest 1.23.5 requires certifi <2026, pycryptodome <4, argon2-cffi <24 and targets MinIO, whose repository is archived; replace with an S3 client against RustFS."
-   },
-   "pydantic": {
-    "stack": "2.14.1",
-    "reason": "Latest in core; aiogram 3.31.0 (experimental only) needs <2.14."
-   },
-   "certifi": {
-    "stack": "2026.10.23",
-    "reason": "Latest. Conditional: miniopy-async 1.23.5 would force 2025.11.12 (stale CA bundle); remove miniopy-async instead."
-   },
-   "pycryptodome": {
-    "stack": "4.2.0",
-    "reason": "Latest. Conditional: miniopy-async would force <4."
-   },
-   "argon2-cffi": {
-    "stack": "25.1.0",
-    "reason": "Latest. Conditional: miniopy-async would force <24."
    }
   },
   "crates": {},

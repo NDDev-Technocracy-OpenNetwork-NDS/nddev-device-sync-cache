@@ -1,0 +1,521 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/contracts/stack.schema.json",
+  "title": "NDS cache technology registry state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "snapshot_date",
+    "generated_at",
+    "policy",
+    "toolchains",
+    "packages",
+    "github_actions",
+    "container_images",
+    "replacements",
+    "workspace_rules",
+    "compatibility_checks"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "name": {
+      "$ref": "#/$defs/text"
+    },
+    "snapshot_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "generated_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "registry_note": {
+      "$ref": "#/$defs/text"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "scopes"
+      ],
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/text"
+        },
+        "scopes": {
+          "$ref": "#/$defs/scopes"
+        }
+      }
+    },
+    "toolchains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/toolchain"
+      }
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "npm",
+        "pypi",
+        "crates",
+        "pub",
+        "go"
+      ],
+      "properties": {
+        "npm": {
+          "$ref": "#/$defs/packageSet"
+        },
+        "pypi": {
+          "$ref": "#/$defs/packageSet"
+        },
+        "crates": {
+          "$ref": "#/$defs/packageSet"
+        },
+        "pub": {
+          "$ref": "#/$defs/packageSet"
+        },
+        "go": {
+          "$ref": "#/$defs/packageSet"
+        }
+      }
+    },
+    "github_actions": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "latest",
+          "sha"
+        ],
+        "properties": {
+          "latest": {
+            "$ref": "#/$defs/version"
+          },
+          "sha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "note": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      }
+    },
+    "container_images": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stack_tag",
+          "verified"
+        ],
+        "properties": {
+          "stack_tag": {
+            "$ref": "#/$defs/version"
+          },
+          "verified": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      }
+    },
+    "replacements": {
+      "$ref": "#/$defs/textMap"
+    },
+    "workspace_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workspaceRule"
+      }
+    },
+    "compatibility_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "method",
+          "result"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/identifier"
+          },
+          "method": {
+            "$ref": "#/$defs/text"
+          },
+          "result": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9+._-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S+$"
+    },
+    "versionLines": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/version"
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "textMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "scopes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "experimental",
+        "archive"
+      ],
+      "properties": {
+        "core": {
+          "$ref": "#/$defs/text"
+        },
+        "experimental": {
+          "$ref": "#/$defs/text"
+        },
+        "archive": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "stack",
+        "status",
+        "source",
+        "verified_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "upstream_latest": {
+          "$ref": "#/$defs/version"
+        },
+        "upstream_detail": {
+          "type": "object"
+        },
+        "stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/version"
+            },
+            {
+              "$ref": "#/$defs/versionLines"
+            },
+            {
+              "$ref": "#/$defs/text"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "latest",
+            "latest+compat",
+            "latest+lts",
+            "held"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/text"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "note": {
+          "$ref": "#/$defs/text"
+        },
+        "upstream": {
+          "$ref": "#/$defs/references"
+        },
+        "removal_condition": {
+          "$ref": "#/$defs/text"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/text"
+            },
+            {
+              "$ref": "#/$defs/references"
+            }
+          ]
+        },
+        "verified_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "latest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stack": {
+                "$ref": "#/$defs/version"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "reason",
+              "removal_condition"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "latest+compat",
+                  "latest+lts"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stack": {
+                "$ref": "#/$defs/versionLines"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "packageSet": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/package"
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latest",
+        "stack",
+        "status",
+        "source"
+      ],
+      "properties": {
+        "latest": {
+          "$ref": "#/$defs/version"
+        },
+        "stack": {
+          "$ref": "#/$defs/version"
+        },
+        "status": {
+          "enum": [
+            "latest",
+            "latest+exception",
+            "replace",
+            "isolated-tool"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "exceptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/exception"
+          }
+        },
+        "requires_python": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rust_version": {
+          "$ref": "#/$defs/version"
+        },
+        "engines": {
+          "type": "object"
+        },
+        "environment": {
+          "type": "object"
+        },
+        "source": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "latest"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "latest+exception"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "exceptions"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "exceptions"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "replace",
+                  "isolated-tool"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ]
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "reason",
+        "upstream",
+        "removal_condition",
+        "project_count"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "upstream": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "removal_condition": {
+          "$ref": "#/$defs/text"
+        },
+        "project_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "workspaceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "rule",
+        "verified",
+        "upstream",
+        "removal_condition"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rule": {
+          "$ref": "#/$defs/text"
+        },
+        "verified": {
+          "$ref": "#/$defs/text"
+        },
+        "upstream": {
+          "$ref": "#/$defs/references"
+        },
+        "removal_condition": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    }
+  }
+}

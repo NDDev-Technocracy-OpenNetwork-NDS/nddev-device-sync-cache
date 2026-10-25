@@ -1,0 +1,9 @@
+id: cache
+name: nddev-device-sync-cache
+version: 0.0.1-alpha.1
+channel: alpha
+license: AGPL-3.0-only
+repository: NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache
+standards_lock: standarts.lock
+platforms:
+  - linux

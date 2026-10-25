@@ -50,10 +50,27 @@ observations append lines and existing lines are never rewritten.
 
 | File | Role |
 | --- | --- |
-| `registry/decisions.json`, `registry/android-jvm.json` | Hand-edited decisions: lines, holds, exceptions, replacements and their references. |
+| `registry/decisions.json` | The only hand-edited registry input: lines, holds, exceptions, replacements and their references. |
 | `registry/stack.json` | Registry state derived from the decisions and official-source evidence. |
 | `registry/journal.jsonl` | Append-only events with UTC timestamps. |
-| `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints and security rules. |
+| `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
+
+### Contracts and commands
+
+[`contracts/`](contracts/) holds the JSON Schemas (draft 2020-12) of the registry state, the
+decisions input and the journal; the cache service and future registry consumers read the registry
+through them. The commands need `just`, `jq`, Git and a Rust toolchain for the pinned validator:
+
+```sh
+just setup                      # install the pinned Rust JSON Schema validator into .tools
+just check                      # validate schemas, registry files and decisions-to-state consistency
+just test                       # confirm the schemas reject representative invalid content
+just journal-check origin/main  # confirm the journal only appends to that revision
+just structure                  # std-0001 structural check with a prepared nddev validator
+```
+
+Pull requests and `main` pushes run `setup`, `check`, `test` and the journal check on GitHub-hosted
+runners. The std-0001 validator is private, so the structural check runs where it is prepared.
 
 ### How the registry is checked
 
@@ -84,6 +101,13 @@ consumers are owner devices and private runners.
 serves, the client settings that redirect each tool, the Rust components considered for reuse and
 the verified upstream constraints. Shared build caches accept writes only from CI identities;
 devices and pull-request jobs read only.
+
+The service is observable through the NDS pipeline: it emits the canonical event envelope through
+the shared telemetry SDK of
+[nddev-device-sync-observability](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability),
+exposes liveness, readiness and dependency health, and is accepted only after a real event reaches
+OpenObserve and an alert completes its lifecycle. The `observability` section of
+`registry/cache-services.json` lists its lifecycle events, signals, metric labels and alerts.
 
 ## Privacy boundary
 
