@@ -9,10 +9,54 @@ repository's registry. Public repositories keep free GitHub-hosted runners and d
 
 ## Current state
 
-The repository contains the technology registry and the cache design input. The cache service is
-not implemented yet, and the system catalog lists the module with the `future` status. The
+The repository contains the technology registry and the cache service with its first increment,
+toolchain downloads. The system catalog lists the module with the `future` status until the service
+is deployed and accepted with real clients. The
 [system task](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync/issues/75)
 tracks the remaining work.
+
+## Cache service
+
+`nddev-device-sync-cache` is one Rust process. [docs/architecture.md](docs/architecture.md)
+describes its modules, consistency rules, limits and increments. It serves these routes and rejects
+every other path before any upstream connection:
+
+| Route prefix | Upstream |
+| --- | --- |
+| `/rustup/` | rustup distribution server |
+| `/flutter/` | Flutter release storage and the Flutter Maven repository |
+| `/python-build-standalone/` | python-build-standalone release assets, the CPython source for uv |
+| `/playwright/` | Playwright browser builds |
+| `/gradle/` | Gradle distributions and their checksums |
+| `/go/` | Go toolchain archives and their checksums |
+
+Release artifacts are immutable after their first complete download. Channel and index documents
+are revalidated with their upstream validators and served stale when upstream fails.
+`GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
+the store is not writable or lacks room for one maximum object, and reports the outcome of the
+latest upstream exchange without failing on it, because stored objects stay servable while
+upstream is unreachable. `GET /source` links the corresponding source.
+
+| Variable | Meaning |
+| --- | --- |
+| `NDS_CACHE_ROOT` | Required absolute store directory; it must be empty or already owned by the cache. |
+| `NDS_CACHE_LISTEN` | Listener address; the binary defaults to loopback. |
+| `NDS_CACHE_CAPACITY_BYTES` | Store capacity; least recently used objects are evicted beyond it. |
+| `NDS_CACHE_MAX_OBJECT_BYTES` | Largest admitted object. |
+| `NDS_CACHE_FETCHES` | Concurrent upstream downloads. |
+| `NDS_CACHE_REVALIDATE_SECONDS` | Age after which channel and index documents are revalidated. |
+
+The service emits the canonical NDS event envelope on standard output through the shared telemetry
+SDK. `compose.yaml` runs the hardened container with the store as its only writable mount, and the
+`compose.collector.yaml` overlay delivers the events to the observability Fluent collector:
+
+```sh
+docker compose -f compose.yaml -f compose.collector.yaml up --detach
+```
+
+Devices and runners reach the loopback listener through `rds forward` of
+[remote-device-sync](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds);
+client settings for each tool are in `registry/cache-services.json`.
 
 ## Technology registry
 
@@ -55,22 +99,11 @@ observations append lines and existing lines are never rewritten.
 | `registry/journal.jsonl` | Append-only events with UTC timestamps. |
 | `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
 
-### Contracts and commands
+### Contracts
 
 [`contracts/`](contracts/) holds the JSON Schemas (draft 2020-12) of the registry state, the
 decisions input and the journal; the cache service and future registry consumers read the registry
-through them. The commands need `just`, `jq`, Git and a Rust toolchain for the pinned validator:
-
-```sh
-just setup                      # install the pinned Rust JSON Schema validator into .tools
-just check                      # validate schemas, registry files and decisions-to-state consistency
-just test                       # confirm the schemas reject representative invalid content
-just journal-check origin/main  # confirm the journal only appends to that revision
-just structure                  # std-0001 structural check with a prepared nddev validator
-```
-
-Pull requests and `main` pushes run `setup`, `check`, `test` and the journal check on GitHub-hosted
-runners. The std-0001 validator is private, so the structural check runs where it is prepared.
+through them.
 
 ### How the registry is checked
 
@@ -108,6 +141,28 @@ the shared telemetry SDK of
 exposes liveness, readiness and dependency health, and is accepted only after a real event reaches
 OpenObserve and an alert completes its lifecycle. The `observability` section of
 `registry/cache-services.json` lists its lifecycle events, signals, metric labels and alerts.
+
+## Commands
+
+The commands need `just`, `jq`, Git, the pinned Rust toolchain, `cargo-audit` and `cargo-deny`;
+the container check also needs Docker and `curl`:
+
+```sh
+just setup                      # install the pinned Rust JSON Schema validator into .tools
+just check                      # run every local check below except the container and structure checks
+just registry-check             # validate schemas, registry files and decisions-to-state consistency
+just registry-test              # confirm the schemas reject representative invalid content
+just test                       # unit tests and real-socket service tests against local upstreams
+just clippy                     # deny every Clippy warning
+just dependencies-check         # RustSec advisories, licenses and dependency sources
+just journal-check origin/main  # confirm the journal only appends to that revision
+just container-check            # build and exercise the hardened service container
+just structure                  # std-0001 structural check with a prepared nddev validator
+```
+
+Pull requests run the registry checks, the journal check and the STD-0004 native Rust contract on
+GitHub-hosted runners. `main` pushes also run the advisory audit and the container check. The
+std-0001 validator is private, so the structural check runs where it is prepared.
 
 ## Privacy boundary
 
