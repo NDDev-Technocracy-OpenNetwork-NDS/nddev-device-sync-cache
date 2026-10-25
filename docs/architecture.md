@@ -31,12 +31,19 @@ trait. Tests exercise the real filesystem store and a real local upstream over s
 ## Objects and consistency
 
 An object is immutable when its upstream path identifies one release artifact, and mutable when it
-is a channel or index document that upstream rewrites. Immutable objects are served from the store
-after their first complete download. Mutable objects carry their upstream validators and are
-revalidated after a bounded age; when revalidation fails, the stored copy is served and the stale
-response is reported. A download is committed only after it completes within its size bound, so a
-partial transfer never becomes a cached object. Concurrent requests for one missing object share
-one upstream fetch.
+is a channel or index document that upstream rewrites.
+
+A missing immutable object is downloaded by a background task that the first request starts. The
+task writes a temporary file and publishes how many bytes it has flushed; every client of that
+object, the first and any that join later, streams the growing file at once. A client that
+disconnects does not stop the download, and `HEAD` answers from the upstream headers without waiting
+for the body. The download is committed only after it completes within its size bound, so a partial
+transfer never becomes a cached object; a failed download ends every following response early and
+leaves nothing behind. Concurrent requests for one missing object share one upstream fetch.
+
+Mutable objects are small. They are downloaded completely before they are served, carry their
+upstream validators and are revalidated after a bounded age; when revalidation fails, the stored copy
+is served and the stale response is reported.
 
 The store has a configured capacity. Commits that would exceed it evict the least recently used
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
@@ -44,11 +51,11 @@ holds acceleration state only: losing it costs downloads, not data.
 
 ## Current limits
 
-- The first request for a missing object waits until the complete download is committed; later
-  requests stream from the store.
-- A `HEAD` request for a missing object downloads and commits the object first.
-- Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings, need the
-  forwarded endpoint behind a local TLS terminator or a later TLS listener.
+- Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings and Gradle
+  Maven repositories, need the forwarded endpoint behind a local TLS terminator or a later TLS
+  listener.
+- A response without an upstream `Content-Length` is sent chunked; its end marks a committed
+  download.
 
 ## Observability
 

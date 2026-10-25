@@ -18,7 +18,9 @@ tracks the remaining work.
 ## Cache service
 
 `nddev-device-sync-cache` is one Rust process. [docs/architecture.md](docs/architecture.md)
-describes its modules, consistency rules, limits and increments. It serves these routes and rejects
+describes its modules, consistency rules, limits and increments, and
+[docs/operations.md](docs/operations.md) is the operator runbook with its no-backup policy, events
+and troubleshooting. It serves these routes and rejects
 every other path before any upstream connection:
 
 | Route prefix | Upstream |
@@ -31,8 +33,9 @@ every other path before any upstream connection:
 | `/go/` | Go toolchain archives and their checksums |
 | `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
 
-Release artifacts are immutable after their first complete download. Channel and index documents
-are revalidated with their upstream validators and served stale when upstream fails.
+Release artifacts stream to every client while the cache downloads them once, and stay immutable
+after the complete download is committed. Channel and index documents are revalidated with their
+upstream validators and served stale when upstream fails.
 `GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while
