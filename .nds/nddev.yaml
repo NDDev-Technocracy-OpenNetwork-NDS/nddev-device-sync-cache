@@ -31,6 +31,9 @@ spec:
   - name: technology-registry-journal
     source: contracts/journal.schema.json
     direction: schema-first
+  - name: cache-client-contract
+    source: contracts/clients.schema.json
+    direction: schema-first
   variations:
   - paths: [module.yaml]
     purpose: manifest

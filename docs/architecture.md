@@ -70,7 +70,7 @@ store directory live in the private estate.
 ## Increments
 
 1. Toolchain downloads: rustup distribution, Flutter storage, python-build-standalone releases,
-   Playwright browsers, Gradle and Go distributions.
+   Playwright browsers, Gradle and Go distributions, Chrome for Testing archives.
 2. crates.io sparse index and crate files.
 3. npm registry for Bun and npm.
 4. PyPI simple index for uv.
