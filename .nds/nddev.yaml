@@ -12,11 +12,15 @@ spec:
   role: component
   profiles:
   - docs
+  - rust
   system:
     id: nds
     root: github:NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync
   portfolios:
   - portfolio:nddev-technocracy-opennetwork-nds
+  consumes:
+  - contract: nddev-device-sync-observability/telemetry
+    via: Cargo.toml
   provides:
   - name: technology-registry
     source: contracts/stack.schema.json
@@ -39,6 +43,10 @@ spec:
   - paths: [contracts]
     purpose: manifest
     reason: NDS contract corpus of the technology registry schemas.
+    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
+  - paths: [Dockerfile, compose.yaml, compose.collector.yaml]
+    purpose: infrastructure
+    reason: Hardened service image and self-hostable compose surfaces owned by the repository.
     decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
   adapters:
   - claude
