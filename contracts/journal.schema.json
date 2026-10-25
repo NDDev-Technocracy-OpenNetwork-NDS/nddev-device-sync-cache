@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/contracts/journal.schema.json",
+  "title": "NDS cache technology registry journal",
+  "description": "The journal file is JSON Lines; validators read it as an array of its lines in file order.",
+  "type": "array",
+  "minItems": 1,
+  "prefixItems": [{"$ref": "#/$defs/created"}],
+  "items": {"$ref": "#/$defs/event"},
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "version": {"type": "string", "minLength": 1, "pattern": "^\\S+$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "created": {
+      "type": "object",
+      "required": ["ts", "event", "snapshot_date", "sources_fetched_at"],
+      "properties": {"event": {"const": "registry.created"}}
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ts", "event"],
+      "properties": {
+        "ts": {"$ref": "#/$defs/timestamp"},
+        "event": {"enum": ["registry.created", "registry.revised", "toolchain.latest", "toolchain.latest+compat", "toolchain.latest+lts", "toolchain.held", "package.latest+exception", "package.replace", "package.isolated-tool", "packages.verified", "github-action.verified"]},
+        "snapshot_date": {"type": "string", "format": "date"},
+        "sources_fetched_at": {"$ref": "#/$defs/timestamp"},
+        "changes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
+        "id": {"$ref": "#/$defs/text"},
+        "ecosystem": {"enum": ["npm", "pypi", "crates", "pub", "go"]},
+        "version": {"anyOf": [{"$ref": "#/$defs/version"}, {"$ref": "#/$defs/text"}, {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/version"}}]},
+        "upstream": {"type": ["string", "null"]},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "exceptions": {"type": "array", "items": {"$ref": "#/$defs/version"}},
+        "reason": {"type": ["string", "null"]},
+        "count": {"type": "integer", "minimum": 0},
+        "latest": {"type": "integer", "minimum": 0}
+      },
+      "allOf": [
+        {"if": {"properties": {"event": {"const": "registry.revised"}}}, "then": {"required": ["changes"]}},
+        {"if": {"properties": {"event": {"pattern": "^(toolchain|package)\\."}}}, "then": {"required": ["id", "version"]}},
+        {"if": {"properties": {"event": {"const": "packages.verified"}}}, "then": {"required": ["ecosystem", "count", "latest"]}},
+        {"if": {"properties": {"event": {"const": "github-action.verified"}}}, "then": {"required": ["id", "version", "sha"]}}
+      ]
+    }
+  }
+}

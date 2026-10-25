@@ -55,6 +55,20 @@ observations append lines and existing lines are never rewritten.
 | `registry/journal.jsonl` | Append-only events with UTC timestamps. |
 | `registry/cache-services.json` | Cache design input: owner constraints, protocols, reusable Rust components, verified constraints, security and observability requirements. |
 
+### Contracts and commands
+
+[`contracts/`](contracts/) holds the JSON Schemas (draft 2020-12) of the registry state, the
+decisions input and the journal; the cache service and future registry consumers read the registry
+through them. The commands need `just`, `jq`, Git and a Rust toolchain for the pinned validator:
+
+```sh
+just setup                      # install the pinned Rust JSON Schema validator into .tools
+just check                      # validate schemas, registry files and decisions-to-state consistency
+just test                       # confirm the schemas reject representative invalid content
+just journal-check origin/main  # confirm the journal only appends to that revision
+just structure                  # std-0001 structural check with a prepared nddev validator
+```
+
 ### How the registry is checked
 
 Versions come from official machine-readable release sources: language package registries,

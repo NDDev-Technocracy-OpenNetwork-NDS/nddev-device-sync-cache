@@ -118,10 +118,9 @@
    "stack": "20261021",
    "status": "latest",
    "scope": "core",
-   "upstream_detail": {
-    "error": "string indices must be integers, not 'str'"
-   },
-   "verified_at": "2026-10-25T12:49:53Z"
+   "verified_at": "2026-10-25T12:49:53Z",
+   "upstream_latest": "20261021",
+   "source": "https://github.com/astral-sh/python-build-standalone/releases"
   },
   {
    "id": "go",

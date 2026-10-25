@@ -20,5 +20,7 @@ The parent task is
 
 ## Checks
 
-- `nddev check` (std-0001 validator) for repository structure.
-- `jq empty registry/*.json` and `jq -c . registry/journal.jsonl > /dev/null` for registry syntax.
+- `just setup` once, then `just check` and `just test` for any registry or contract change.
+- `just journal-check REVISION` before integration; the journal never rewrites recorded lines.
+- `just structure` with a prepared std-0001 `nddev`; the validator is private, so CI does not run it.
+- A schema change keeps `just test` rejecting each covered invalid case.
