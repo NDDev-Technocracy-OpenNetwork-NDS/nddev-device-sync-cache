@@ -265,6 +265,34 @@
   "cargo-shear": {
    "stack": "1.14.0",
    "status": "latest"
+  },
+  "chrome-for-testing": {
+   "stack": "156.0.8078.47",
+   "status": "latest"
+  },
+  "vector": {
+   "stack": [
+    "0.60.0",
+    "0.59.0"
+   ],
+   "status": "latest+compat",
+   "reason": "A project keeps its qualified 0.59.0 journald compatibility image until an upstream release fixes the idle disk-buffer flush; 0.60.0 does not contain the fix, so it does not justify requalification.",
+   "upstream": [
+    "https://github.com/vectordotdev/vector/pull/26530"
+   ],
+   "removal_condition": "An upstream release contains the idle disk-buffer flush fix and the project's cold-first-event, privacy, restart and outage acceptance passes on it."
+  },
+  "ubuntu": {
+   "stack": [
+    "26.04",
+    "24.04"
+   ],
+   "status": "latest+compat",
+   "reason": "Release binaries for runtimes on Ubuntu 24.04 must link against glibc 2.39 or older, so their build image stays on Ubuntu 24.04 with a GLIBC symbol gate; current Rust toolchains run on it.",
+   "upstream": [
+    "https://packages.ubuntu.com/noble/libc6"
+   ],
+   "removal_condition": "The target runtime moves to a newer ABI by plan and every release binary passes its check there."
   }
  },
  "package_holds": {
@@ -355,6 +383,16 @@
     ],
     "removal_condition": "@payloadcms/richtext-lexical peers the latest @faceless-ui/modal.",
     "project_count": 1
+   },
+   "@opentelemetry/exporter-logs-otlp-http": {
+    "stack": "0.223.0",
+    "reason": "@vercel/otel 2.1.3 peers @opentelemetry/sdk-logs <0.300.0, and exporter-logs-otlp-http 0.300.0 depends on sdk-logs 3.0.0.",
+    "kind": "project",
+    "upstream": [
+     "https://github.com/vercel/otel/pull/223"
+    ],
+    "removal_condition": "@vercel/otel releases OpenTelemetry JS SDK 3.x support.",
+    "project_count": 6
    }
   },
   "pypi": {
