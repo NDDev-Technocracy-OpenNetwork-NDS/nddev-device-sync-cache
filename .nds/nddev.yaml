@@ -1,0 +1,21 @@
+# std-0001 repository manifest; schema: `nddev schema manifest`.
+apiVersion: nddev.ai/v1alpha3
+kind: Repository
+metadata:
+  id: nddev-device-sync-cache
+  locator: github:NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache
+  owner: rldyourmnd
+spec:
+  standard:
+    id: std-0001
+    version: 3.0.1
+  role: component
+  profiles:
+  - docs
+  system:
+    id: nds
+    root: github:NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync
+  portfolios:
+  - portfolio:nddev-technocracy-opennetwork-nds
+  adapters:
+  - claude

@@ -1,0 +1,64 @@
+{"ts": "2026-10-25T13:32:56Z", "event": "registry.created", "snapshot_date": "2026-10-25", "sources_fetched_at": "2026-10-25T12:49:53Z"}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "rust", "version": "1.99.1", "upstream": "1.99.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "node", "version": "26.12.1", "upstream": "v26.12.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "bun", "version": "1.4.4", "upstream": "bun-v1.4.4", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest+compat", "id": "python", "version": ["3.15.1", "3.14.9"], "upstream": "3.15.1", "reason": "Owner selects both lines. 3.15 is the latest; 3.14 is admitted for projects whose locked set does not resolve on 3.15. The core whole-set uv resolution succeeds on 3.14 and fails on 3.15 (ctranslate2/faster-whisper publish no cp315 wheels; livekit-agents requires <3.15)."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "uv", "version": "0.13.5", "upstream": "0.13.5", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "python-build-standalone", "version": "20261021", "upstream": null, "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "go", "version": "go1.27.3", "upstream": "go1.27.3", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "flutter+dart", "version": "3.47.8", "upstream": "3.47.8", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest+compat", "id": "typescript", "version": ["7.0.2", "6.0.3"], "upstream": "7.0.2", "reason": "Owner selects TypeScript 7 (native compiler) and the latest TypeScript 6 (JavaScript compiler API for typescript-eslint, openapi-typescript, @astrojs/check, svelte-language-server). The @typescript/typescript6 alias package currently publishes 6.0.2; alias npm:typescript@6.0.3 instead."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "npm", "version": "12.2.1", "upstream": "12.2.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "pnpm", "version": "12.15.0", "upstream": "12.15.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "just", "version": "1.59.0", "upstream": "1.59.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "mise", "version": "v2026.10.19", "upstream": "v2026.10.19", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest+lts", "id": "jdk", "version": ["27.0.1", "25.0.5"], "upstream": "27.0.1+0", "reason": "Owner selects the latest feature release and the latest LTS. Gradle runs on JDK 27 only from 9.8.0; with the Kotlin-compatible Gradle line use JDK 25. Kotlin 2.4.21 -jvm-target stops at 26 and Flutter 3.47.8 treats Java >=26 as newer-than-known, so Android/Flutter apps keep Java target 17."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest+compat", "id": "gradle", "version": ["9.8.2", "9.7.1"], "upstream": "9.8.2", "reason": "Owner selects the latest Gradle and the newest Gradle fully supported by Kotlin Gradle Plugin 2.4.21 (Gradle 7.6.3-9.7.0; 9.7.1 is its bug-fix patch). Kotlin/Android builds use the compatible line."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest+compat", "id": "android-gradle-plugin", "version": ["9.4.1", "9.3.3"], "upstream": "9.4.1", "reason": "The owner's Gradle rule applied to AGP: the latest release and the newest release fully supported by Kotlin Gradle Plugin 2.4.21 (AGP 8.5.2-9.3.1; 9.3.3 is a bug-fix patch). AGP 9.4 requires Gradle >=9.6.0."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "kotlin", "version": "2.4.21", "upstream": "2.4.21", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.held", "id": "android-sdk", "version": "platform android-37.0 (compileSdk/targetSdk 37), build-tools 37.0.0 (set buildToolsVersion explicitly; AGP default is 36.0.0), cmdline-tools 23.0, NDK 30.0.16248370", "upstream": null, "reason": "Upstream latest platform is 37.2 (minor API); AGP 9.3 documents API 37 and Flutter reads compileSdk as an integer; 37.1/37.2 unverified. NDK r30 is the latest LTS and already used by a core repo, but AGP 9.x and Flutter 3.47.8 default to 28.2.13676358 (fallback)."}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "dotnet", "version": "10.0.402", "upstream": "10.0.402", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cmake", "version": "v4.4.4", "upstream": "v4.4.4", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "llvm", "version": "llvmorg-23.1.4", "upstream": "llvmorg-23.1.4", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "gcc", "version": "16.2.0", "upstream": "16.2.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "swift", "version": "6.4.1", "upstream": "6.4.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "ruby", "version": "4.0.9", "upstream": "4.0.9", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "maven", "version": "3.10.0", "upstream": "3.10.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "qt", "version": "6.12.0", "upstream": null, "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "gdb", "version": "18.1", "upstream": null, "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "playwright", "version": "1.64.1", "upstream": "1.64.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "docker-engine", "version": "docker-v29.9.2", "upstream": "docker-v29.9.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "buildx", "version": "v0.38.1", "upstream": "v0.38.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "compose", "version": "v5.6.1", "upstream": "v5.6.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "buildkit", "version": "v0.34.1", "upstream": "dockerfile/1.28.0-labs", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "containerd", "version": "v2.4.2", "upstream": "v2.4.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "sccache", "version": "0.19.0", "upstream": "0.19.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "ccache", "version": "v4.14.2", "upstream": "v4.14.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-nextest", "version": "0.9.149", "upstream": "0.9.149", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-deny", "version": "0.20.2", "upstream": "0.20.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-audit", "version": "0.22.2", "upstream": "0.22.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-llvm-cov", "version": "0.9.1", "upstream": "0.9.1", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "wasm-bindgen-cli", "version": "0.2.129", "upstream": "0.2.129", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "wasm-pack", "version": "0.15.0", "upstream": "0.15.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "flutter_rust_bridge_codegen", "version": "2.13.0", "upstream": "2.13.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "sqlx-cli", "version": "0.9.0", "upstream": "0.9.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-machete", "version": "0.9.2", "upstream": "0.9.2", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "toolchain.latest", "id": "cargo-shear", "version": "1.14.0", "upstream": "1.14.0", "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.replace", "ecosystem": "npm", "id": "@hey-api/client-axios", "version": "0.9.1", "upstream": "0.9.1", "exceptions": [], "reason": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated)."}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.replace", "ecosystem": "npm", "id": "@hey-api/client-fetch", "version": "0.13.1", "upstream": "0.13.1", "exceptions": [], "reason": "Bundled into @hey-api/openapi-ts since 0.73.0 (deprecated)."}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "npm", "id": "@opentelemetry/instrumentation", "version": "0.300.0", "upstream": "0.300.0", "exceptions": ["0.223.0"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "npm", "id": "@opentelemetry/resources", "version": "3.0.0", "upstream": "3.0.0", "exceptions": ["2.12.0"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "npm", "id": "@opentelemetry/sdk-logs", "version": "3.0.0", "upstream": "3.0.0", "exceptions": ["0.223.0"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.replace", "ecosystem": "npm", "id": "@react-email/components", "version": "1.0.12", "upstream": "1.0.12", "exceptions": [], "reason": "Package marked no longer supported by npm."}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "npm", "id": "eslint", "version": "10.13.0", "upstream": "10.13.0", "exceptions": ["9.39.5"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "npm", "id": "graphql", "version": "17.0.2", "upstream": "17.0.2", "exceptions": ["16.14.2"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "packages.verified", "ecosystem": "npm", "count": 268, "latest": 265}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "pypi", "id": "aiobotocore", "version": "3.10.0", "upstream": "3.10.0", "exceptions": ["2.25.1"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "pypi", "id": "boto3", "version": "1.43.118", "upstream": "1.43.118", "exceptions": ["1.40.61"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.replace", "ecosystem": "pypi", "id": "miniopy-async", "version": "replace", "upstream": "1.23.5", "exceptions": [], "reason": "Stale and MinIO-specific; use an S3 client against RustFS."}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.isolated-tool", "ecosystem": "pypi", "id": "semgrep", "version": "1.182.1", "upstream": "1.182.1", "exceptions": [], "reason": "Install as an isolated tool (uv tool); it pins click, jsonschema, mcp and OpenTelemetry exactly."}
+{"ts": "2026-10-25T13:32:56Z", "event": "packages.verified", "ecosystem": "pypi", "count": 158, "latest": 156}
+{"ts": "2026-10-25T13:32:56Z", "event": "packages.verified", "ecosystem": "crates", "count": 181, "latest": 181}
+{"ts": "2026-10-25T13:32:56Z", "event": "package.latest+exception", "ecosystem": "pub", "id": "cross_file", "version": "0.4.0", "upstream": "0.4.0", "exceptions": ["0.3.5+5"], "reason": null}
+{"ts": "2026-10-25T13:32:56Z", "event": "packages.verified", "ecosystem": "pub", "count": 68, "latest": 68}
+{"ts": "2026-10-25T13:32:56Z", "event": "packages.verified", "ecosystem": "go", "count": 8, "latest": 8}
