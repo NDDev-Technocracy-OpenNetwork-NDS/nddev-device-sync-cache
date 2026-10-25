@@ -112,6 +112,13 @@ impl Routes {
                     gradle,
                 ),
                 route("go", "/go", "/go/{path}", "https://dl.google.com/go", go),
+                route(
+                    "chrome-for-testing",
+                    "/chrome-for-testing",
+                    "/chrome-for-testing/{path}",
+                    "https://storage.googleapis.com/chrome-for-testing-public",
+                    chrome_for_testing,
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -137,6 +144,10 @@ impl Routes {
             redirect_hosts,
             plain_http,
         }
+    }
+
+    pub fn routes(&self) -> &[Route] {
+        &self.routes
     }
 
     pub fn resolve(&self, path: &str) -> Result<Target<'_>, Rejection> {
@@ -268,6 +279,40 @@ fn go(path: &str) -> Option<Freshness> {
     .then_some(Freshness::Immutable)
 }
 
+const CHROME_FOR_TESTING_PLATFORMS: [&str; 6] = [
+    "linux64",
+    "linux-arm64",
+    "mac-arm64",
+    "mac-x64",
+    "win32",
+    "win64",
+];
+const CHROME_FOR_TESTING_PRODUCTS: [&str; 3] = ["chrome", "chromedriver", "chrome-headless-shell"];
+
+/// `/{major.minor.build.patch}/{platform}/{product}-{platform}.zip`, one release archive.
+fn chrome_for_testing(path: &str) -> Option<Freshness> {
+    let mut segments = path[1..].split('/');
+    let (Some(version), Some(platform), Some(file), None) = (
+        segments.next(),
+        segments.next(),
+        segments.next(),
+        segments.next(),
+    ) else {
+        return None;
+    };
+    let release = version.split('.').count() == 4
+        && version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()));
+    let archive = file
+        .strip_suffix(".zip")
+        .and_then(|stem| stem.strip_suffix(platform))
+        .and_then(|product| product.strip_suffix('-'))
+        .is_some_and(|product| CHROME_FOR_TESTING_PRODUCTS.contains(&product));
+    (release && CHROME_FOR_TESTING_PLATFORMS.contains(&platform) && archive)
+        .then_some(Freshness::Immutable)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,6 +360,16 @@ mod tests {
             class("/go/go1.27.3.linux-amd64.tar.gz"),
             Ok(("go", Immutable))
         );
+        assert_eq!(
+            class("/chrome-for-testing/156.0.8078.47/linux64/chrome-linux64.zip"),
+            Ok(("chrome-for-testing", Immutable))
+        );
+        assert_eq!(
+            class(
+                "/chrome-for-testing/156.0.8078.47/mac-arm64/chrome-headless-shell-mac-arm64.zip"
+            ),
+            Ok(("chrome-for-testing", Immutable))
+        );
     }
 
     #[test]
@@ -331,6 +386,16 @@ mod tests {
             Err(Rejection::NotAllowed)
         );
         assert_eq!(class("/go/doc/install"), Err(Rejection::NotAllowed));
+        for path in [
+            "/chrome-for-testing/156.0.8078/linux64/chrome-linux64.zip",
+            "/chrome-for-testing/latest/linux64/chrome-linux64.zip",
+            "/chrome-for-testing/156.0.8078.47/linux32/chrome-linux32.zip",
+            "/chrome-for-testing/156.0.8078.47/linux64/chrome-win64.zip",
+            "/chrome-for-testing/156.0.8078.47/linux64/other-linux64.zip",
+            "/chrome-for-testing/156.0.8078.47/linux64/chrome-linux64.zip/extra",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
     }
 
     #[test]
