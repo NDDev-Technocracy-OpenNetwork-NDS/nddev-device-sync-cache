@@ -65,6 +65,41 @@ async fn channel(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Resp
     ([(header::ETAG, etag)], format!("channel {version}")).into_response()
 }
 
+/// Sends a first chunk at once and the rest after a pause, without a declared length.
+async fn stream(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    let chunks = futures_util::stream::unfold(0, |step| async move {
+        match step {
+            0 => Some((
+                Ok::<_, std::io::Error>(bytes::Bytes::from_static(b"first-")),
+                1,
+            )),
+            1 => {
+                tokio::time::sleep(Duration::from_millis(800)).await;
+                Some((Ok(bytes::Bytes::from_static(b"second")), 2))
+            }
+            _ => None,
+        }
+    });
+    axum::body::Body::from_stream(chunks).into_response()
+}
+
+/// Sends a first chunk, then fails the body.
+async fn broken_stream(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    let chunks = futures_util::stream::unfold(0, |step| async move {
+        match step {
+            0 => Some((Ok(bytes::Bytes::from_static(b"partial")), 1)),
+            1 => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                Some((Err(std::io::Error::other("upstream reset")), 2))
+            }
+            _ => None,
+        }
+    });
+    axum::body::Body::from_stream(chunks).into_response()
+}
+
 async fn big() -> Response {
     vec![b'x'; 2 << 20].into_response()
 }
@@ -104,6 +139,8 @@ impl Harness {
                 .route("/files/slow.bin", get(slow))
                 .route("/files/channel.toml", get(channel))
                 .route("/files/big.bin", get(big))
+                .route("/files/stream.bin", get(stream))
+                .route("/files/broken.bin", get(broken_stream))
                 .with_state(upstream.clone()),
         )
         .await;
@@ -210,6 +247,29 @@ impl Harness {
         (status, serde_json::from_str(&body).unwrap())
     }
 
+    async fn objects(&self) -> u64 {
+        let response = self
+            .client
+            .get(format!("{}/v1/health", self.base))
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        body["store_objects"].as_u64().unwrap()
+    }
+
+    /// Waits until the store holds `count` objects, as background downloads commit.
+    async fn committed(&self, count: u64) {
+        for _ in 0..100 {
+            if self.objects().await == count {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("store did not reach {count} objects");
+    }
+
     fn hits(&self) -> usize {
         self.upstream.hits.load(Ordering::SeqCst)
     }
@@ -222,6 +282,7 @@ async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
         harness.get("/origin/files/immutable.bin").await,
         (200, "miss".into(), "immutable payload".into())
     );
+    harness.committed(1).await;
     assert_eq!(
         harness.get("/origin/files/immutable.bin").await,
         (200, "hit".into(), "immutable payload".into())
@@ -325,6 +386,7 @@ async fn redirects_are_followed_only_to_allowlisted_hosts() {
         harness.get("/redirector/hop/allowed").await,
         (200, "miss".into(), "immutable payload".into())
     );
+    harness.committed(1).await;
     assert_eq!(harness.get("/redirector/hop/denied").await.0, 502);
 }
 
@@ -352,4 +414,98 @@ async fn readiness_reports_an_unwritable_store() {
         .status();
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(degraded, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn clients_follow_a_download_before_it_completes() {
+    let harness = Arc::new(Harness::start().await);
+    let url = format!("{}/origin/files/stream.bin", harness.base);
+    let started = std::time::Instant::now();
+    let mut first = harness.client.get(&url).send().await.unwrap();
+    assert_eq!(first.headers()["x-nds-cache"], "miss");
+    let chunk = first.chunk().await.unwrap().unwrap();
+    assert_eq!(&chunk[..], b"first-");
+    assert!(
+        started.elapsed() < Duration::from_millis(600),
+        "first bytes waited for the whole download"
+    );
+    let joined = harness.get("/origin/files/stream.bin").await;
+    assert_eq!(joined, (200, "joined".into(), "first-second".into()));
+    let mut rest = Vec::new();
+    while let Some(chunk) = first.chunk().await.unwrap() {
+        rest.extend_from_slice(&chunk);
+    }
+    assert_eq!(rest, b"second");
+    harness.committed(1).await;
+    assert_eq!(harness.get("/origin/files/stream.bin").await.1, "hit");
+    assert_eq!(harness.hits(), 1);
+}
+
+#[tokio::test]
+async fn a_disconnecting_client_does_not_abort_the_download() {
+    let harness = Harness::start().await;
+    let mut response = harness
+        .client
+        .get(format!("{}/origin/files/stream.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(&response.chunk().await.unwrap().unwrap()[..], b"first-");
+    drop(response);
+    harness.committed(1).await;
+    assert_eq!(
+        harness.get("/origin/files/stream.bin").await,
+        (200, "hit".into(), "first-second".into())
+    );
+    assert_eq!(harness.hits(), 1);
+}
+
+#[tokio::test]
+async fn head_on_a_miss_answers_from_the_upstream_headers() {
+    let harness = Harness::start().await;
+    let started = std::time::Instant::now();
+    let response = harness
+        .client
+        .head(format!("{}/origin/files/stream.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        started.elapsed() < Duration::from_millis(600),
+        "HEAD waited for the whole download"
+    );
+    harness.committed(1).await;
+    assert_eq!(harness.hits(), 1);
+}
+
+#[tokio::test]
+async fn a_failed_download_fails_its_clients_and_leaves_no_object() {
+    let harness = Harness::start().await;
+    let response = harness
+        .client
+        .get(format!("{}/origin/files/broken.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response.bytes().await.is_err(),
+        "a partial download was delivered as complete"
+    );
+    assert_eq!(harness.objects().await, 0);
+    let mut leftovers = tokio::fs::read_dir(harness.root.join("tmp")).await.unwrap();
+    assert!(leftovers.next_entry().await.unwrap().is_none());
+    assert!(
+        harness
+            .client
+            .get(format!("{}/origin/files/broken.bin", harness.base))
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .is_err()
+    );
+    assert_eq!(harness.hits(), 2);
 }

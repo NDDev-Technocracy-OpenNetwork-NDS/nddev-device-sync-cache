@@ -15,7 +15,8 @@ use tracing::Instrument;
 
 use crate::{
     REPOSITORY, SOURCE_COMMIT,
-    cache::{Cache, Object, ServeError},
+    cache::{Cache, Delivery, Filling, Object, ServeError, Served},
+    store,
     telemetry::Identity,
 };
 
@@ -114,15 +115,25 @@ async fn serve(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respons
             return response;
         }
         match app.cache.serve(uri.path()).await {
-            Ok(object) => {
-                if object.eviction.objects > 0 {
-                    tracing::info!(module = "cache", scope = "io", event.name = "cache.store.evicted", outcome = "ok");
-                }
-                if let Some(error) = object.upstream_error {
-                    tracing::warn!(module = "cache", event.name = "cache.upstream.failed", route, error.type = %error, outcome = "error");
-                }
-                let served = object.served;
-                match respond(object, method == Method::HEAD).await {
+            Ok(delivery) => {
+                let served = match &delivery {
+                    Delivery::Stored(object) => {
+                        if object.eviction.objects > 0 {
+                            tracing::info!(module = "cache", scope = "io", event.name = "cache.store.evicted", outcome = "ok");
+                        }
+                        if let Some(error) = object.upstream_error {
+                            tracing::warn!(module = "cache", event.name = "cache.upstream.failed", route, error.type = %error, outcome = "error");
+                        }
+                        object.served
+                    }
+                    Delivery::Filling(filling) => filling.served,
+                };
+                let head = method == Method::HEAD;
+                let responded = match delivery {
+                    Delivery::Stored(object) => respond(object, head).await,
+                    Delivery::Filling(filling) => respond_filling(filling, head).await,
+                };
+                match responded {
                     Ok(response) => {
                         tracing::info!(module = "cache", event.name = event_name(served), method = method.as_str(), route, status = 200, duration_ms = duration_ms(), outcome = "ok");
                         response
@@ -152,21 +163,48 @@ async fn serve(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respons
     response
 }
 
-fn event_name(served: crate::cache::Served) -> &'static str {
+fn event_name(served: Served) -> &'static str {
     match served {
-        crate::cache::Served::Hit => "cache.hit",
-        crate::cache::Served::Miss => "cache.miss",
-        crate::cache::Served::Revalidated => "cache.revalidated",
-        crate::cache::Served::Stale => "cache.stale",
+        Served::Hit => "cache.hit",
+        Served::Miss => "cache.miss",
+        Served::Joined => "cache.joined",
+        Served::Revalidated => "cache.revalidated",
+        Served::Stale => "cache.stale",
     }
 }
 
+fn content_type(value: Option<&str>) -> HeaderValue {
+    value
+        .and_then(|value| HeaderValue::from_str(value).ok())
+        .unwrap_or(HeaderValue::from_static("application/octet-stream"))
+}
+
+/// Streams a download that is still in progress. `HEAD` answers from the upstream headers
+/// without waiting for the body. The body carries `Content-Length` when upstream declared
+/// it; a failed download ends the response early, so clients never accept a partial object.
+async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Response> {
+    let body = if head {
+        Body::empty()
+    } else {
+        Body::from_stream(store::follow(&filling.temp, filling.progress).await?)
+    };
+    let mut response = Response::new(body);
+    let headers = response.headers_mut();
+    if let Some(length) = filling.length {
+        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
+    }
+    headers.insert(
+        header::CONTENT_TYPE,
+        content_type(filling.content_type.as_deref()),
+    );
+    headers.insert(
+        "x-nds-cache",
+        HeaderValue::from_static(filling.served.as_str()),
+    );
+    Ok(response)
+}
+
 async fn respond(object: Object, head: bool) -> std::io::Result<Response> {
-    let content_type = object
-        .meta
-        .content_type
-        .as_deref()
-        .unwrap_or("application/octet-stream");
     let body = if head {
         Body::empty()
     } else {
@@ -179,8 +217,7 @@ async fn respond(object: Object, head: bool) -> std::io::Result<Response> {
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(object.meta.size));
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(content_type)
-            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        content_type(object.meta.content_type.as_deref()),
     );
     if let Ok(etag) = HeaderValue::from_str(&format!("\"sha256-{}\"", object.meta.sha256)) {
         headers.insert(header::ETAG, etag);
