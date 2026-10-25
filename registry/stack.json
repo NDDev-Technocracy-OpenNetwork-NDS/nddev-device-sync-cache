@@ -5969,8 +5969,9 @@
    "sha": "7ec28a010822b4626af4874f9448a4b05ac6f3e5"
   },
   "dtolnay/rust-toolchain": {
-   "latest": "v1",
-   "sha": "683b588c487a69d01f6c6ddf40f036ff682cc2c8"
+   "latest": "stable",
+   "sha": "b725eda525362e7cf34af9a7243cac1e3f01a7ec",
+   "note": "Workflows select a generated toolchain branch; master (v1) is the generator base. The stack Rust branch 1.99.1 is d124f86f28ff42855784ff3319f48ac182c248f8."
   },
   "extractions/setup-just": {
    "latest": "v4",
