@@ -23,6 +23,9 @@ services:
       - type: bind
         source: ${NDS_CACHE_STORE:?Set the host store directory owned by 10001:10001}
         target: /var/lib/nds-cache
+        # A missing store, such as an unmounted volume, stops the start instead of filling the root disk.
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:${NDS_CACHE_PORT:-8740}:8740"
     pids_limit: 64
