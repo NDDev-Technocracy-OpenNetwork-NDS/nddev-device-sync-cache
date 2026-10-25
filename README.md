@@ -69,6 +69,9 @@ just journal-check origin/main  # confirm the journal only appends to that revis
 just structure                  # std-0001 structural check with a prepared nddev validator
 ```
 
+Pull requests and `main` pushes run `setup`, `check`, `test` and the journal check on GitHub-hosted
+runners. The std-0001 validator is private, so the structural check runs where it is prepared.
+
 ### How the registry is checked
 
 Versions come from official machine-readable release sources: language package registries,
