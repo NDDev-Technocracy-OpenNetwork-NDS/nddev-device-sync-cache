@@ -17,7 +17,7 @@ setup:
 # Run every local check: registry, formatting, tests, lints and dependency policy.
 check: registry-check registry-test fmt-check test clippy dependencies-check
 
-# Validate the schemas, the registry files and decisions-to-state consistency.
+# Validate the schemas, the registry files, the client contract and decisions-to-state consistency.
 registry-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -27,6 +27,7 @@ registry-check:
     "{{ validator }}" validate --offline --errors-only -i contracts/*.schema.json
     validate contracts/stack.schema.json -i registry/stack.json
     validate contracts/decisions.schema.json -i registry/decisions.json
+    validate contracts/clients.schema.json -i contracts/clients.json
     jq -s . registry/journal.jsonl > "$work/journal.json"
     validate contracts/journal.schema.json -i "$work/journal.json"
     jq -e -n --slurpfile d registry/decisions.json --slurpfile s registry/stack.json '
@@ -68,6 +69,9 @@ registry-test:
     reject contracts/decisions.schema.json held-toolchain-without-reason registry/decisions.json '(.toolchains[] | select(.status == "held")) |= del(.reason)'
     reject contracts/journal.schema.json event-without-timestamp "$work/journal-source.json" '.[-1] |= del(.ts)'
     reject contracts/journal.schema.json journal-without-creation "$work/journal-source.json" '.[1:]'
+    reject contracts/clients.schema.json route-without-clients contracts/clients.json '.routes[0].clients = []'
+    reject contracts/clients.schema.json setting-outside-base contracts/clients.json '.routes[0].clients[0].setting |= map_values("https://example.com")'
+    reject contracts/clients.schema.json plain-http-upstream contracts/clients.json '.routes[0].upstream = "http://static.rust-lang.org"'
 
 # Verify that registry/journal.jsonl only appends to its content at the given Git revision.
 journal-check revision="origin/main":

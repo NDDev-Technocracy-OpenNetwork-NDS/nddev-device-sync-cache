@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/contracts/clients.schema.json",
+  "title": "Cache client contract",
+  "description": "Live cache routes and the client settings that send each tool through them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "service", "access", "integrity", "routes"],
+  "properties": {
+    "schema": {"const": 1},
+    "service": {"const": "nddev-device-sync-cache"},
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "base", "admission"],
+      "properties": {
+        "transport": {"const": "rds forward"},
+        "base": {"const": "http://127.0.0.1:{port}"},
+        "admission": {"type": "string", "minLength": 1}
+      }
+    },
+    "integrity": {"type": "string", "minLength": 1},
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/route"}
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "prefix", "upstream", "objects", "clients"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "prefix": {"type": "string", "pattern": "^/[a-z][a-z0-9-]*$"},
+        "upstream": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "objects": {"type": "string", "minLength": 1},
+        "clients": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/client"}
+        }
+      }
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "setting", "acceptance"],
+      "properties": {
+        "tool": {"type": "string", "minLength": 1},
+        "setting": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+          "additionalProperties": {"type": "string", "pattern": "^\\{base\\}/"}
+        },
+        "acceptance": {
+          "description": "real client: this tool completed through the deployed service; route only: the route served real upstream objects to an HTTP client; pending: not yet exercised.",
+          "enum": ["real client", "route only", "pending"]
+        },
+        "limits": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
