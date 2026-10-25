@@ -10,11 +10,18 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use bytes::Bytes;
+use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::{
+    fs,
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::watch,
+};
 
 const MARKER: &str = ".nds-cache-store";
+const FOLLOW_CHUNK: u64 = 64 * 1024;
 const MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache\"}\n";
 
 static PENDING: AtomicU64 = AtomicU64::new(0);
@@ -90,7 +97,34 @@ pub struct Pending {
     limit: u64,
 }
 
+/// Published state of a download that readers follow before it is committed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Progress {
+    /// Bytes flushed to the temporary file so far.
+    Writing(u64),
+    /// The complete object and where it now lives.
+    Committed {
+        size: u64,
+        path: PathBuf,
+    },
+    Failed,
+}
+
 impl Pending {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    /// Makes written bytes visible to readers of the temporary file.
+    pub async fn flush(&mut self) -> Result<(), StoreError> {
+        self.file.as_mut().ok_or(StoreError::Io)?.flush().await?;
+        Ok(())
+    }
+
     pub async fn write(&mut self, chunk: &[u8]) -> Result<(), StoreError> {
         self.size += chunk.len() as u64;
         if self.size > self.limit {
@@ -112,6 +146,66 @@ impl Drop for Pending {
             let _ = std::fs::remove_file(&self.path);
         }
     }
+}
+
+/// Streams a download while it is written. The temporary file is opened while it exists;
+/// once the rename happened, the committed object is opened instead. The stream ends with an
+/// error when the download fails or its writer disappears, so a client never takes a partial
+/// object for a complete one.
+pub async fn follow(
+    temp: &Path,
+    mut progress: watch::Receiver<Progress>,
+) -> std::io::Result<impl Stream<Item = std::io::Result<Bytes>> + Send + 'static> {
+    let failed = || std::io::Error::other("download_failed");
+    let file = match fs::File::open(temp).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let state = progress
+                .wait_for(|state| !matches!(state, Progress::Writing(_)))
+                .await
+                .map_err(|_| failed())?
+                .clone();
+            match state {
+                Progress::Committed { path, .. } => fs::File::open(path).await?,
+                _ => return Err(failed()),
+            }
+        }
+        Err(error) => return Err(error),
+    };
+    Ok(futures_util::stream::unfold(
+        Some((file, progress, 0u64)),
+        move |state| async move {
+            let (mut file, mut progress, offset) = state?;
+            loop {
+                let (limit, end) = match &*progress.borrow_and_update() {
+                    Progress::Writing(written) => (*written, None),
+                    Progress::Committed { size, .. } => (*size, Some(true)),
+                    Progress::Failed => (offset, Some(false)),
+                };
+                if offset < limit {
+                    let mut buffer = vec![0; (limit - offset).min(FOLLOW_CHUNK) as usize];
+                    return match file.read(&mut buffer).await {
+                        Ok(0) => Some((Err(failed()), None)),
+                        Ok(read) => {
+                            buffer.truncate(read);
+                            let next = offset + read as u64;
+                            Some((Ok(Bytes::from(buffer)), Some((file, progress, next))))
+                        }
+                        Err(error) => Some((Err(error), None)),
+                    };
+                }
+                match end {
+                    Some(true) => return None,
+                    Some(false) => return Some((Err(failed()), None)),
+                    None => {
+                        if progress.changed().await.is_err() {
+                            return Some((Err(failed()), None));
+                        }
+                    }
+                }
+            }
+        },
+    ))
 }
 
 pub fn now() -> u64 {
@@ -359,6 +453,10 @@ impl Store {
             eviction.objects += 1;
             eviction.bytes += victim.1;
         }
+    }
+
+    pub fn max_object(&self) -> u64 {
+        self.max_object
     }
 
     pub fn usage(&self) -> Usage {

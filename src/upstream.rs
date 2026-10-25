@@ -27,7 +27,8 @@ pub enum UpstreamError {
 pub type Body = Pin<Box<dyn Stream<Item = Result<Bytes, UpstreamError>> + Send>>;
 
 pub enum Fetched {
-    Content(Validators, Body),
+    /// Validators, the declared `Content-Length` and the body stream.
+    Content(Validators, Option<u64>, Body),
     NotModified(Validators),
     NotFound,
 }
@@ -122,9 +123,10 @@ impl Upstream {
             return Err(UpstreamError::Status);
         }
         let found = validators(response.headers());
+        let length = response.content_length();
         let body = response
             .bytes_stream()
             .map(|chunk| chunk.map_err(|error| classify(&error)));
-        Ok(Fetched::Content(found, Box::pin(body)))
+        Ok(Fetched::Content(found, length, Box::pin(body)))
     }
 }
