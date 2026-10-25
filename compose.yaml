@@ -1,0 +1,39 @@
+# Set the image, source commit and store directory outside Git. See README.md.
+services:
+  nddev-device-sync-cache:
+    image: ${NDS_CACHE_IMAGE:?Set the reviewed cache image reference}
+    build:
+      context: .
+      args:
+        NDS_SOURCE_COMMIT: ${NDS_SOURCE_COMMIT:?Set the full source commit}
+    user: "10001:10001"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      NDS_CACHE_CAPACITY_BYTES: ${NDS_CACHE_CAPACITY_BYTES:?Set the store capacity in bytes}
+      NDS_CACHE_MAX_OBJECT_BYTES: ${NDS_CACHE_MAX_OBJECT_BYTES:-4294967296}
+      NDS_CACHE_FETCHES: ${NDS_CACHE_FETCHES:-16}
+      NDS_CACHE_REVALIDATE_SECONDS: ${NDS_CACHE_REVALIDATE_SECONDS:-300}
+      NDS_RELEASE_CHANNEL: ${NDS_RELEASE_CHANNEL:-alpha}
+      NDS_STANDARDS_RELEASE: ${NDS_STANDARDS_RELEASE:-unreleased}
+      NDS_ENVIRONMENT: ${NDS_ENVIRONMENT:-self-hosted}
+    volumes:
+      - type: bind
+        source: ${NDS_CACHE_STORE:?Set the host store directory owned by 10001:10001}
+        target: /var/lib/nds-cache
+        # A missing store, such as an unmounted volume, stops the start instead of filling the root disk.
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:${NDS_CACHE_PORT:-8740}:8740"
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 2.0
+    stop_grace_period: 40s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"

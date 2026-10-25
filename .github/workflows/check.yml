@@ -15,7 +15,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,14 +25,26 @@ jobs:
         with:
           just-version: '1.59.0'
       - name: Install the pinned Rust toolchain
-        run: rustup toolchain install 1.99.1 --profile minimal
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+      - name: Install the pinned quality tools
+        run: |
+          cargo install --locked --version 0.22.2 cargo-audit
+          cargo install --locked --version 0.20.2 cargo-deny
       - name: Install the pinned registry validator
         run: just setup
       - name: Validate schemas and registry
-        run: just check
+        run: just registry-check
       - name: Reject invalid registry content
-        run: just test
+        run: just registry-test
       - name: Require an append-only journal
         env:
           BASE_REF: ${{ github.base_ref }}
         run: just journal-check "origin/${BASE_REF:-main}"
+      - name: Run the STD-0004 native Rust contract
+        id: native
+        uses: NDDev-Technocracy-Standarts/std-0004-ci-cd-workflows/.github/actions/ci@70226500214618c56bf0d8896bf58ff1402cb74d # std-0004-v0.3.3
+      - name: Require complete native results
+        if: ${{ !cancelled() }}
+        env:
+          STATUS: ${{ steps.native.outputs.status }}
+        run: test "$STATUS" = success

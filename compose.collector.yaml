@@ -1,0 +1,17 @@
+# Overlay that delivers process events to the NDS observability Fluent collector.
+services:
+  nddev-device-sync-cache:
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: ${NDS_FLUENT_ADDRESS:?Set the loopback Fluent collector address}
+        fluentd-async: "true"
+        fluentd-buffer-limit: "256"
+        fluentd-max-retries: "3"
+        fluentd-retry-wait: 1s
+        fluentd-write-timeout: 2s
+        fluentd-async-reconnect-interval: 1s
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-max-size: 2m
+        cache-max-file: "2"
