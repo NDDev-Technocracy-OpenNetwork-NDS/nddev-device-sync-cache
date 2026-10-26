@@ -33,6 +33,76 @@ pub struct Upstream {
     pub broken: AtomicBool,
     /// The `Accept` values of index document requests, in arrival order.
     pub accepts: Mutex<Vec<String>>,
+    /// Tokens the test registry issued, and the `Accept` values of its manifest requests.
+    pub tokens: AtomicUsize,
+    pub manifest_accepts: Mutex<Vec<String>>,
+}
+
+/// The test registry's layer and the SHA-256 hex digest of it, and a digest its bytes lack.
+pub const LAYER: &[u8] = b"layer bytes";
+pub const LAYER_DIGEST: &str = "3997bfa39738f279d788e49d0cc743d02a512c8855f798b3ee1c0daf589a6b9a";
+pub const WRONG_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const REGISTRY_TOKEN: &str = "anonymous-test-token";
+
+/// A registry that issues anonymous tokens and refuses manifests without one.
+async fn registry_token(State(state): State<Arc<Upstream>>) -> Response {
+    state.tokens.fetch_add(1, Ordering::SeqCst);
+    axum::Json(serde_json::json!({ "token": REGISTRY_TOKEN, "expires_in": 300 })).into_response()
+}
+
+async fn registry_manifest(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    let authorized = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        == Some(&format!("Bearer {REGISTRY_TOKEN}"));
+    if !authorized {
+        let host = headers
+            .get(header::HOST)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let challenge = format!(
+            r#"Bearer realm="http://{host}/token",service="test",scope="repository:library/app:pull""#
+        );
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, challenge)],
+        )
+            .into_response();
+    }
+    let accept = headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    state
+        .manifest_accepts
+        .lock()
+        .unwrap()
+        .push(accept.to_owned());
+    let manifest =
+        format!(r#"{{"schemaVersion":2,"layers":[{{"digest":"sha256:{LAYER_DIGEST}"}}]}}"#);
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/vnd.oci.image.manifest.v1+json",
+        )],
+        manifest,
+    )
+        .into_response()
+}
+
+/// Blobs redirect to storage, as registries do; the wrong digest serves the layer anyway.
+async fn registry_blob(axum::extract::Path(digest): axum::extract::Path<String>) -> Response {
+    (
+        StatusCode::TEMPORARY_REDIRECT,
+        [(header::LOCATION, format!("/storage/{digest}"))],
+    )
+        .into_response()
+}
+
+async fn registry_storage(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    LAYER.into_response()
 }
 
 /// The representations of the test index document, preferred first.
@@ -148,6 +218,16 @@ fn registry_accept(path: &str) -> Option<Freshness> {
     }
 }
 
+fn oci_accept(path: &str) -> Option<Freshness> {
+    if path.ends_with("/manifests/latest") {
+        Some(Freshness::Revalidate)
+    } else if path.contains("/blobs/sha256:") {
+        Some(Freshness::Immutable)
+    } else {
+        None
+    }
+}
+
 fn accept(path: &str) -> Option<Freshness> {
     if path.starts_with("/files/channel") {
         Some(Freshness::Revalidate)
@@ -179,6 +259,10 @@ impl Harness {
                 .route("/files/stream.bin", get(stream))
                 .route("/files/broken.bin", get(broken_stream))
                 .route("/files/index.json", get(index))
+                .route("/token", get(registry_token))
+                .route("/v2/library/app/manifests/latest", get(registry_manifest))
+                .route("/v2/library/app/blobs/{digest}", get(registry_blob))
+                .route("/storage/{digest}", get(registry_storage))
                 .with_state(upstream.clone()),
         )
         .await;
@@ -218,6 +302,7 @@ impl Harness {
             canonical: verbatim,
             accept,
             index: None,
+            oci: false,
         };
         let routes = Routes::new(
             vec![
@@ -227,6 +312,11 @@ impl Harness {
                     "/redirector/{path}",
                     format!("http://{redirector}"),
                 ),
+                Route {
+                    accept: oci_accept,
+                    oci: true,
+                    ..route("/oci", "/oci/{path}", format!("http://{origin}/v2"))
+                },
                 Route {
                     accept: registry_accept,
                     index: Some(Index {

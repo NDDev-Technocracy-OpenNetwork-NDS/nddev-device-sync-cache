@@ -32,6 +32,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/ready", get(ready))
         .route("/source", get(source))
         .route("/crates-index/config.json", get(crates_config))
+        .route("/v2/", get(registry_ping))
+        .route("/v2", get(registry_ping))
         .fallback(serve)
         .with_state(app)
 }
@@ -101,6 +103,18 @@ async fn source() -> Response {
     }))
     .into_response()
 }
+
+/// The OCI distribution API check that registry clients make before pulling; the cache asks for
+/// no credentials.
+async fn registry_ping() -> Response {
+    (
+        [(DISTRIBUTION_API, HeaderValue::from_static("registry/2.0"))],
+        Json(serde_json::json!({})),
+    )
+        .into_response()
+}
+
+const DISTRIBUTION_API: &str = "docker-distribution-api-version";
 
 /// The crates.io sparse index configuration, generated for the loopback base address the client
 /// used, so that crate downloads come back through this cache.
@@ -178,10 +192,25 @@ async fn serve(
                 let validator = headers
                     .get(header::IF_NONE_MATCH)
                     .and_then(|value| value.to_str().ok());
+                // OCI clients read the digest of what they receive from the registry's header.
+                let content_digest = app.cache.oci(uri.path()).map(|path_digest| match &delivery {
+                    Delivery::Stored(object) => Some(object.meta.sha256.clone()),
+                    Delivery::Filling(_) => path_digest,
+                });
                 let responded = match delivery {
                     Delivery::Stored(object) => respond(object, head, validator).await,
                     Delivery::Filling(filling) => respond_filling(filling, head).await,
-                };
+                }
+                .map(|mut response| {
+                    if let Some(digest) = content_digest {
+                        let headers = response.headers_mut();
+                        headers.insert(DISTRIBUTION_API, HeaderValue::from_static("registry/2.0"));
+                        if let Some(value) = digest.and_then(|digest| HeaderValue::from_str(&format!("sha256:{digest}")).ok()) {
+                            headers.insert("docker-content-digest", value);
+                        }
+                    }
+                    response
+                });
                 match responded {
                     Ok(response) => {
                         let status = response.status().as_u16();

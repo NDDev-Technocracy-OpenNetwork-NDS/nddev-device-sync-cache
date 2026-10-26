@@ -23,7 +23,13 @@ pub struct Route {
     pub accept: fn(&str) -> Option<Freshness>,
     /// Set when the route's revalidated objects are index documents.
     pub index: Option<Index>,
+    /// Set for an OCI distribution route: manifests are requested in every image manifest
+    /// type, and content-addressed objects are checked against the digest in their path.
+    pub oci: bool,
 }
+
+/// The manifest types an OCI route requests; the registry answers with the one it holds.
+pub const OCI_MANIFEST_TYPES: &str = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json";
 
 /// Index documents that name their downloads by absolute upstream URL. The cache fetches the
 /// representation the client accepts and points the download links at the client's base.
@@ -69,6 +75,26 @@ impl Target<'_> {
     /// The index of an index document.
     pub fn index(&self) -> Option<&Index> {
         self.media_type.and(self.route.index.as_ref())
+    }
+
+    /// The representation to request upstream.
+    pub fn upstream_accept(&self) -> Option<&'static str> {
+        self.media_type
+            .or(self.route.oci.then_some(OCI_MANIFEST_TYPES))
+    }
+
+    /// The SHA-256 hex digest an OCI blob or manifest-by-digest path names; the stored bytes
+    /// must have it.
+    pub fn digest(&self) -> Option<&str> {
+        if !self.route.oci {
+            return None;
+        }
+        let hex = self.subpath.rsplit_once("/sha256:")?.1;
+        (hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+        .then_some(hex)
     }
 }
 
@@ -120,6 +146,11 @@ impl Routes {
             canonical: verbatim,
             accept,
             index: None,
+            oci: false,
+        };
+        let oci = |id, prefix, template, upstream: &str| Route {
+            oci: true,
+            ..route(id, prefix, template, upstream, oci_object)
         };
         Self {
             routes: vec![
@@ -253,6 +284,35 @@ impl Routes {
                     "https://proxy.golang.org",
                     go_module,
                 ),
+                // OCI pulls name the registry after the cache's own address, for example
+                // `127.0.0.1:8740/docker.io/library/alpine:3`.
+                Route {
+                    canonical: docker_library,
+                    ..oci(
+                        "docker-hub",
+                        "/v2/docker.io",
+                        "/v2/docker.io/{path}",
+                        "https://registry-1.docker.io/v2",
+                    )
+                },
+                oci(
+                    "ghcr",
+                    "/v2/ghcr.io",
+                    "/v2/ghcr.io/{path}",
+                    "https://ghcr.io/v2",
+                ),
+                oci(
+                    "gcr",
+                    "/v2/gcr.io",
+                    "/v2/gcr.io/{path}",
+                    "https://gcr.io/v2",
+                ),
+                oci(
+                    "cgr",
+                    "/v2/cgr.dev",
+                    "/v2/cgr.dev/{path}",
+                    "https://cgr.dev/v2",
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -267,6 +327,14 @@ impl Routes {
                 "repo.maven.apache.org",
                 "plugins.gradle.org",
                 "plugins-artifacts.gradle.org",
+                // OCI token services and blob storage.
+                "auth.docker.io",
+                "production.cloudfront.docker.com",
+                "ghcr.io",
+                "pkg-containers.githubusercontent.com",
+                "gcr.io",
+                "cgr.dev",
+                ".r2.cloudflarestorage.com",
             ]
             .map(String::from)
             .to_vec(),
@@ -322,13 +390,24 @@ impl Routes {
         })
     }
 
+    /// Whether an upstream may send the cache to `host`, by a redirect or as its token service.
+    /// An entry that starts with `.` admits the subdomains of that domain.
     pub fn redirect_allowed(&self, scheme: &str, host: &str) -> bool {
         (scheme == "https" || (self.plain_http && scheme == "http"))
-            && self.redirect_hosts.iter().any(|allowed| allowed == host)
+            && self
+                .redirect_hosts
+                .iter()
+                .any(|allowed| match allowed.strip_prefix('.') {
+                    Some(domain) => host
+                        .strip_suffix(domain)
+                        .is_some_and(|prefix| prefix.len() > 1 && prefix.ends_with('.')),
+                    None => allowed == host,
+                })
     }
 }
 
-/// Accepts `/segment/...` with unreserved characters, `+`, `@`, `!` and percent-escapes. A segment may
+/// Accepts `/segment/...` with unreserved characters, `+`, `@`, `!`, `:` and percent-escapes. A
+/// segment may
 /// not be empty, `.` or `..` after decoding, and an escape may not decode to a separator,
 /// control character or escape introducer.
 fn valid_subpath(path: &str) -> bool {
@@ -357,7 +436,7 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
             }
             decoded.push(value);
             index += 3;
-        } else if byte.is_ascii_alphanumeric() || b"._~-+@!".contains(&byte) {
+        } else if byte.is_ascii_alphanumeric() || b"._~-+@!:".contains(&byte) {
             decoded.push(byte);
             index += 1;
         } else {
@@ -714,6 +793,64 @@ fn pypi(path: &str) -> Option<Freshness> {
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
     normalized.then_some(Freshness::Revalidate)
+}
+
+/// Docker Hub names official images under `library/`, which clients leave out.
+fn docker_library(path: &str) -> Cow<'_, str> {
+    let name = path
+        .split_once("/manifests/")
+        .or_else(|| path.split_once("/blobs/"))
+        .map_or(path, |(name, _)| name);
+    if name.len() > 1 && !name[1..].contains('/') {
+        Cow::Owned(format!("/library{path}"))
+    } else {
+        Cow::Borrowed(path)
+    }
+}
+
+/// One OCI repository path component: lowercase alphanumerics joined by `.`, `_`, `__` or
+/// dashes.
+fn oci_component(component: &str) -> bool {
+    !component.is_empty()
+        && component.as_bytes()[0].is_ascii_alphanumeric()
+        && component.as_bytes()[component.len() - 1].is_ascii_alphanumeric()
+        && component.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+        })
+}
+
+/// OCI distribution pulls. `/{name}/manifests/{tag}` changes when the tag moves;
+/// `/{name}/manifests/sha256:{hex}` and `/{name}/blobs/sha256:{hex}` are content-addressed.
+fn oci_object(path: &str) -> Option<Freshness> {
+    let (name, kind, reference) = match path.rsplit_once("/manifests/") {
+        Some((name, reference)) => (name, "manifests", reference),
+        None => {
+            let (name, reference) = path.rsplit_once("/blobs/")?;
+            (name, "blobs", reference)
+        }
+    };
+    if !name.strip_prefix('/')?.split('/').all(oci_component) {
+        return None;
+    }
+    let digest = reference.strip_prefix("sha256:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    });
+    let tag = kind == "manifests"
+        && (1..=128).contains(&reference.len())
+        && (reference.as_bytes()[0].is_ascii_alphanumeric() || reference.starts_with('_'))
+        && reference
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte));
+    if digest {
+        Some(Freshness::Immutable)
+    } else if tag {
+        Some(Freshness::Revalidate)
+    } else {
+        None
+    }
 }
 
 /// A Go module path in the proxy's escaped form: lowercase elements, capitals written as `!`
@@ -1216,6 +1353,85 @@ mod tests {
         assert_eq!(
             class("/go/go1.27.3.linux-amd64.tar.gz"),
             Ok(("go", Immutable))
+        );
+    }
+
+    #[test]
+    fn classifies_oci_objects() {
+        use Freshness::*;
+        let digest = "sha256:28a33e0390da2b341d05e53803c6766977039baedfc8a82a4910d5acc4755b66";
+        let routes = Routes::production();
+        for (path, route, freshness, upstream) in [
+            (
+                "/v2/docker.io/library/alpine/manifests/3.22",
+                "docker-hub",
+                Revalidate,
+                "https://registry-1.docker.io/v2/library/alpine/manifests/3.22",
+            ),
+            (
+                "/v2/docker.io/alpine/manifests/3.22",
+                "docker-hub",
+                Revalidate,
+                "https://registry-1.docker.io/v2/library/alpine/manifests/3.22",
+            ),
+            (
+                "/v2/docker.io/grafana/grafana/manifests/latest",
+                "docker-hub",
+                Revalidate,
+                "https://registry-1.docker.io/v2/grafana/grafana/manifests/latest",
+            ),
+            (
+                "/v2/ghcr.io/linuxcontainers/alpine/manifests/latest",
+                "ghcr",
+                Revalidate,
+                "https://ghcr.io/v2/linuxcontainers/alpine/manifests/latest",
+            ),
+            (
+                "/v2/cgr.dev/chainguard/static/manifests/latest",
+                "cgr",
+                Revalidate,
+                "https://cgr.dev/v2/chainguard/static/manifests/latest",
+            ),
+        ] {
+            let target = routes.resolve(path, None).unwrap();
+            assert_eq!(
+                (target.route.id, target.freshness),
+                (route, freshness),
+                "{path}"
+            );
+            assert_eq!(target.upstream_url(), upstream);
+            assert_eq!(target.upstream_accept(), Some(OCI_MANIFEST_TYPES));
+            assert_eq!(target.digest(), None);
+        }
+        for path in [
+            format!("/v2/gcr.io/distroless/static/manifests/{digest}"),
+            format!("/v2/docker.io/library/alpine/blobs/{digest}"),
+            format!("/v2/docker.io/alpine/blobs/{digest}"),
+        ] {
+            let target = routes.resolve(&path, None).unwrap();
+            assert_eq!(target.freshness, Immutable, "{path}");
+            assert_eq!(target.digest(), Some(&digest[7..]));
+        }
+        for path in [
+            "/v2/docker.io/library/alpine/blobs/latest",
+            "/v2/docker.io/Library/alpine/manifests/3",
+            "/v2/docker.io/library/alpine/manifests/-bad",
+            "/v2/docker.io/library/alpine/tags/list",
+            "/v2/docker.io/library/alpine/blobs/uploads/",
+            "/v2/docker.io/library/alpine/manifests/sha256:abc",
+            "/v2/quay.io/coreos/etcd/manifests/latest",
+        ] {
+            assert!(routes.resolve(path, None).is_err(), "{path}");
+        }
+        assert!(
+            routes.redirect_allowed("https", "docker-images-prod.6aa3.r2.cloudflarestorage.com")
+        );
+        assert!(!routes.redirect_allowed("https", "r2.cloudflarestorage.com"));
+        assert!(!routes.redirect_allowed("https", "evilr2.cloudflarestorage.com"));
+        assert!(routes.redirect_allowed("https", "auth.docker.io"));
+        assert_eq!(
+            routes.resolve("/npm/is-number", None).unwrap().digest(),
+            None
         );
     }
 
