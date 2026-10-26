@@ -101,8 +101,8 @@
         {
           "tool": "cargo, replacing the crates-io source",
           "setting": {"source.crates-io.replace-with": "nds-cache", "source.nds-cache.registry": "sparse+{base}/crates-index/"},
-          "acceptance": "pending",
-          "limits": "Set through cargo --config or a Cargo configuration file: Cargo reads source replacement from no environment variable. Index changes reach clients after the revalidation age."
+          "acceptance": "real client",
+          "limits": "Set through cargo --config or a Cargo configuration file: Cargo reads source replacement from no environment variable. Index changes reach clients after the revalidation age. Cargo names its local registry cache by the URL, port included, so a client keeps one forwarded port to reuse it."
         }
       ]
     },
@@ -115,7 +115,7 @@
         {
           "tool": "cargo, through the index configuration the cache generates",
           "setting": {"dl": "{base}/crates/{crate}/{crate}-{version}.crate"},
-          "acceptance": "pending",
+          "acceptance": "real client",
           "limits": "No client setting: the config.json of the crates-index route carries this download template."
         }
       ]
