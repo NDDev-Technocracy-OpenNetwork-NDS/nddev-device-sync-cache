@@ -38,13 +38,18 @@ every other path before any upstream connection:
 | `/npm/` | npm package documents and tarballs, for Bun and npm |
 | `/pypi/` | PyPI simple index project pages in their JSON form |
 | `/pypi-files/` | PyPI release files and their core metadata |
+| `/pub/` | pub.dev package documents and archives, for Dart and Flutter |
+| `/maven-central/` | Maven Central release files |
+| `/google-maven/` | Google's Maven repository for Android |
+| `/gradle-plugins/` | Gradle Plugin Portal markers and plugin artifacts |
+| `/goproxy/` | Go module proxy versions, including Go toolchains |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
-upstream validators and served stale when upstream fails. npm package documents and PyPI project
-pages are stored per representation the client accepts and served with their download links
-pointed at the loopback base address the client used, so the downloads come back through the
-cache.
+upstream validators and served stale when upstream fails. npm package documents, PyPI project
+pages and pub package documents are stored per representation the client accepts and served
+with their download links pointed at the loopback base address the client used, so the
+downloads come back through the cache.
 `GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while
