@@ -958,6 +958,8 @@ dependencies = [
  "bytes",
  "futures-util",
  "nddev-device-sync-telemetry",
+ "opentelemetry",
+ "opentelemetry_sdk",
  "reqwest",
  "rustix",
  "rustls",
