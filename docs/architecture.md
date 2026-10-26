@@ -63,6 +63,14 @@ highest, requests that one upstream and stores each representation as its own ob
 that accepts none of them gets `406`. The PyPI route serves only the JSON form, which uv and pip
 prefer.
 
+OCI pulls name the registry after the cache's address, for example
+`127.0.0.1:8740/docker.io/library/alpine:3`. The cache answers the `/v2/` check itself, asks the
+registry for every image manifest type, takes an anonymous token from the registry's allowlisted
+token service when it is challenged, and follows blob redirects only to allowlisted storage hosts.
+Manifests by tag are revalidated; manifests by digest and blobs are content-addressed, and the
+cache stores them only when their bytes have the digest of their path. Responses carry
+`Docker-Content-Digest`.
+
 The store has a configured capacity. Commits that would exceed it evict the least recently used
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
 holds acceleration state only: losing it costs downloads, not data.
@@ -109,7 +117,8 @@ store directory live in the private estate.
    only through its explicit insecure-protocol opt-in.
 6. Go module proxy and toolchain modules; the go command verifies against the checksum database
    directly.
-7. OCI pull-through and BuildKit cache references.
+7. OCI pull-through for Docker Hub, GitHub, Google and Chainguard registries; BuildKit cache
+   references belong to the shared build caches.
 8. Shared build caches with CI-only writes.
 9. Registry admission and the Rust registry generator.
 

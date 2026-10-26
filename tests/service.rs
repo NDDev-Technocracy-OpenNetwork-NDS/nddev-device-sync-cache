@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::http::{StatusCode, header};
-use support::{Harness, INDEX_TYPES};
+use support::{Harness, INDEX_TYPES, LAYER, LAYER_DIGEST, WRONG_DIGEST};
 
 #[tokio::test]
 async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
@@ -383,4 +383,84 @@ async fn index_documents_are_negotiated_and_link_back_to_the_client_base() {
             .all(|accept| INDEX_TYPES.contains(&accept.as_str())),
         "{accepts:?}"
     );
+}
+
+#[tokio::test]
+async fn oci_pulls_answer_the_token_challenge_once_and_carry_digests() {
+    let harness = Harness::start().await;
+    let ping = harness
+        .client
+        .get(format!("{}/v2/", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ping.status(), StatusCode::OK);
+    assert_eq!(
+        ping.headers()["docker-distribution-api-version"],
+        "registry/2.0"
+    );
+
+    let manifest_url = format!("{}/oci/library/app/manifests/latest", harness.base);
+    let manifest = harness.client.get(&manifest_url).send().await.unwrap();
+    assert_eq!(manifest.status(), StatusCode::OK);
+    assert_eq!(
+        manifest.headers()[header::CONTENT_TYPE],
+        "application/vnd.oci.image.manifest.v1+json"
+    );
+    let digest = manifest.headers()["docker-content-digest"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let body = manifest.bytes().await.unwrap();
+    use sha2::Digest as _;
+    let computed: String = sha2::Sha256::digest(&body)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert_eq!(digest, format!("sha256:{computed}"));
+    assert_eq!(
+        harness.upstream.manifest_accepts.lock().unwrap().as_slice(),
+        [nddev_device_sync_cache::domain::OCI_MANIFEST_TYPES]
+    );
+
+    let blob_url = format!(
+        "{}/oci/library/app/blobs/sha256:{LAYER_DIGEST}",
+        harness.base
+    );
+    let (status, served, body) = harness.get(&blob_url[harness.base.len()..]).await;
+    assert_eq!(
+        (status, served.as_str(), body.as_bytes()),
+        (200, "miss", LAYER)
+    );
+    harness.committed(2).await;
+    let blob = harness.client.get(&blob_url).send().await.unwrap();
+    assert_eq!(blob.headers()["x-nds-cache"], "hit");
+    assert_eq!(
+        blob.headers()["docker-content-digest"],
+        format!("sha256:{LAYER_DIGEST}").as_str()
+    );
+
+    // Revalidating the tag reuses the token the registry issued.
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    assert_eq!(
+        harness.get(&manifest_url[harness.base.len()..]).await.0,
+        200
+    );
+    assert_eq!(harness.upstream.tokens.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_blob_without_its_digest_is_never_stored() {
+    let harness = Harness::start().await;
+    let url = format!(
+        "{}/oci/library/app/blobs/sha256:{WRONG_DIGEST}",
+        harness.base
+    );
+    for _ in 0..2 {
+        let response = harness.client.get(&url).send().await.unwrap();
+        assert!(response.bytes().await.is_err() || harness.objects().await == 0);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(harness.objects().await, 0);
+    }
+    assert_eq!(harness.hits(), 2);
 }

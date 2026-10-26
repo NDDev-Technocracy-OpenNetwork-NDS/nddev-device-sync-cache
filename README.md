@@ -43,6 +43,7 @@ every other path before any upstream connection:
 | `/google-maven/` | Google's Maven repository for Android |
 | `/gradle-plugins/` | Gradle Plugin Portal markers and plugin artifacts |
 | `/goproxy/` | Go module proxy versions, including Go toolchains |
+| `/v2/<registry>/` | OCI image pulls from `docker.io`, `ghcr.io`, `gcr.io` and `cgr.dev` |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
