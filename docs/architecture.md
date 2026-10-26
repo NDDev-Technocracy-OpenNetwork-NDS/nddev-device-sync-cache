@@ -47,14 +47,31 @@ Mutable objects are small. They are downloaded completely before they are served
 upstream validators and are revalidated after a bounded age; when revalidation fails, the stored copy
 is served and the stale response is reported.
 
+Package registries name their downloads by absolute upstream URL inside index documents: npm
+package documents link tarballs and PyPI project pages link release files. Bun, uv and pip fetch
+those URLs as written, so the cache serves such a document with its download links pointed at the
+client's base address, the loopback address of its forward. Only a link prefix that opens a JSON
+string is rewritten, while the document streams; hashes, integrity values and the rest of the
+document stay as upstream sent them, and the store keeps the upstream bytes. A request whose host
+is not loopback is refused, so a rewritten link never leads elsewhere. The entity tag of a served
+document names both the stored object and the base, so a client at another address revalidates.
+
+An index document has several representations: npm serves an abbreviated install document and
+the full document, and the simple repository API a JSON and an HTML form. The route lists the
+representations it serves in preference order. The cache picks the one the client's `Accept` ranks
+highest, requests that one upstream and stores each representation as its own object; a client
+that accepts none of them gets `406`. The PyPI route serves only the JSON form, which uv and pip
+prefer.
+
 The store has a configured capacity. Commits that would exceed it evict the least recently used
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
 holds acceleration state only: losing it costs downloads, not data.
 
 ## Current limits
 
-- Registry admission is a later increment: the crates routes proxy every published crate, and
-  Cargo verifies each archive against its index checksum.
+- Registry admission is a later increment: the crates, npm and PyPI routes proxy every published
+  package, and the clients verify each download against the checksum or integrity value of its
+  index document.
 
 - Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings and Gradle
   Maven repositories, need the forwarded endpoint behind a local TLS terminator or a later TLS
@@ -85,13 +102,13 @@ store directory live in the private estate.
    Playwright browsers, Gradle and Go distributions, Chrome for Testing archives.
 2. crates.io sparse index and crate files. The cache generates the index `config.json` for the
    loopback base address of each client, so downloads return through the cache.
-3. npm registry for Bun and npm.
-4. PyPI simple index for uv.
-5. Go module proxy, checksum database and toolchain modules.
-6. pub hosted repository.
-7. Maven Central, Google Maven and the Gradle Plugin Portal.
-8. OCI pull-through and BuildKit cache references.
-9. Shared build caches with CI-only writes.
-10. Registry admission and the Rust registry generator.
+3. npm registry for Bun and npm, and the PyPI simple index for uv and pip. Their index documents
+   are served per negotiated representation with download links pointed at the client base.
+4. Go module proxy, checksum database and toolchain modules.
+5. pub hosted repository.
+6. Maven Central, Google Maven and the Gradle Plugin Portal.
+7. OCI pull-through and BuildKit cache references.
+8. Shared build caches with CI-only writes.
+9. Registry admission and the Rust registry generator.
 
 Each increment is accepted with its real protocol client against the deployed service.

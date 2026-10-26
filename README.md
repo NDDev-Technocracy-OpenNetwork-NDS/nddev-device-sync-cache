@@ -35,10 +35,16 @@ every other path before any upstream connection:
 | `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
 | `/crates-index/` | crates.io sparse index files; the cache generates `config.json` |
 | `/crates/` | crate archives of exact published versions |
+| `/npm/` | npm package documents and tarballs, for Bun and npm |
+| `/pypi/` | PyPI simple index project pages in their JSON form |
+| `/pypi-files/` | PyPI release files and their core metadata |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
-upstream validators and served stale when upstream fails.
+upstream validators and served stale when upstream fails. npm package documents and PyPI project
+pages are stored per representation the client accepts and served with their download links
+pointed at the loopback base address the client used, so the downloads come back through the
+cache.
 `GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while

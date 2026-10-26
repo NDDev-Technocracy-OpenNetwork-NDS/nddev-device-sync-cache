@@ -7,7 +7,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
@@ -22,7 +22,7 @@ use axum::{
 };
 use nddev_device_sync_cache::{
     config::Settings,
-    domain::{Freshness, Route, Routes},
+    domain::{Freshness, Index, Route, Routes, verbatim},
     telemetry::Identity,
 };
 
@@ -31,7 +31,12 @@ pub struct Upstream {
     pub hits: AtomicUsize,
     pub channel_v2: AtomicBool,
     pub broken: AtomicBool,
+    /// The `Accept` values of index document requests, in arrival order.
+    pub accepts: Mutex<Vec<String>>,
 }
+
+/// The representations of the test index document, preferred first.
+pub const INDEX_TYPES: &[&str] = &["application/vnd.test.v1+json", "application/json"];
 
 async fn immutable(State(state): State<Arc<Upstream>>) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
@@ -104,6 +109,26 @@ async fn broken_stream(State(state): State<Arc<Upstream>>) -> Response {
     axum::body::Body::from_stream(chunks).into_response()
 }
 
+/// An index document in the representation the request names, linking one download by the
+/// absolute URL of this upstream.
+async fn index(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    let text = |name| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (accept, host) = (text(header::ACCEPT), text(header::HOST));
+    state.accepts.lock().unwrap().push(accept.clone());
+    let document = serde_json::json!({
+        "files": [{"url": format!("http://{host}/files/immutable.bin"), "sha256": "unchanged"}],
+        "representation": accept,
+    });
+    ([(header::CONTENT_TYPE, accept)], document.to_string()).into_response()
+}
+
 async fn big() -> Response {
     vec![b'x'; 2 << 20].into_response()
 }
@@ -113,6 +138,14 @@ async fn spawn(router: Router) -> SocketAddr {
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     address
+}
+
+fn registry_accept(path: &str) -> Option<Freshness> {
+    match path {
+        "/files/index.json" => Some(Freshness::Revalidate),
+        "/files/immutable.bin" => Some(Freshness::Immutable),
+        _ => None,
+    }
 }
 
 fn accept(path: &str) -> Option<Freshness> {
@@ -145,6 +178,7 @@ impl Harness {
                 .route("/files/big.bin", get(big))
                 .route("/files/stream.bin", get(stream))
                 .route("/files/broken.bin", get(broken_stream))
+                .route("/files/index.json", get(index))
                 .with_state(upstream.clone()),
         )
         .await;
@@ -181,7 +215,9 @@ impl Harness {
             prefix,
             template,
             upstream,
+            canonical: verbatim,
             accept,
+            index: None,
         };
         let routes = Routes::new(
             vec![
@@ -191,6 +227,15 @@ impl Harness {
                     "/redirector/{path}",
                     format!("http://{redirector}"),
                 ),
+                Route {
+                    accept: registry_accept,
+                    index: Some(Index {
+                        media_types: INDEX_TYPES,
+                        links: vec![format!("http://{origin}/")],
+                        mount: "/registry/",
+                    }),
+                    ..route("/registry", "/registry/{path}", format!("http://{origin}"))
+                },
             ],
             vec!["127.0.0.1".into()],
             true,

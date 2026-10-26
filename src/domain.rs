@@ -1,4 +1,5 @@
 //! Route allowlist, request path validation and object classes. Pure rules without I/O.
+use std::borrow::Cow;
 
 /// Longest accepted request subpath, in bytes.
 pub const MAX_PATH_BYTES: usize = 512;
@@ -10,14 +11,35 @@ pub enum Freshness {
     Revalidate,
 }
 
-/// One allowlisted upstream mount. `accept` classifies a validated subpath or refuses it.
+/// One allowlisted upstream mount. `canonical` maps a client's form of a subpath to the upstream
+/// form before validation; `accept` classifies a validated subpath or refuses it.
 #[derive(Clone, Debug)]
 pub struct Route {
     pub id: &'static str,
     pub prefix: &'static str,
     pub template: &'static str,
     pub upstream: String,
+    pub canonical: fn(&str) -> Cow<'_, str>,
     pub accept: fn(&str) -> Option<Freshness>,
+    /// Set when the route's revalidated objects are index documents.
+    pub index: Option<Index>,
+}
+
+/// Index documents that name their downloads by absolute upstream URL. The cache fetches the
+/// representation the client accepts and points the download links at the client's base.
+#[derive(Clone, Debug)]
+pub struct Index {
+    /// Representations in preference order; each one is stored as its own object.
+    pub media_types: &'static [&'static str],
+    /// Upstream download URL prefixes, rewritten where they open a JSON string.
+    pub links: Vec<String>,
+    /// The cache path that serves those downloads.
+    pub mount: &'static str,
+}
+
+/// Leaves a subpath as the client sent it.
+pub fn verbatim(path: &str) -> Cow<'_, str> {
+    Cow::Borrowed(path)
 }
 
 /// A request resolved to one route and an upstream-relative subpath.
@@ -26,6 +48,8 @@ pub struct Target<'a> {
     pub route: &'a Route,
     pub subpath: String,
     pub freshness: Freshness,
+    /// The negotiated representation of an index document.
+    pub media_type: Option<&'static str>,
 }
 
 impl Target<'_> {
@@ -33,9 +57,18 @@ impl Target<'_> {
         format!("{}{}", self.route.upstream, self.subpath)
     }
 
-    /// Stable store identity of the object.
+    /// Stable store identity of the object. A representation follows `#`, which a validated
+    /// subpath never contains.
     pub fn key(&self) -> String {
-        format!("{}{}", self.route.id, self.subpath)
+        match self.media_type {
+            Some(media_type) => format!("{}{}#{media_type}", self.route.id, self.subpath),
+            None => format!("{}{}", self.route.id, self.subpath),
+        }
+    }
+
+    /// The index of an index document.
+    pub fn index(&self) -> Option<&Index> {
+        self.media_type.and(self.route.index.as_ref())
     }
 }
 
@@ -44,6 +77,8 @@ pub enum Rejection {
     UnknownRoute,
     InvalidPath,
     NotAllowed,
+    NotAcceptable,
+    HostNotLoopback,
 }
 
 impl Rejection {
@@ -52,6 +87,16 @@ impl Rejection {
             Self::UnknownRoute => "route_unknown",
             Self::InvalidPath => "path_invalid",
             Self::NotAllowed => "path_not_allowed",
+            Self::NotAcceptable => "not_acceptable",
+            Self::HostNotLoopback => "host_not_loopback",
+        }
+    }
+
+    pub fn status(self) -> u16 {
+        match self {
+            Self::NotAcceptable => 406,
+            Self::HostNotLoopback => 400,
+            _ => 404,
         }
     }
 }
@@ -72,7 +117,9 @@ impl Routes {
             prefix,
             template,
             upstream: upstream.into(),
+            canonical: verbatim,
             accept,
+            index: None,
         };
         Self {
             routes: vec![
@@ -133,6 +180,40 @@ impl Routes {
                     "https://static.crates.io/crates",
                     crates,
                 ),
+                Route {
+                    canonical: npm_path,
+                    index: Some(Index {
+                        media_types: &["application/vnd.npm.install-v1+json", "application/json"],
+                        // Early package versions name their tarballs with plain HTTP.
+                        links: vec![
+                            "https://registry.npmjs.org/".into(),
+                            "http://registry.npmjs.org/".into(),
+                        ],
+                        mount: "/npm/",
+                    }),
+                    ..route(
+                        "npm",
+                        "/npm",
+                        "/npm/{path}",
+                        "https://registry.npmjs.org",
+                        npm,
+                    )
+                },
+                Route {
+                    index: Some(Index {
+                        media_types: &["application/vnd.pypi.simple.v1+json"],
+                        links: vec!["https://files.pythonhosted.org/".into()],
+                        mount: "/pypi-files/",
+                    }),
+                    ..route("pypi", "/pypi", "/pypi/{path}", "https://pypi.org", pypi)
+                },
+                route(
+                    "pypi-files",
+                    "/pypi-files",
+                    "/pypi-files/{path}",
+                    "https://files.pythonhosted.org",
+                    pypi_files,
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -164,7 +245,9 @@ impl Routes {
         &self.routes
     }
 
-    pub fn resolve(&self, path: &str) -> Result<Target<'_>, Rejection> {
+    /// Resolves a request path. `accept` is the client's `Accept` header, which selects the
+    /// representation of an index document.
+    pub fn resolve(&self, path: &str, accept: Option<&str>) -> Result<Target<'_>, Rejection> {
         let route = self
             .routes
             .iter()
@@ -173,15 +256,27 @@ impl Routes {
                     .is_some_and(|rest| rest.starts_with('/'))
             })
             .ok_or(Rejection::UnknownRoute)?;
-        let subpath = &path[route.prefix.len()..];
-        if !valid_subpath(subpath) {
+        let subpath = (route.canonical)(&path[route.prefix.len()..]);
+        // An index document may be a directory URL, as PyPI project pages are.
+        let checked = match route.index {
+            Some(_) => subpath.strip_suffix('/').unwrap_or(&subpath),
+            None => &subpath,
+        };
+        if !valid_subpath(checked) {
             return Err(Rejection::InvalidPath);
         }
-        let freshness = (route.accept)(subpath).ok_or(Rejection::NotAllowed)?;
+        let freshness = (route.accept)(&subpath).ok_or(Rejection::NotAllowed)?;
+        let media_type = match (&route.index, freshness) {
+            (Some(index), Freshness::Revalidate) => {
+                Some(negotiate(index.media_types, accept).ok_or(Rejection::NotAcceptable)?)
+            }
+            _ => None,
+        };
         Ok(Target {
             route,
-            subpath: subpath.to_owned(),
+            subpath: subpath.into_owned(),
             freshness,
+            media_type,
         })
     }
 
@@ -191,7 +286,7 @@ impl Routes {
     }
 }
 
-/// Accepts `/segment/...` with unreserved characters and percent-escapes. A segment may
+/// Accepts `/segment/...` with unreserved characters, `+`, `@` and percent-escapes. A segment may
 /// not be empty, `.` or `..` after decoding, and an escape may not decode to a separator,
 /// control character or escape introducer.
 fn valid_subpath(path: &str) -> bool {
@@ -220,7 +315,7 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
             }
             decoded.push(value);
             index += 3;
-        } else if byte.is_ascii_alphanumeric() || b"._~-+".contains(&byte) {
+        } else if byte.is_ascii_alphanumeric() || b"._~-+@".contains(&byte) {
             decoded.push(byte);
             index += 1;
         } else {
@@ -327,10 +422,10 @@ fn chrome_for_testing(path: &str) -> Option<Freshness> {
         .then_some(Freshness::Immutable)
 }
 
-/// The sparse index configuration for a client that reached the cache at `host`. Only a
-/// loopback host, the forwarded listener, is accepted, so the download URL in the generated
-/// configuration can never send a client elsewhere.
-pub fn crates_index_config(host: &str) -> Option<String> {
+/// The base address of a client that reached the cache at `host`. Only a loopback host, the
+/// forwarded listener, is accepted, so a download URL the cache generates or rewrites can never
+/// send a client elsewhere.
+pub fn loopback_base(host: &str) -> Option<String> {
     // `port` keeps its leading colon, or is empty when the host names no port.
     let (name, port) = match host.strip_prefix("[::1]") {
         Some(rest) => ("[::1]", rest),
@@ -343,9 +438,128 @@ pub fn crates_index_config(host: &str) -> Option<String> {
                 && digits.parse::<u16>().is_ok_and(|port| port > 0)
         }
     };
-    (matches!(name, "127.0.0.1" | "localhost" | "[::1]") && port_valid).then(|| {
-        format!("{{\"dl\":\"http://{host}/crates/{{crate}}/{{crate}}-{{version}}.crate\"}}")
-    })
+    (matches!(name, "127.0.0.1" | "localhost" | "[::1]") && port_valid)
+        .then(|| format!("http://{host}"))
+}
+
+/// The sparse index configuration for a client that reached the cache at `host`.
+pub fn crates_index_config(host: &str) -> Option<String> {
+    loopback_base(host)
+        .map(|base| format!("{{\"dl\":\"{base}/crates/{{crate}}/{{crate}}-{{version}}.crate\"}}"))
+}
+
+/// The representation to serve: the one the client's `Accept` gives the highest quality,
+/// earlier `media_types` first on a tie. A request without the header accepts any.
+pub fn negotiate(media_types: &[&'static str], accept: Option<&str>) -> Option<&'static str> {
+    let Some(accept) = accept else {
+        return media_types.first().copied();
+    };
+    let mut best: Option<(&'static str, f32)> = None;
+    for &media_type in media_types {
+        let quality = quality(media_type, accept);
+        if quality > 0.0 && best.is_none_or(|(_, chosen)| quality > chosen) {
+            best = Some((media_type, quality));
+        }
+    }
+    best.map(|(media_type, _)| media_type)
+}
+
+/// The quality of `media_type` in an `Accept` value: the most specific matching range decides.
+fn quality(media_type: &str, accept: &str) -> f32 {
+    let kind = media_type
+        .split_once('/')
+        .map_or(media_type, |(kind, _)| kind);
+    let mut matched: Option<(u8, f32)> = None;
+    for range in accept.split(',') {
+        let mut parts = range.split(';');
+        let name = parts.next().unwrap_or_default().trim();
+        let specificity = if name.eq_ignore_ascii_case(media_type) {
+            3
+        } else if name
+            .strip_suffix("/*")
+            .is_some_and(|range| range.eq_ignore_ascii_case(kind))
+        {
+            2
+        } else if name == "*/*" {
+            1
+        } else {
+            continue;
+        };
+        let quality = parts
+            .find_map(|parameter| {
+                let parameter = parameter.trim();
+                parameter
+                    .strip_prefix("q=")
+                    .or_else(|| parameter.strip_prefix("Q="))
+            })
+            .map_or(Some(1.0), |value| value.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        if matched.is_none_or(|(current, _)| specificity > current) {
+            matched = Some((specificity, quality));
+        }
+    }
+    matched.map_or(0.0, |(_, quality)| quality)
+}
+
+/// Streams an index document with its download links pointing at `{base}{mount}`. A link is
+/// rewritten only where it opens a JSON string, so hashes and other values stay as upstream
+/// sent them, and a link split across chunks is held until it completes.
+pub struct Links {
+    links: Vec<Vec<u8>>,
+    replacement: Vec<u8>,
+    base: String,
+    pending: Vec<u8>,
+}
+
+impl Links {
+    pub fn new(index: &Index, base: &str) -> Self {
+        Self {
+            links: index
+                .links
+                .iter()
+                .map(|link| format!("\"{link}").into_bytes())
+                .collect(),
+            replacement: format!("\"{base}{}", index.mount).into_bytes(),
+            base: base.to_owned(),
+            pending: Vec::new(),
+        }
+    }
+
+    /// The entity tag of the served document. It depends on the stored document and on the
+    /// client base, so a client that reaches the cache at another address revalidates.
+    pub fn tag(&self, digest: &str) -> String {
+        let host = self.base.strip_prefix("http://").unwrap_or(&self.base);
+        format!("\"sha256-{digest}@{host}\"")
+    }
+
+    pub fn push(&mut self, chunk: &[u8]) -> Vec<u8> {
+        self.pending.extend_from_slice(chunk);
+        let mut out = Vec::with_capacity(self.pending.len());
+        let mut at = 0;
+        while let Some(quote) = self.pending[at..].iter().position(|&byte| byte == b'"') {
+            out.extend_from_slice(&self.pending[at..at + quote]);
+            at += quote;
+            let rest = &self.pending[at..];
+            if let Some(link) = self.links.iter().find(|link| rest.starts_with(link)) {
+                out.extend_from_slice(&self.replacement);
+                at += link.len();
+            } else if self.links.iter().any(|link| link.starts_with(rest)) {
+                // The rest may complete a link in the next chunk.
+                self.pending.drain(..at);
+                return out;
+            } else {
+                out.push(b'"');
+                at += 1;
+            }
+        }
+        out.extend_from_slice(&self.pending[at..]);
+        self.pending.clear();
+        out
+    }
+
+    pub fn finish(self) -> Vec<u8> {
+        self.pending
+    }
 }
 
 /// Crate names: ASCII letters, digits, `-` and `_`, starting with a letter.
@@ -386,12 +600,100 @@ fn crates(path: &str) -> Option<Freshness> {
         .strip_suffix(".crate")?
         .strip_prefix(name)?
         .strip_prefix('-')?;
-    let semver = !version.is_empty()
+    (crate_name(name) && semver(version)).then_some(Freshness::Immutable)
+}
+
+/// A semantic version: a leading digit, then letters, digits, `.`, `-` and `+`.
+fn semver(version: &str) -> bool {
+    !version.is_empty()
         && version.as_bytes()[0].is_ascii_digit()
         && version
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'));
-    (crate_name(name) && semver).then_some(Freshness::Immutable)
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'))
+}
+
+/// npm clients request a scoped package document as `/@scope%2fname`; the registry and the
+/// store use `/@scope/name`.
+fn npm_path(path: &str) -> Cow<'_, str> {
+    let scoped = path.strip_prefix("/@").and_then(|rest| {
+        rest.split_once("%2f")
+            .or_else(|| rest.split_once("%2F"))
+            .filter(|(scope, _)| !scope.contains('/'))
+    });
+    match scoped {
+        Some((scope, name)) => Cow::Owned(format!("/@{scope}/{name}")),
+        None => Cow::Borrowed(path),
+    }
+}
+
+/// npm package and scope names: URL-safe, not starting with `.` or `_`. Packages published
+/// before names became lowercase keep their capitals.
+fn npm_name(name: &str) -> bool {
+    (1..=214).contains(&name.len())
+        && !name.starts_with(['.', '_'])
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte))
+}
+
+/// `/{package}`, a package document, or `/{package}/-/{name}-{version}.tgz`, the tarball of one
+/// published version, where a scoped package is `@{scope}/{name}`.
+fn npm(path: &str) -> Option<Freshness> {
+    let segments: Vec<&str> = path[1..].split('/').collect();
+    let (name, rest) = match segments.as_slice() {
+        [scope, name, rest @ ..] if scope.starts_with('@') => {
+            (npm_name(&scope[1..]) && npm_name(name)).then_some((*name, rest))?
+        }
+        [name, rest @ ..] => npm_name(name).then_some((*name, rest))?,
+        [] => return None,
+    };
+    match rest {
+        [] => Some(Freshness::Revalidate),
+        ["-", file] => {
+            let version = file
+                .strip_suffix(".tgz")?
+                .strip_prefix(name)?
+                .strip_prefix('-')?;
+            semver(version).then_some(Freshness::Immutable)
+        }
+        _ => None,
+    }
+}
+
+/// `/simple/{project}/`, the page of one project under its normalized name: lowercase letters,
+/// digits and single `-` between them.
+fn pypi(path: &str) -> Option<Freshness> {
+    let name = path.strip_prefix("/simple/")?.strip_suffix('/')?;
+    let normalized = !name.is_empty()
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && !name.contains("--")
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+    normalized.then_some(Freshness::Revalidate)
+}
+
+/// `/packages/{aa}/{bb}/{rest}/{file}`: one release file, or its core metadata, at the path of
+/// its BLAKE2b-256 digest.
+fn pypi_files(path: &str) -> Option<Freshness> {
+    let mut segments = path.strip_prefix("/packages/")?.split('/');
+    let (Some(first), Some(second), Some(rest), Some(_file), None) = (
+        segments.next(),
+        segments.next(),
+        segments.next(),
+        segments.next(),
+        segments.next(),
+    ) else {
+        return None;
+    };
+    let hex = |segment: &str, length| {
+        segment.len() == length
+            && segment
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    };
+    (hex(first, 2) && hex(second, 2) && hex(rest, 60)).then_some(Freshness::Immutable)
 }
 
 #[cfg(test)]
@@ -400,7 +702,7 @@ mod tests {
 
     fn class(path: &str) -> Result<(&'static str, Freshness), Rejection> {
         let routes = Routes::production();
-        let target = routes.resolve(path)?;
+        let target = routes.resolve(path, None)?;
         Ok((target.route.id, target.freshness))
     }
 
@@ -455,7 +757,7 @@ mod tests {
 
     #[test]
     fn rejects_paths_outside_the_allowlist() {
-        assert_eq!(class("/npm/react"), Err(Rejection::UnknownRoute));
+        assert_eq!(class("/maven/org/a.pom"), Err(Rejection::UnknownRoute));
         assert_eq!(class("/rustupx/dist/a"), Err(Rejection::UnknownRoute));
         assert_eq!(class("/rustup/other/file"), Err(Rejection::NotAllowed));
         assert_eq!(
@@ -555,6 +857,176 @@ mod tests {
         }
         let long = format!("/rustup/dist/{}", "a".repeat(MAX_PATH_BYTES));
         assert_eq!(class(&long), Err(Rejection::InvalidPath));
+    }
+
+    #[test]
+    fn classifies_npm_objects() {
+        use Freshness::*;
+        for (path, freshness) in [
+            ("/npm/is-number", Revalidate),
+            ("/npm/JSONStream", Revalidate),
+            ("/npm/@sindresorhus/is", Revalidate),
+            ("/npm/@sindresorhus%2fis", Revalidate),
+            ("/npm/@types%2Fnode", Revalidate),
+            ("/npm/is-number/-/is-number-7.0.0.tgz", Immutable),
+            ("/npm/@sindresorhus/is/-/is-4.6.0.tgz", Immutable),
+            (
+                "/npm/typescript/-/typescript-6.1.0-dev.20261026.tgz",
+                Immutable,
+            ),
+        ] {
+            assert_eq!(class(path), Ok(("npm", freshness)), "{path}");
+        }
+        let routes = Routes::production();
+        let scoped = routes.resolve("/npm/@sindresorhus%2fis", None).unwrap();
+        assert_eq!(
+            scoped.upstream_url(),
+            "https://registry.npmjs.org/@sindresorhus/is"
+        );
+        for path in [
+            "/npm/-/v1/search",
+            "/npm/-/npm/v1/security/advisories/bulk",
+            "/npm/is-number/",
+            "/npm/.hidden",
+            "/npm/@scope",
+            "/npm/@/name",
+            "/npm/is-number/-/other-7.0.0.tgz",
+            "/npm/is-number/-/is-number-latest.tgz",
+            "/npm/is-number/7.0.0",
+            "/npm/@scope/name/-/scope-name-1.0.0.tgz",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
+        for path in ["/npm/@scope/a%2fb", "/npm/a%2fb"] {
+            assert_eq!(class(path), Err(Rejection::InvalidPath), "{path}");
+        }
+    }
+
+    #[test]
+    fn classifies_pypi_objects() {
+        use Freshness::*;
+        let file = "/pypi-files/packages/6b/34/415834bfdafca3c5f451532e8a8d9ba89a21c9743a0c59fbd0205c7f9426/six-1.16.0-py2.py3-none-any.whl";
+        for (path, route, freshness) in [
+            ("/pypi/simple/six/", "pypi", Revalidate),
+            ("/pypi/simple/typing-extensions/", "pypi", Revalidate),
+            ("/pypi/simple/zope-interface/", "pypi", Revalidate),
+            (file, "pypi-files", Immutable),
+        ] {
+            assert_eq!(class(path), Ok((route, freshness)), "{path}");
+        }
+        assert_eq!(
+            class(&format!("{file}.metadata")),
+            Ok(("pypi-files", Immutable))
+        );
+        for path in [
+            "/pypi/simple/",
+            "/pypi/simple/six",
+            "/pypi/simple/Six/",
+            "/pypi/simple/typing_extensions/",
+            "/pypi/simple/zope.interface/",
+            "/pypi/simple/a--b/",
+            "/pypi/simple/-six/",
+            "/pypi/pypi/six/json",
+            "/pypi-files/packages/source/s/six/six-1.16.0.tar.gz",
+            "/pypi-files/packages/6B/34/415834bfdafca3c5f451532e8a8d9ba89a21c9743a0c59fbd0205c7f9426/six.whl",
+            "/pypi-files/packages/6b/34/4158/six-1.16.0-py2.py3-none-any.whl",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
+        assert_eq!(class("/pypi/simple//"), Err(Rejection::InvalidPath));
+        assert_eq!(class("/rustup/dist/"), Err(Rejection::InvalidPath));
+    }
+
+    #[test]
+    fn index_documents_are_stored_per_negotiated_representation() {
+        let routes = Routes::production();
+        let bun = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*";
+        let install = routes.resolve("/npm/is-number", Some(bun)).unwrap();
+        assert_eq!(
+            install.media_type,
+            Some("application/vnd.npm.install-v1+json")
+        );
+        assert_eq!(
+            install.key(),
+            "npm/is-number#application/vnd.npm.install-v1+json"
+        );
+        let full = routes
+            .resolve("/npm/is-number", Some("application/json"))
+            .unwrap();
+        assert_eq!(full.key(), "npm/is-number#application/json");
+        let tarball = routes
+            .resolve(
+                "/npm/is-number/-/is-number-7.0.0.tgz",
+                Some("application/json"),
+            )
+            .unwrap();
+        assert_eq!(
+            (tarball.media_type, tarball.key().as_str()),
+            (None, "npm/is-number/-/is-number-7.0.0.tgz")
+        );
+        assert_eq!(
+            routes
+                .resolve("/pypi/simple/six/", Some("text/html"))
+                .unwrap_err(),
+            Rejection::NotAcceptable
+        );
+    }
+
+    #[test]
+    fn negotiation_follows_quality_and_specificity() {
+        let types = &["application/vnd.pypi.simple.v1+json", "text/html"];
+        for (accept, chosen) in [
+            (None, Some(types[0])),
+            (Some("*/*"), Some(types[0])),
+            (Some("text/html"), Some(types[1])),
+            (
+                Some("text/html, application/vnd.pypi.simple.v1+json;q=0.2"),
+                Some(types[1]),
+            ),
+            (
+                Some("application/vnd.pypi.simple.v1+json, text/html;q=0.01"),
+                Some(types[0]),
+            ),
+            (Some("application/*;q=0.5, text/*;q=0.9"), Some(types[1])),
+            (
+                Some("*/*, application/vnd.pypi.simple.v1+json;q=0"),
+                Some(types[1]),
+            ),
+            (
+                Some("application/vnd.pypi.simple.v1+json;Q=0.3, text/html;q=x"),
+                Some(types[0]),
+            ),
+            (Some("image/png"), None),
+            (Some(""), None),
+        ] {
+            assert_eq!(negotiate(types, accept), chosen, "{accept:?}");
+        }
+    }
+
+    #[test]
+    fn links_point_at_the_client_base_however_the_document_is_split() {
+        let routes = Routes::production();
+        let npm = routes
+            .routes()
+            .iter()
+            .find(|route| route.id == "npm")
+            .unwrap();
+        let index = npm.index.clone().unwrap();
+        let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://registry.npmjs.org/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
+        let expected = br#"{"versions":{"1.0.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
+        for size in 1..=document.len() {
+            let mut links = Links::new(&index, "http://127.0.0.1:18740");
+            let mut out = Vec::new();
+            for chunk in document.chunks(size) {
+                out.extend(links.push(chunk));
+            }
+            out.extend(links.finish());
+            assert_eq!(
+                String::from_utf8(out).unwrap(),
+                String::from_utf8_lossy(expected),
+                "chunk size {size}"
+            );
+        }
     }
 
     #[test]
