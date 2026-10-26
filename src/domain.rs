@@ -222,6 +222,37 @@ impl Routes {
                     }),
                     ..route("pub", "/pub", "/pub/{path}", "https://pub.dev", pub_hosted)
                 },
+                route(
+                    "maven-central",
+                    "/maven-central",
+                    "/maven-central/{path}",
+                    "https://repo.maven.apache.org/maven2",
+                    maven,
+                ),
+                route(
+                    "google-maven",
+                    "/google-maven",
+                    "/google-maven/{path}",
+                    "https://dl.google.com/dl/android/maven2",
+                    maven,
+                ),
+                // The portal redirects plugin artifacts to their content-addressed host.
+                route(
+                    "gradle-plugins",
+                    "/gradle-plugins",
+                    "/gradle-plugins/{path}",
+                    "https://plugins.gradle.org/m2",
+                    maven,
+                ),
+                // Checksum database requests stay outside: the go command then verifies against
+                // sum.golang.org directly, as with proxy.golang.org itself.
+                route(
+                    "goproxy",
+                    "/goproxy",
+                    "/goproxy/{path}",
+                    "https://proxy.golang.org",
+                    go_module,
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -233,6 +264,9 @@ impl Routes {
                 "services.gradle.org",
                 "downloads.gradle.org",
                 "dl.google.com",
+                "repo.maven.apache.org",
+                "plugins.gradle.org",
+                "plugins-artifacts.gradle.org",
             ]
             .map(String::from)
             .to_vec(),
@@ -294,7 +328,7 @@ impl Routes {
     }
 }
 
-/// Accepts `/segment/...` with unreserved characters, `+`, `@` and percent-escapes. A segment may
+/// Accepts `/segment/...` with unreserved characters, `+`, `@`, `!` and percent-escapes. A segment may
 /// not be empty, `.` or `..` after decoding, and an escape may not decode to a separator,
 /// control character or escape introducer.
 fn valid_subpath(path: &str) -> bool {
@@ -323,7 +357,7 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
             }
             decoded.push(value);
             index += 3;
-        } else if byte.is_ascii_alphanumeric() || b"._~-+@".contains(&byte) {
+        } else if byte.is_ascii_alphanumeric() || b"._~-+@!".contains(&byte) {
             decoded.push(byte);
             index += 1;
         } else {
@@ -682,6 +716,74 @@ fn pypi(path: &str) -> Option<Freshness> {
     normalized.then_some(Freshness::Revalidate)
 }
 
+/// A Go module path in the proxy's escaped form: lowercase elements, capitals written as `!`
+/// and the lowercase letter, and a first element that names a domain.
+fn go_module_path(module: &str) -> bool {
+    let mut elements = module.split('/');
+    elements.next().is_some_and(|domain| domain.contains('.'))
+        && module.split('/').all(|element| {
+            !element.is_empty()
+                && !element.starts_with('.')
+                && element.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._~-!".contains(&byte)
+                })
+        })
+}
+
+/// The Go module proxy protocol. `/{module}/@v/list` and `/{module}/@latest` change with
+/// releases; `/{module}/@v/{version}.info`, `.mod` and `.zip` describe one version, whose
+/// capitals are escaped like the module path's.
+fn go_module(path: &str) -> Option<Freshness> {
+    let (module, rest) = path[1..].split_once("/@")?;
+    if !go_module_path(module) {
+        return None;
+    }
+    if rest == "latest" || rest == "v/list" {
+        return Some(Freshness::Revalidate);
+    }
+    let (version, kind) = rest.strip_prefix("v/")?.rsplit_once('.')?;
+    let version_valid = version
+        .strip_prefix('v')
+        .is_some_and(|number| number.as_bytes().first().is_some_and(u8::is_ascii_digit))
+        && version
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-+!".contains(&byte));
+    (version_valid && matches!(kind, "info" | "mod" | "zip")).then_some(Freshness::Immutable)
+}
+
+/// Checksum files that Maven repositories publish beside every file.
+const MAVEN_CHECKSUMS: [&str; 4] = ["md5", "sha1", "sha256", "sha512"];
+
+/// The Maven repository layout. `{group path}/{artifact}/{version}/{artifact}-{version}{rest}`
+/// is one file of a release, where `rest` is an extension or a classifier and extension;
+/// `maven-metadata.xml` and its checksums list the versions and change with each release.
+/// Snapshots are not served.
+fn maven(path: &str) -> Option<Freshness> {
+    let segments: Vec<&str> = path[1..].split('/').collect();
+    if segments
+        .iter()
+        .any(|segment| segment.ends_with("-SNAPSHOT"))
+    {
+        return None;
+    }
+    let file = *segments.last()?;
+    let metadata = file == "maven-metadata.xml"
+        || file
+            .strip_prefix("maven-metadata.xml.")
+            .is_some_and(|checksum| MAVEN_CHECKSUMS.contains(&checksum));
+    if metadata {
+        return (segments.len() >= 2).then_some(Freshness::Revalidate);
+    }
+    let [_, .., artifact, version, file] = segments.as_slice() else {
+        return None;
+    };
+    let rest = file
+        .strip_prefix(*artifact)?
+        .strip_prefix('-')?
+        .strip_prefix(*version)?;
+    (rest.len() > 1 && rest.starts_with(['.', '-'])).then_some(Freshness::Immutable)
+}
+
 /// Dart package names: lowercase letters, digits and `_`, not starting with a digit.
 fn dart_package(name: &str) -> bool {
     (1..=64).contains(&name.len())
@@ -1008,6 +1110,113 @@ mod tests {
         ] {
             assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
         }
+    }
+
+    #[test]
+    fn classifies_maven_objects() {
+        use Freshness::*;
+        for (path, route, freshness) in [
+            (
+                "/maven-central/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar",
+                "maven-central",
+                Immutable,
+            ),
+            (
+                "/maven-central/com/google/code/gson/gson/2.11.0/gson-2.11.0.pom.sha1",
+                "maven-central",
+                Immutable,
+            ),
+            (
+                "/maven-central/com/google/code/gson/gson/2.11.0/gson-2.11.0-sources.jar",
+                "maven-central",
+                Immutable,
+            ),
+            (
+                "/maven-central/com/google/code/gson/gson/maven-metadata.xml",
+                "maven-central",
+                Revalidate,
+            ),
+            (
+                "/maven-central/com/google/code/gson/gson/maven-metadata.xml.sha256",
+                "maven-central",
+                Revalidate,
+            ),
+            (
+                "/google-maven/androidx/core/core/1.13.1/core-1.13.1.aar",
+                "google-maven",
+                Immutable,
+            ),
+            (
+                "/google-maven/androidx/core/core/1.13.1/core-1.13.1.module",
+                "google-maven",
+                Immutable,
+            ),
+            (
+                "/gradle-plugins/org/jetbrains/kotlin/jvm/org.jetbrains.kotlin.jvm.gradle.plugin/2.0.0/org.jetbrains.kotlin.jvm.gradle.plugin-2.0.0.pom",
+                "gradle-plugins",
+                Immutable,
+            ),
+        ] {
+            assert_eq!(class(path), Ok((route, freshness)), "{path}");
+        }
+        for path in [
+            "/maven-central/com/example/app/1.0-SNAPSHOT/app-1.0-SNAPSHOT.jar",
+            "/maven-central/com/example/app/1.0-SNAPSHOT/maven-metadata.xml",
+            "/maven-central/com/google/code/gson/gson/2.11.0/other-2.11.0.jar",
+            "/maven-central/com/google/code/gson/gson/2.11.0/gson-2.10.0.jar",
+            "/maven-central/com/google/code/gson/gson/2.11.0/gson-2.11.0",
+            "/maven-central/gson/2.11.0/gson-2.11.0.jar",
+            "/maven-central/maven-metadata.xml",
+            "/maven-central/com/google/code/gson/gson/maven-metadata.xml.asc",
+            "/maven-central/archetype-catalog.xml",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
+        let routes = Routes::production();
+        assert!(routes.redirect_allowed("https", "plugins-artifacts.gradle.org"));
+    }
+
+    #[test]
+    fn classifies_go_module_objects() {
+        use Freshness::*;
+        for (path, freshness) in [
+            ("/goproxy/github.com/google/uuid/@v/list", Revalidate),
+            ("/goproxy/github.com/google/uuid/@latest", Revalidate),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.info", Immutable),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.mod", Immutable),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.zip", Immutable),
+            (
+                "/goproxy/github.com/!azure/azure-sdk-for-go/@v/v68.0.0+incompatible.mod",
+                Immutable,
+            ),
+            (
+                "/goproxy/golang.org/x/mod/@v/v0.0.0-20240101123456-abcdef123456.zip",
+                Immutable,
+            ),
+            (
+                "/goproxy/golang.org/toolchain/@v/v0.0.1-go1.27.3.linux-amd64.zip",
+                Immutable,
+            ),
+            ("/goproxy/go.yaml.in/yaml/v4/@v/v4.0.0-rc.3.info", Immutable),
+        ] {
+            assert_eq!(class(path), Ok(("goproxy", freshness)), "{path}");
+        }
+        for path in [
+            "/goproxy/sumdb/sum.golang.org/supported",
+            "/goproxy/sumdb/sum.golang.org/lookup/github.com/google/uuid@v1.6.0",
+            "/goproxy/github.com/Google/uuid/@v/list",
+            "/goproxy/uuid/@v/list",
+            "/goproxy/github.com/google/uuid/@v/v1.6.0.tar.gz",
+            "/goproxy/github.com/google/uuid/@v/latest.info",
+            "/goproxy/github.com/google/uuid/@v/v1.6.0",
+            "/goproxy/github.com/google/uuid/@v/",
+        ] {
+            assert!(class(path).is_err(), "{path}");
+        }
+        assert_eq!(
+            class("/go/go1.27.3.linux-amd64.tar.gz"),
+            Ok(("go", Immutable))
+        );
     }
 
     #[test]

@@ -74,7 +74,7 @@
           "tool": "go release archives",
           "setting": {"download_url": "{base}/go/{file}"},
           "acceptance": "route only",
-          "limits": "GOTOOLCHAIN downloads go through the Go module proxy, a later increment."
+          "limits": "GOTOOLCHAIN downloads go through the goproxy route instead."
         }
       ]
     },
@@ -186,6 +186,62 @@
           "setting": {"PUB_HOSTED_URL": "{base}/pub"},
           "acceptance": "route only",
           "limits": "The same pub client and lockfile limits as dart pub get; Flutter SDK artifacts use the flutter route."
+        }
+      ]
+    },
+    {
+      "id": "maven-central",
+      "prefix": "/maven-central",
+      "upstream": "https://repo.maven.apache.org/maven2",
+      "objects": "Release files of the Maven Central layout and their checksums; maven-metadata.xml is revalidated and snapshots are not served.",
+      "clients": [
+        {
+          "tool": "gradle, as a Maven repository",
+          "setting": {"url": "{base}/maven-central"},
+          "acceptance": "route only",
+          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+        }
+      ]
+    },
+    {
+      "id": "google-maven",
+      "prefix": "/google-maven",
+      "upstream": "https://dl.google.com/dl/android/maven2",
+      "objects": "Release files of Google's Maven repository for Android and their checksums; maven-metadata.xml is revalidated.",
+      "clients": [
+        {
+          "tool": "gradle, as a Maven repository for Android libraries",
+          "setting": {"url": "{base}/google-maven"},
+          "acceptance": "route only",
+          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+        }
+      ]
+    },
+    {
+      "id": "gradle-plugins",
+      "prefix": "/gradle-plugins",
+      "upstream": "https://plugins.gradle.org/m2",
+      "objects": "Plugin markers and plugin artifacts of the Gradle Plugin Portal, which redirects artifacts to its content-addressed host; maven-metadata.xml is revalidated.",
+      "clients": [
+        {
+          "tool": "gradle, as the plugin repository in pluginManagement",
+          "setting": {"url": "{base}/gradle-plugins"},
+          "acceptance": "route only",
+          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+        }
+      ]
+    },
+    {
+      "id": "goproxy",
+      "prefix": "/goproxy",
+      "upstream": "https://proxy.golang.org",
+      "objects": "Module versions of the Go module proxy protocol: .info, .mod and .zip of exact versions, including golang.org/toolchain for GOTOOLCHAIN; version lists and @latest are revalidated.",
+      "clients": [
+        {
+          "tool": "go mod download, go build and GOTOOLCHAIN switches",
+          "setting": {"GOPROXY": "{base}/goproxy"},
+          "acceptance": "route only",
+          "limits": "Checksum database requests are not proxied: the go command then verifies against sum.golang.org directly, as with proxy.golang.org, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
         }
       ]
     }

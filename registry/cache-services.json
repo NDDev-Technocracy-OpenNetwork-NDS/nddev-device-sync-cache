@@ -1,5 +1,5 @@
 {
- "status": "design input for the later protocol increments; toolchain downloads, the crates.io sparse index, the npm registry, the PyPI simple index and the pub hosted repository are served, and contracts/clients.json is their client contract",
+ "status": "design input for the later protocol increments; toolchain downloads, the crates.io sparse index, the npm registry, the PyPI simple index, the pub hosted repository, the Maven repositories and the Go module proxy are served, and contracts/clients.json is their client contract",
  "evidence_levels": {
   "verified": "checked against the primary source on the registry snapshot date",
   "reported": "research result with a primary-source URL, not re-checked",
