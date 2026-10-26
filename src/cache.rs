@@ -8,11 +8,12 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU8, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures_util::StreamExt;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
+use tracing::Instrument;
 
 use crate::{
     domain::{Freshness, Rejection, Routes, Target},
@@ -346,7 +347,11 @@ impl Cache {
             .lock()
             .map_err(|_| ServeError::Store(StoreError::Io))?
             .insert(key.to_owned(), fill.clone());
-        tokio::spawn(download(Download {
+        // The download outlives its request; its own operation span stays in the
+        // request's trace, so the fill events correlate with the request that started it.
+        let span = nddev_device_sync_telemetry::operation_span("cache", "io")
+            .unwrap_or_else(|_| tracing::Span::none());
+        let job = Download {
             store: self.store.clone(),
             fills: self.fills.clone(),
             fill: fill.clone(),
@@ -357,8 +362,11 @@ impl Cache {
             validators,
             body,
             progress,
+            started: Instant::now(),
+            span: span.clone(),
             _permit: permit,
-        }));
+        };
+        tokio::spawn(download(job).instrument(span));
         Ok(Delivery::Filling(fill.follow(Served::Miss)))
     }
 
@@ -443,6 +451,8 @@ struct Download {
     validators: Validators,
     body: Body,
     progress: watch::Sender<Progress>,
+    started: Instant,
+    span: tracing::Span,
     _permit: OwnedSemaphorePermit,
 }
 
@@ -472,6 +482,8 @@ async fn download(mut job: Download) {
         }
     };
     let route = job.route;
+    let duration_ms = job.started.elapsed().as_secs_f64() * 1000.0;
+    nddev_device_sync_telemetry::finish_operation_span(&job.span, committed.is_err());
     match committed {
         Ok((meta, path, eviction)) => {
             job.progress.send_replace(Progress::Committed {
@@ -483,6 +495,7 @@ async fn download(mut job: Download) {
                 scope = "io",
                 event.name = "cache.fill.committed",
                 route,
+                duration_ms,
                 outcome = "ok"
             );
             if eviction.objects > 0 {
@@ -499,7 +512,7 @@ async fn download(mut job: Download) {
                 record(&job.upstream_state, UpstreamState::Failing);
             }
             job.progress.send_replace(Progress::Failed);
-            tracing::warn!(module = "cache", scope = "io", event.name = "cache.fill.failed", route, error.type = error.class(), outcome = "error");
+            tracing::warn!(module = "cache", scope = "io", event.name = "cache.fill.failed", route, duration_ms, error.type = error.class(), outcome = "error");
         }
     }
     if let Ok(mut fills) = job.fills.lock()

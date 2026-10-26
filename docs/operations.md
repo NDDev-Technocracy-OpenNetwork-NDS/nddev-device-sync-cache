@@ -50,7 +50,7 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.store.evicted` | A commit evicted least recently used objects. |
 | `cache.store.read.failed` | A stored object could not be opened for a response. |
 | `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy. |
-| `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed. |
+| `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed, with its duration, in the trace of the request that started it; a `HEAD` on a missing object starts one too. |
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
 | `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method or an object missing upstream. |

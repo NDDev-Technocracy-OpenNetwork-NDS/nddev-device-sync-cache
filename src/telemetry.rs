@@ -40,14 +40,9 @@ impl Identity {
     }
 }
 
-/// Installs the process subscriber. Events reach the pipeline through the container log
-/// collector; the returned logger emits the final stop event when dropped.
-pub fn install(
-    identity: &Identity,
-    get: &impl Fn(&str) -> Option<String>,
-) -> Result<Logger, TelemetryError> {
-    let debug = DebugWindow::from_settings(get).map_err(|_| TelemetryError)?;
-    nddev_device_sync_telemetry::install(Config {
+/// The SDK configuration of this service; tests install it with their own writer.
+pub fn config(identity: &Identity, debug: Option<DebugWindow>) -> Config {
+    Config {
         service: "nddev-device-sync-cache".into(),
         version: identity.version.clone(),
         repository: REPOSITORY.into(),
@@ -58,6 +53,15 @@ pub fn install(
         target_prefixes: vec!["nddev_device_sync_cache".into()],
         default_module: "cache".into(),
         debug,
-    })
-    .map_err(|_| TelemetryError)
+    }
+}
+
+/// Installs the process subscriber. Events reach the pipeline through the container log
+/// collector; the returned logger emits the final stop event when dropped.
+pub fn install(
+    identity: &Identity,
+    get: &impl Fn(&str) -> Option<String>,
+) -> Result<Logger, TelemetryError> {
+    let debug = DebugWindow::from_settings(get).map_err(|_| TelemetryError)?;
+    nddev_device_sync_telemetry::install(config(identity, debug)).map_err(|_| TelemetryError)
 }
