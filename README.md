@@ -39,6 +39,9 @@ every other path before any upstream connection:
 | `/pypi/` | PyPI simple index project pages in their JSON form |
 | `/pypi-files/` | PyPI release files and their core metadata |
 | `/pub/` | pub.dev package documents and archives, for Dart and Flutter |
+| `/maven-central/` | Maven Central release files |
+| `/google-maven/` | Google's Maven repository for Android |
+| `/gradle-plugins/` | Gradle Plugin Portal markers and plugin artifacts |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
