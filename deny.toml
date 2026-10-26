@@ -21,4 +21,5 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-git = [
     "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git",
+    "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-agent",
 ]

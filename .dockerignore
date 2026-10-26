@@ -4,3 +4,5 @@
 !build.rs
 !rust-toolchain.toml
 !src
+!crates
+!contracts

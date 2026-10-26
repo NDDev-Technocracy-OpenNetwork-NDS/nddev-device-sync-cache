@@ -82,6 +82,22 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
 
+## Device client
+
+[`crates/client`](crates/client) is the device side of the module, the
+`nddev-device-sync-cache-client` adapter that NDS composes with its `NetworkCache` port and the
+`nds-cache` command. `nds-cache bind --port PORT` binds the current user's tools to the cache base
+`http://127.0.0.1:PORT`, the cache listener on the cache host or the local port of the RDS forward
+elsewhere; `--root DIR` binds a CI job home instead. It writes managed blocks into the user
+configuration of Cargo, npm and Bun, pip, uv and the go command, one environment file for rustup,
+Flutter, pub, Playwright and uv's Python downloads, and the Gradle init script. User files rank
+below a project's own configuration, so project pins, lockfiles and private registries stay in
+force; a user file that names a default registry of its own is refused, never overwritten.
+Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
+the cache does not answer, and `unbind` restores the earlier files. The client holds no
+credential: RDS owns the forward and the device identity. Its runtime manifest is
+[`contracts/module.json`](contracts/module.json).
+
 ## Technology registry
 
 [`registry/stack.json`](registry/stack.json) records, for every technology used by core

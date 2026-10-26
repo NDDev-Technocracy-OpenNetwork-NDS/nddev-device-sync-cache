@@ -10,6 +10,11 @@ repository = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-
 build = "build.rs"
 publish = false
 
+[workspace]
+members = ["crates/client"]
+# Commands without --workspace cover the device client as well as the service.
+default-members = [".", "crates/client"]
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 bytes = "1.12"

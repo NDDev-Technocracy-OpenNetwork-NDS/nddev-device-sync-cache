@@ -75,6 +75,20 @@ The store has a configured capacity. Commits that would exceed it evict the leas
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
 holds acceleration state only: losing it costs downloads, not data.
 
+## Device client
+
+The module's device side is the `nddev-device-sync-cache-client` adapter in `crates/client`, built
+on the ADR 0014 template: a `NetworkCache` port with `status`, `bind` and `unbind`, the adapter
+behind it on adapter-io's local authority, and the `nds-cache` command. A binding projects one
+base onto one scope, the home of a user or of a CI job. Configuration files that tools read for a
+user get managed blocks, because they rank below project configuration; only tools without such a
+file get variables, from one environment file. The projection refuses a scope root that is not
+the user's own real directory, a link in place of a file, foreign edits of the files it owns, and
+a user file that already names a default registry. It checks every file before it writes any,
+writes each atomically and restores the written ones on a failure. A bound scope fails closed;
+there is no automatic switch back to direct downloads. RDS owns the persistent forward and the
+device identity, so the client holds no credential.
+
 ## Current limits
 
 - Registry admission is a later increment: the crates, npm, PyPI and pub routes proxy every
