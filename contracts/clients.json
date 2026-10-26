@@ -6,7 +6,7 @@
     "base": "http://127.0.0.1:{port}",
     "admission": "A device or private runner forwards a local port to the cache host listener under its own rds identity. The cache host agent admits that identity and allows only the cache listener as its TCP target. Host, ticket, port and admitted identities live in the private estate."
   },
-  "integrity": "The cache returns upstream bytes unchanged and commits an object only after a complete download. Two documents are the cache's own: it generates the crates.io index config.json, and as it serves npm package documents and PyPI project pages it points download links that open a JSON string at the client's base address; hashes and every other value stay as upstream sent them. Clients keep their own digest and signature checks.",
+  "integrity": "The cache returns upstream bytes unchanged and commits an object only after a complete download. Two documents are the cache's own: it generates the crates.io index config.json, and as it serves npm package documents, PyPI project pages and pub package documents it points download links that open a JSON string at the client's base address; hashes and every other value stay as upstream sent them. Clients keep their own digest and signature checks.",
   "routes": [
     {
       "id": "rustup",
@@ -166,6 +166,26 @@
           "setting": {"url": "{base}/pypi-files/packages/{digest-path}/{file}"},
           "acceptance": "real client",
           "limits": "No client setting: the project pages served by the cache carry these links."
+        }
+      ]
+    },
+    {
+      "id": "pub",
+      "prefix": "/pub",
+      "upstream": "https://pub.dev",
+      "objects": "Package documents of the hosted repository API, revalidated and served with their archive links pointed at this route of the client's base address; archives of exact published versions, which pub checks against the archive_sha256 in the document.",
+      "clients": [
+        {
+          "tool": "dart pub get",
+          "setting": {"PUB_HOSTED_URL": "{base}/pub"},
+          "acceptance": "route only",
+          "limits": "pubspec.lock records the forwarded base as the hosted URL, and dart pub get --enforce-lockfile refuses a lockfile resolved against pub.dev, so locked builds keep the public repository. Security advisories are served with the package documents."
+        },
+        {
+          "tool": "flutter pub get",
+          "setting": {"PUB_HOSTED_URL": "{base}/pub"},
+          "acceptance": "route only",
+          "limits": "The same pub client and lockfile limits as dart pub get; Flutter SDK artifacts use the flutter route."
         }
       ]
     }

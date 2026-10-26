@@ -214,6 +214,14 @@ impl Routes {
                     "https://files.pythonhosted.org",
                     pypi_files,
                 ),
+                Route {
+                    index: Some(Index {
+                        media_types: &["application/vnd.pub.v2+json"],
+                        links: vec!["https://pub.dev/".into()],
+                        mount: "/pub/",
+                    }),
+                    ..route("pub", "/pub", "/pub/{path}", "https://pub.dev", pub_hosted)
+                },
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -674,6 +682,32 @@ fn pypi(path: &str) -> Option<Freshness> {
     normalized.then_some(Freshness::Revalidate)
 }
 
+/// Dart package names: lowercase letters, digits and `_`, not starting with a digit.
+fn dart_package(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && !name.as_bytes()[0].is_ascii_digit()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+/// `/api/packages/{package}`, the package document of the hosted repository API, and its
+/// security advisories, which pub reports during resolution; or
+/// `/api/archives/{package}-{version}.tar.gz`, the archive of one published version. A package
+/// name has no `-`, so the first one starts the version; pub.dev escapes a build suffix's `+`.
+fn pub_hosted(path: &str) -> Option<Freshness> {
+    if let Some(rest) = path.strip_prefix("/api/packages/") {
+        let name = rest.strip_suffix("/advisories").unwrap_or(rest);
+        return dart_package(name).then_some(Freshness::Revalidate);
+    }
+    let (name, version) = path
+        .strip_prefix("/api/archives/")?
+        .strip_suffix(".tar.gz")?
+        .split_once('-')?;
+    let version = version.replace("%2B", "+").replace("%2b", "+");
+    (dart_package(name) && semver(&version)).then_some(Freshness::Immutable)
+}
+
 /// `/packages/{aa}/{bb}/{rest}/{file}`: one release file, or its core metadata, at the path of
 /// its BLAKE2b-256 digest.
 fn pypi_files(path: &str) -> Option<Freshness> {
@@ -935,6 +969,45 @@ mod tests {
         }
         assert_eq!(class("/pypi/simple//"), Err(Rejection::InvalidPath));
         assert_eq!(class("/rustup/dist/"), Err(Rejection::InvalidPath));
+    }
+
+    #[test]
+    fn classifies_pub_objects() {
+        use Freshness::*;
+        for (path, freshness) in [
+            ("/pub/api/packages/path", Revalidate),
+            ("/pub/api/packages/flutter_lints", Revalidate),
+            ("/pub/api/packages/_fe_analyzer_shared", Revalidate),
+            ("/pub/api/packages/http/advisories", Revalidate),
+            ("/pub/api/archives/path-1.9.1.tar.gz", Immutable),
+            ("/pub/api/archives/flutter_lints-6.0.0.tar.gz", Immutable),
+            ("/pub/api/archives/analyzer-8.1.0-dev.1.tar.gz", Immutable),
+            ("/pub/api/archives/build-2.4.2%2B1.tar.gz", Immutable),
+        ] {
+            assert_eq!(class(path), Ok(("pub", freshness)), "{path}");
+        }
+        let routes = Routes::production();
+        let document = routes
+            .resolve(
+                "/pub/api/packages/path",
+                Some("application/vnd.pub.v2+json"),
+            )
+            .unwrap();
+        assert_eq!(document.media_type, Some("application/vnd.pub.v2+json"));
+        for path in [
+            "/pub/api/packages/Path",
+            "/pub/api/packages/1path",
+            "/pub/api/packages/path/versions",
+            "/pub/api/packages/path/advisories/x",
+            "/pub/api/packages/path/",
+            "/pub/api/archives/path.tar.gz",
+            "/pub/api/archives/path-latest.tar.gz",
+            "/pub/api/archives/path-1.9.1.zip",
+            "/pub/packages/path/versions/1.9.1.tar.gz",
+            "/pub/api/search",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
     }
 
     #[test]

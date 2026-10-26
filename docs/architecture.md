@@ -48,8 +48,8 @@ upstream validators and are revalidated after a bounded age; when revalidation f
 is served and the stale response is reported.
 
 Package registries name their downloads by absolute upstream URL inside index documents: npm
-package documents link tarballs and PyPI project pages link release files. Bun, uv and pip fetch
-those URLs as written, so the cache serves such a document with its download links pointed at the
+package documents link tarballs, PyPI project pages link release files and pub package
+documents link archives. Bun, uv, pip and pub fetch those URLs as written, so the cache serves such a document with its download links pointed at the
 client's base address, the loopback address of its forward. Only a link prefix that opens a JSON
 string is rewritten, while the document streams; hashes, integrity values and the rest of the
 document stay as upstream sent them, and the store keeps the upstream bytes. A request whose host
@@ -69,8 +69,8 @@ holds acceleration state only: losing it costs downloads, not data.
 
 ## Current limits
 
-- Registry admission is a later increment: the crates, npm and PyPI routes proxy every published
-  package, and the clients verify each download against the checksum or integrity value of its
+- Registry admission is a later increment: the crates, npm, PyPI and pub routes proxy every
+  published package, and the clients verify each download against the checksum or integrity value of its
   index document.
 
 - Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings and Gradle
@@ -104,8 +104,8 @@ store directory live in the private estate.
    loopback base address of each client, so downloads return through the cache.
 3. npm registry for Bun and npm, and the PyPI simple index for uv and pip. Their index documents
    are served per negotiated representation with download links pointed at the client base.
-4. Go module proxy, checksum database and toolchain modules.
-5. pub hosted repository.
+4. pub hosted repository for Dart and Flutter, through the same index documents.
+5. Go module proxy, checksum database and toolchain modules.
 6. Maven Central, Google Maven and the Gradle Plugin Portal.
 7. OCI pull-through and BuildKit cache references.
 8. Shared build caches with CI-only writes.
