@@ -9,6 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
+use futures_util::StreamExt;
 use serde::Serialize;
 use tokio_util::io::ReaderStream;
 use tracing::Instrument;
@@ -152,7 +153,14 @@ async fn serve(
             response.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET, HEAD"));
             return response;
         }
-        match app.cache.serve(uri.path()).await {
+        let accept = headers
+            .get(header::ACCEPT)
+            .and_then(|value| value.to_str().ok());
+        let base = headers
+            .get(header::HOST)
+            .and_then(|host| host.to_str().ok())
+            .and_then(domain::loopback_base);
+        match app.cache.serve(uri.path(), accept, base.as_deref()).await {
             Ok(delivery) => {
                 let served = match &delivery {
                     Delivery::Stored(object) => {
@@ -247,19 +255,28 @@ async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Respon
 }
 
 /// Serves a stored object. A client that already holds it, by the object's entity tag, gets
-/// `304 Not Modified`; sparse registry clients such as Cargo revalidate this way.
+/// `304 Not Modified`; sparse registry clients such as Cargo revalidate this way. An index
+/// document streams with its links rewritten, so its length is not declared.
 async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io::Result<Response> {
-    let etag = format!("\"sha256-{}\"", object.meta.sha256);
+    let index = object.links.is_some();
+    let etag = match &object.links {
+        Some(links) => links.tag(&object.meta.sha256),
+        None => format!("\"sha256-{}\"", object.meta.sha256),
+    };
     if validator.is_some_and(|validator| {
         validator
             .split(',')
             .any(|candidate| candidate.trim() == etag || candidate.trim() == "*")
     }) {
         let mut response = StatusCode::NOT_MODIFIED.into_response();
+        let headers = response.headers_mut();
         if let Ok(etag) = HeaderValue::from_str(&etag) {
-            response.headers_mut().insert(header::ETAG, etag);
+            headers.insert(header::ETAG, etag);
         }
-        response.headers_mut().insert(
+        if index {
+            headers.insert(header::VARY, HeaderValue::from_static("accept"));
+        }
+        headers.insert(
             "x-nds-cache",
             HeaderValue::from_static(object.served.as_str()),
         );
@@ -268,13 +285,19 @@ async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io
     let body = if head {
         Body::empty()
     } else {
-        Body::from_stream(ReaderStream::new(
-            tokio::fs::File::open(&object.path).await?,
-        ))
+        let file = tokio::fs::File::open(&object.path).await?;
+        match object.links {
+            Some(links) => Body::from_stream(rewritten(file, links)),
+            None => Body::from_stream(ReaderStream::new(file)),
+        }
     };
     let mut response = Response::new(body);
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_LENGTH, HeaderValue::from(object.meta.size));
+    if index {
+        headers.insert(header::VARY, HeaderValue::from_static("accept"));
+    } else {
+        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(object.meta.size));
+    }
     headers.insert(
         header::CONTENT_TYPE,
         content_type(object.meta.content_type.as_deref()),
@@ -287,4 +310,19 @@ async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io
         HeaderValue::from_static(object.served.as_str()),
     );
     Ok(response)
+}
+
+/// The stored document with its download links rewritten chunk by chunk.
+fn rewritten(
+    file: tokio::fs::File,
+    links: domain::Links,
+) -> impl futures_util::Stream<Item = std::io::Result<bytes::Bytes>> {
+    futures_util::stream::unfold(Some((ReaderStream::new(file), links)), |state| async move {
+        let (mut chunks, mut links) = state?;
+        match chunks.next().await {
+            Some(Ok(chunk)) => Some((Ok(links.push(&chunk).into()), Some((chunks, links)))),
+            Some(Err(error)) => Some((Err(error), None)),
+            None => Some((Ok(links.finish().into()), None)),
+        }
+    })
 }
