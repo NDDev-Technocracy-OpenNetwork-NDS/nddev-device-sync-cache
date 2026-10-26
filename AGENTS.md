@@ -29,7 +29,8 @@ The parent task is
   they never carry URLs, client addresses, keys or project identities.
 - Tests use the real filesystem store and real local upstreams over sockets, never mocks of them.
 - The container keeps a read-only root, no capabilities, a non-root user and loopback-bound ports.
-- A new or renamed event is listed in `docs/operations.md` in the same change.
+- A new or renamed event is listed in `docs/operations.md` in the same change, and `tests/events.rs`,
+  which decodes every emitted event through the SDK contract, exercises it.
 
 ## Checks
 

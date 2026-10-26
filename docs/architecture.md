@@ -37,7 +37,9 @@ A missing immutable object is downloaded by a background task that the first req
 task writes a temporary file and publishes how many bytes it has flushed; every client of that
 object, the first and any that join later, streams the growing file at once. A client that
 disconnects does not stop the download, and `HEAD` answers from the upstream headers without waiting
-for the body. The download is committed only after it completes within its size bound, so a partial
+for the body. A `HEAD` on a missing object therefore also starts its complete download, which later
+requests join or find stored. The download runs in its own operation span inside the trace of the
+request that started it, so its completion or failure is reported in that trace with its duration. The download is committed only after it completes within its size bound, so a partial
 transfer never becomes a cached object; a failed download ends every following response early and
 leaves nothing behind. Concurrent requests for one missing object share one upstream fetch.
 
