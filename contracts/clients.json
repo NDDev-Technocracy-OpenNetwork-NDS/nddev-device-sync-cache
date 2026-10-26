@@ -178,13 +178,13 @@
         {
           "tool": "dart pub get",
           "setting": {"PUB_HOSTED_URL": "{base}/pub"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "pubspec.lock records the forwarded base as the hosted URL, and dart pub get --enforce-lockfile refuses a lockfile resolved against pub.dev, so locked builds keep the public repository. Security advisories are served with the package documents."
         },
         {
           "tool": "flutter pub get",
           "setting": {"PUB_HOSTED_URL": "{base}/pub"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "The same pub client and lockfile limits as dart pub get; Flutter SDK artifacts use the flutter route."
         }
       ]
@@ -198,8 +198,8 @@
         {
           "tool": "gradle, as a Maven repository",
           "setting": {"url": "{base}/maven-central"},
-          "acceptance": "route only",
-          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+          "acceptance": "real client",
+          "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
       ]
     },
@@ -212,8 +212,8 @@
         {
           "tool": "gradle, as a Maven repository for Android libraries",
           "setting": {"url": "{base}/google-maven"},
-          "acceptance": "route only",
-          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+          "acceptance": "real client",
+          "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
       ]
     },
@@ -226,8 +226,8 @@
         {
           "tool": "gradle, as the plugin repository in pluginManagement",
           "setting": {"url": "{base}/gradle-plugins"},
-          "acceptance": "route only",
-          "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+          "acceptance": "real client",
+          "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
       ]
     },
@@ -240,7 +240,7 @@
         {
           "tool": "go mod download, go build and GOTOOLCHAIN switches",
           "setting": {"GOPROXY": "{base}/goproxy"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Checksum database requests are not proxied: the go command then verifies against sum.golang.org directly, as with proxy.golang.org, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
         }
       ]
