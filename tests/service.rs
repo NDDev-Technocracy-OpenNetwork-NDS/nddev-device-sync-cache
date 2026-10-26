@@ -457,8 +457,12 @@ async fn a_blob_without_its_digest_is_never_stored() {
         harness.base
     );
     for _ in 0..2 {
-        let response = harness.client.get(&url).send().await.unwrap();
-        assert!(response.bytes().await.is_err() || harness.objects().await == 0);
+        // The response ends in an error, before or after its headers, as soon as the digest fails.
+        let received = match harness.client.get(&url).send().await {
+            Ok(response) => response.bytes().await.map(drop),
+            Err(error) => Err(error),
+        };
+        assert!(received.is_err());
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(harness.objects().await, 0);
     }
