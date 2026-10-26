@@ -27,6 +27,8 @@ tokio-util = { version = "0.7.20", features = ["io"] }
 tracing = "0.1"
 
 [dev-dependencies]
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
 tempfile = "3.27"
 
 [lints.rust]
