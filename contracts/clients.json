@@ -129,13 +129,13 @@
         {
           "tool": "bun install",
           "setting": {"BUN_CONFIG_REGISTRY": "{base}/npm/"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "A bun.lock written through the cache records the forwarded base in its tarball URLs, so create and update lockfiles against the public registry; bun install --frozen-lockfile with such a lockfile fetches its tarballs through the cache."
         },
         {
           "tool": "npm install and npm ci",
           "setting": {"npm_config_registry": "{base}/npm/"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Audit, search, login and publish endpoints are not proxied; run npm without audit. A package-lock.json written through the cache records the forwarded base in its resolved URLs, so create and update lockfiles against the public registry; npm ci with such a lockfile replaces the registry host and fetches through the cache."
         }
       ]
@@ -149,10 +149,10 @@
         {
           "tool": "uv pip install and uv tool install",
           "setting": {"UV_DEFAULT_INDEX": "{base}/pypi/simple/"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "uv lock through the cache records the forwarded base in uv.lock, and uv treats a lockfile resolved against another index as outdated, so locked project syncs keep the public index."
         },
-        {"tool": "pip install", "setting": {"PIP_INDEX_URL": "{base}/pypi/simple/"}, "acceptance": "route only", "limits": "Only the JSON form is served; a client that accepts only HTML pages gets 406."}
+        {"tool": "pip install", "setting": {"PIP_INDEX_URL": "{base}/pypi/simple/"}, "acceptance": "real client", "limits": "Only the JSON form is served; a client that accepts only HTML pages gets 406."}
       ]
     },
     {
@@ -164,7 +164,7 @@
         {
           "tool": "uv and pip, through the project pages of the pypi route",
           "setting": {"url": "{base}/pypi-files/packages/{digest-path}/{file}"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "No client setting: the project pages served by the cache carry these links."
         }
       ]
