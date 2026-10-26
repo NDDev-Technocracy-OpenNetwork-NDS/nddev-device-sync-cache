@@ -244,6 +244,15 @@ impl Routes {
                     "https://plugins.gradle.org/m2",
                     maven,
                 ),
+                // Checksum database requests stay outside: the go command then verifies against
+                // sum.golang.org directly, as with proxy.golang.org itself.
+                route(
+                    "goproxy",
+                    "/goproxy",
+                    "/goproxy/{path}",
+                    "https://proxy.golang.org",
+                    go_module,
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -319,7 +328,7 @@ impl Routes {
     }
 }
 
-/// Accepts `/segment/...` with unreserved characters, `+`, `@` and percent-escapes. A segment may
+/// Accepts `/segment/...` with unreserved characters, `+`, `@`, `!` and percent-escapes. A segment may
 /// not be empty, `.` or `..` after decoding, and an escape may not decode to a separator,
 /// control character or escape introducer.
 fn valid_subpath(path: &str) -> bool {
@@ -348,7 +357,7 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
             }
             decoded.push(value);
             index += 3;
-        } else if byte.is_ascii_alphanumeric() || b"._~-+@".contains(&byte) {
+        } else if byte.is_ascii_alphanumeric() || b"._~-+@!".contains(&byte) {
             decoded.push(byte);
             index += 1;
         } else {
@@ -705,6 +714,41 @@ fn pypi(path: &str) -> Option<Freshness> {
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
     normalized.then_some(Freshness::Revalidate)
+}
+
+/// A Go module path in the proxy's escaped form: lowercase elements, capitals written as `!`
+/// and the lowercase letter, and a first element that names a domain.
+fn go_module_path(module: &str) -> bool {
+    let mut elements = module.split('/');
+    elements.next().is_some_and(|domain| domain.contains('.'))
+        && module.split('/').all(|element| {
+            !element.is_empty()
+                && !element.starts_with('.')
+                && element.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._~-!".contains(&byte)
+                })
+        })
+}
+
+/// The Go module proxy protocol. `/{module}/@v/list` and `/{module}/@latest` change with
+/// releases; `/{module}/@v/{version}.info`, `.mod` and `.zip` describe one version, whose
+/// capitals are escaped like the module path's.
+fn go_module(path: &str) -> Option<Freshness> {
+    let (module, rest) = path[1..].split_once("/@")?;
+    if !go_module_path(module) {
+        return None;
+    }
+    if rest == "latest" || rest == "v/list" {
+        return Some(Freshness::Revalidate);
+    }
+    let (version, kind) = rest.strip_prefix("v/")?.rsplit_once('.')?;
+    let version_valid = version
+        .strip_prefix('v')
+        .is_some_and(|number| number.as_bytes().first().is_some_and(u8::is_ascii_digit))
+        && version
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-+!".contains(&byte));
+    (version_valid && matches!(kind, "info" | "mod" | "zip")).then_some(Freshness::Immutable)
 }
 
 /// Checksum files that Maven repositories publish beside every file.
@@ -1130,6 +1174,49 @@ mod tests {
         }
         let routes = Routes::production();
         assert!(routes.redirect_allowed("https", "plugins-artifacts.gradle.org"));
+    }
+
+    #[test]
+    fn classifies_go_module_objects() {
+        use Freshness::*;
+        for (path, freshness) in [
+            ("/goproxy/github.com/google/uuid/@v/list", Revalidate),
+            ("/goproxy/github.com/google/uuid/@latest", Revalidate),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.info", Immutable),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.mod", Immutable),
+            ("/goproxy/github.com/google/uuid/@v/v1.6.0.zip", Immutable),
+            (
+                "/goproxy/github.com/!azure/azure-sdk-for-go/@v/v68.0.0+incompatible.mod",
+                Immutable,
+            ),
+            (
+                "/goproxy/golang.org/x/mod/@v/v0.0.0-20240101123456-abcdef123456.zip",
+                Immutable,
+            ),
+            (
+                "/goproxy/golang.org/toolchain/@v/v0.0.1-go1.27.3.linux-amd64.zip",
+                Immutable,
+            ),
+            ("/goproxy/go.yaml.in/yaml/v4/@v/v4.0.0-rc.3.info", Immutable),
+        ] {
+            assert_eq!(class(path), Ok(("goproxy", freshness)), "{path}");
+        }
+        for path in [
+            "/goproxy/sumdb/sum.golang.org/supported",
+            "/goproxy/sumdb/sum.golang.org/lookup/github.com/google/uuid@v1.6.0",
+            "/goproxy/github.com/Google/uuid/@v/list",
+            "/goproxy/uuid/@v/list",
+            "/goproxy/github.com/google/uuid/@v/v1.6.0.tar.gz",
+            "/goproxy/github.com/google/uuid/@v/latest.info",
+            "/goproxy/github.com/google/uuid/@v/v1.6.0",
+            "/goproxy/github.com/google/uuid/@v/",
+        ] {
+            assert!(class(path).is_err(), "{path}");
+        }
+        assert_eq!(
+            class("/go/go1.27.3.linux-amd64.tar.gz"),
+            Ok(("go", Immutable))
+        );
     }
 
     #[test]

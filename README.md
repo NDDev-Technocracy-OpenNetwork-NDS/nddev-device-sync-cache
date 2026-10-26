@@ -42,6 +42,7 @@ every other path before any upstream connection:
 | `/maven-central/` | Maven Central release files |
 | `/google-maven/` | Google's Maven repository for Android |
 | `/gradle-plugins/` | Gradle Plugin Portal markers and plugin artifacts |
+| `/goproxy/` | Go module proxy versions, including Go toolchains |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their

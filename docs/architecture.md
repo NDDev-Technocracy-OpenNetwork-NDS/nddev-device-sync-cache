@@ -107,7 +107,8 @@ store directory live in the private estate.
 4. pub hosted repository for Dart and Flutter, through the same index documents.
 5. Maven Central, Google Maven and the Gradle Plugin Portal; Gradle reaches a plain-HTTP repository
    only through its explicit insecure-protocol opt-in.
-6. Go module proxy, checksum database and toolchain modules.
+6. Go module proxy and toolchain modules; the go command verifies against the checksum database
+   directly.
 7. OCI pull-through and BuildKit cache references.
 8. Shared build caches with CI-only writes.
 9. Registry admission and the Rust registry generator.

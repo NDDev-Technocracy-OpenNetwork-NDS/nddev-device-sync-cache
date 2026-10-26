@@ -74,7 +74,7 @@
           "tool": "go release archives",
           "setting": {"download_url": "{base}/go/{file}"},
           "acceptance": "route only",
-          "limits": "GOTOOLCHAIN downloads go through the Go module proxy, a later increment."
+          "limits": "GOTOOLCHAIN downloads go through the goproxy route instead."
         }
       ]
     },
@@ -228,6 +228,20 @@
           "setting": {"url": "{base}/gradle-plugins"},
           "acceptance": "route only",
           "limits": "Gradle accepts a plain-HTTP repository only with isAllowInsecureProtocol = true. The selected candidate is plain HTTP on the literal 127.0.0.1 forwarded port over the authenticated, encrypted rds forward, not JVM HTTPS: the opt-in goes only on those cache URLs in a project-scoped init script, with no global disable, trust store or local CA, and with strict dependency verification against checksums that do not come from the cache. Private or authenticated repositories are not retargeted. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
+        }
+      ]
+    },
+    {
+      "id": "goproxy",
+      "prefix": "/goproxy",
+      "upstream": "https://proxy.golang.org",
+      "objects": "Module versions of the Go module proxy protocol: .info, .mod and .zip of exact versions, including golang.org/toolchain for GOTOOLCHAIN; version lists and @latest are revalidated.",
+      "clients": [
+        {
+          "tool": "go mod download, go build and GOTOOLCHAIN switches",
+          "setting": {"GOPROXY": "{base}/goproxy"},
+          "acceptance": "route only",
+          "limits": "Checksum database requests are not proxied: the go command then verifies against sum.golang.org directly, as with proxy.golang.org, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
         }
       ]
     }
