@@ -107,7 +107,7 @@ clippy:
 # Check RustSec advisories, licenses and dependency sources of the locked graph.
 dependencies-check:
     cargo audit --deny warnings
-    cargo deny --locked check licenses sources
+    cargo deny --workspace --locked check licenses sources
 
 # Build the service image and exercise the hardened container: readiness, identity and events.
 container-check commit=`git rev-parse HEAD`:
