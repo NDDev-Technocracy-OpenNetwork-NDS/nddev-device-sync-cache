@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::State,
-    http::{HeaderValue, Method, StatusCode, Uri, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header},
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -16,7 +16,7 @@ use tracing::Instrument;
 use crate::{
     REPOSITORY, SOURCE_COMMIT,
     cache::{Cache, Delivery, Filling, Object, ServeError, Served},
-    store,
+    domain, store,
     telemetry::Identity,
 };
 
@@ -30,6 +30,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/health", get(health))
         .route("/v1/ready", get(ready))
         .route("/source", get(source))
+        .route("/crates-index/config.json", get(crates_config))
         .fallback(serve)
         .with_state(app)
 }
@@ -100,7 +101,44 @@ async fn source() -> Response {
     .into_response()
 }
 
-async fn serve(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response {
+/// The crates.io sparse index configuration, generated for the loopback base address the client
+/// used, so that crate downloads come back through this cache.
+async fn crates_config(method: Method, headers: HeaderMap) -> Response {
+    let started = Instant::now();
+    let route = "/crates-index/config.json";
+    let span = nddev_device_sync_telemetry::http_server_span(method.as_str(), route)
+        .unwrap_or_else(|_| tracing::Span::none());
+    let finished = span.clone();
+    let response = async {
+        let duration_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let config = headers
+            .get(header::HOST)
+            .and_then(|host| host.to_str().ok())
+            .and_then(domain::crates_index_config);
+        match config {
+            Some(config) => {
+                tracing::info!(module = "cache", event.name = "cache.index.config", method = method.as_str(), route, status = 200, duration_ms, outcome = "ok");
+                ([(header::CONTENT_TYPE, "application/json")], config).into_response()
+            }
+            None => {
+                tracing::info!(module = "cache", event.name = "cache.rejected", method = method.as_str(), route, status = 400, duration_ms, error.type = "host_not_loopback", outcome = "rejected");
+                StatusCode::BAD_REQUEST.into_response()
+            }
+        }
+    }
+    .instrument(span)
+    .await;
+    let _ =
+        nddev_device_sync_telemetry::finish_http_server_span(&finished, response.status().as_u16());
+    response
+}
+
+async fn serve(
+    State(app): State<Arc<App>>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response {
     let started = Instant::now();
     let route = app.cache.template(uri.path());
     let span = nddev_device_sync_telemetry::http_server_span(method.as_str(), route)
@@ -129,13 +167,17 @@ async fn serve(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respons
                     Delivery::Filling(filling) => filling.served,
                 };
                 let head = method == Method::HEAD;
+                let validator = headers
+                    .get(header::IF_NONE_MATCH)
+                    .and_then(|value| value.to_str().ok());
                 let responded = match delivery {
-                    Delivery::Stored(object) => respond(object, head).await,
+                    Delivery::Stored(object) => respond(object, head, validator).await,
                     Delivery::Filling(filling) => respond_filling(filling, head).await,
                 };
                 match responded {
                     Ok(response) => {
-                        tracing::info!(module = "cache", event.name = event_name(served), method = method.as_str(), route, status = 200, duration_ms = duration_ms(), outcome = "ok");
+                        let status = response.status().as_u16();
+                        tracing::info!(module = "cache", event.name = event_name(served), method = method.as_str(), route, status, duration_ms = duration_ms(), outcome = "ok");
                         response
                     }
                     Err(_) => {
@@ -204,7 +246,25 @@ async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Respon
     Ok(response)
 }
 
-async fn respond(object: Object, head: bool) -> std::io::Result<Response> {
+/// Serves a stored object. A client that already holds it, by the object's entity tag, gets
+/// `304 Not Modified`; sparse registry clients such as Cargo revalidate this way.
+async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io::Result<Response> {
+    let etag = format!("\"sha256-{}\"", object.meta.sha256);
+    if validator.is_some_and(|validator| {
+        validator
+            .split(',')
+            .any(|candidate| candidate.trim() == etag || candidate.trim() == "*")
+    }) {
+        let mut response = StatusCode::NOT_MODIFIED.into_response();
+        if let Ok(etag) = HeaderValue::from_str(&etag) {
+            response.headers_mut().insert(header::ETAG, etag);
+        }
+        response.headers_mut().insert(
+            "x-nds-cache",
+            HeaderValue::from_static(object.served.as_str()),
+        );
+        return Ok(response);
+    }
     let body = if head {
         Body::empty()
     } else {
@@ -219,7 +279,7 @@ async fn respond(object: Object, head: bool) -> std::io::Result<Response> {
         header::CONTENT_TYPE,
         content_type(object.meta.content_type.as_deref()),
     );
-    if let Ok(etag) = HeaderValue::from_str(&format!("\"sha256-{}\"", object.meta.sha256)) {
+    if let Ok(etag) = HeaderValue::from_str(&etag) {
         headers.insert(header::ETAG, etag);
     }
     headers.insert(

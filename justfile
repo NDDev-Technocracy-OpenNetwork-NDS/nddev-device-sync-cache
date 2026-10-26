@@ -72,6 +72,7 @@ registry-test:
     reject contracts/clients.schema.json route-without-clients contracts/clients.json '.routes[0].clients = []'
     reject contracts/clients.schema.json setting-outside-base contracts/clients.json '.routes[0].clients[0].setting |= map_values("https://example.com")'
     reject contracts/clients.schema.json plain-http-upstream contracts/clients.json '.routes[0].upstream = "http://static.rust-lang.org"'
+    reject contracts/clients.schema.json sparse-outside-base contracts/clients.json '.routes[0].clients[0].setting |= map_values("sparse+https://mirror.example/")'
 
 # Verify that registry/journal.jsonl only appends to its content at the given Git revision.
 journal-check revision="origin/main":
