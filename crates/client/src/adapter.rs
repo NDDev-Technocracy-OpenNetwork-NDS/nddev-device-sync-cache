@@ -7,6 +7,7 @@ use crate::{
 };
 use nddev_device_sync_adapter_io::CancellationToken;
 use std::{
+    ffi::OsString,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
@@ -17,13 +18,15 @@ const PROBE: Duration = Duration::from_secs(3);
 /// The Gradle init script of the client contract, which builds pass with `--init-script`.
 const GRADLE: &str = include_str!("../../../contracts/gradle/nds-cache.init.gradle.kts");
 
-/// The files that one user, or one CI job acting as its own home, owns for its tools.
+/// The files that one user, or one CI lane whose jobs run below its root, owns for its tools.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scope {
     home: PathBuf,
     config: PathBuf,
     cargo_home: PathBuf,
     go_env: PathBuf,
+    /// A Cargo configuration that the jobs read below the scope's own, which must yield to it.
+    below: Option<PathBuf>,
 }
 
 impl Scope {
@@ -42,17 +45,40 @@ impl Scope {
         let go_env = std::env::var_os("GOENV")
             .map(PathBuf::from)
             .unwrap_or_else(|| go_env(&home, &config));
-        Self::new(home, config, cargo_home, go_env)
+        Self::new(home, config, cargo_home, go_env, None)
     }
 
-    /// A scope rooted at an existing directory that a CI job or dedicated profile uses as its
-    /// home: its owner sets `HOME` to it and leaves the tool variables unset.
-    pub fn rooted(root: &Path) -> Result<Self, Error> {
+    /// The scope of a CI lane, read from the environment its jobs run with; see [`Scope::lane_in`].
+    pub fn lane(root: &Path) -> Result<Self, Error> {
+        Self::lane_in(root, |name| std::env::var_os(name))
+    }
+
+    /// The scope of a CI lane whose jobs run with `HOME` at `root` and their workspaces below it,
+    /// given the variables of the jobs' environment. Cargo finds `root/.cargo/config.toml` by
+    /// directory discovery, so the jobs' own `CARGO_HOME`, a store that lanes may share and
+    /// maintenance may evict, is never written; a configuration there ranks below the lane's and
+    /// must not name a source of its own. The other tools read their user files at the defaults
+    /// below `HOME`, so `XDG_CONFIG_HOME` and `GOENV` must be unset or name those defaults.
+    pub fn lane_in(
+        root: &Path,
+        variable: impl Fn(&str) -> Option<OsString>,
+    ) -> Result<Self, Error> {
         let home = directory(root.to_owned())?;
         let config = home.join(".config");
         let cargo_home = home.join(".cargo");
         let go_env = go_env(&home, &config);
-        Self::new(home, config, cargo_home, go_env)
+        let is = |name: &str, default: &Path| variable(name).is_none_or(|value| value == default);
+        if variable("HOME").is_none_or(|value| value != home)
+            || !is("XDG_CONFIG_HOME", &config)
+            || !is("GOENV", &go_env)
+        {
+            return Err(Error::Invalid);
+        }
+        let below = variable("CARGO_HOME")
+            .map(PathBuf::from)
+            .filter(|jobs| *jobs != cargo_home)
+            .map(|jobs| jobs.join("config.toml"));
+        Self::new(home, config, cargo_home, go_env, below)
     }
 
     fn new(
@@ -60,9 +86,11 @@ impl Scope {
         config: PathBuf,
         cargo_home: PathBuf,
         go_env: PathBuf,
+        below: Option<PathBuf>,
     ) -> Result<Self, Error> {
         if [&home, &config, &cargo_home, &go_env]
-            .iter()
+            .into_iter()
+            .chain(&below)
             .all(|path| path.is_absolute())
         {
             Ok(Self {
@@ -70,6 +98,7 @@ impl Scope {
                 config,
                 cargo_home,
                 go_env,
+                below,
             })
         } else {
             Err(IoError::InvalidConfiguration.into())
@@ -89,7 +118,6 @@ impl Scope {
             Target::Cargo => self.cargo_home.join("config.toml"),
             Target::Npm => self.home.join(".npmrc"),
             Target::Pip => pip_config(&self.home, &self.config),
-            Target::Uv => self.config.join("uv").join("uv.toml"),
             Target::Go => self.go_env.clone(),
             Target::Gradle => self
                 .config
@@ -184,6 +212,9 @@ impl NetworkCache for Client {
                     return Err(Error::NotReady);
                 }
                 // Every file is checked before any is written, so a refusal changes nothing.
+                if let Some(text) = scope.below.as_deref().map(read).transpose()?.flatten() {
+                    binding::yields(Target::Cargo, &text)?;
+                }
                 let mut changes = Vec::new();
                 for target in Target::ALL {
                     let path = scope.path(target);

@@ -3,7 +3,9 @@
 //! Tools that read a user configuration file get a managed block in it, because a user file has
 //! lower precedence than a project's own configuration, so a project that names a private
 //! registry keeps it. Tools that only read variables get them from one environment file. A user
-//! file that already names a default registry of its own is refused, never overwritten.
+//! file that already names a default registry of its own is refused, never overwritten. Tools whose
+//! lockfiles record the index they resolved against, uv and pub, stay unbound, so a committed
+//! lockfile keeps resolving and verifying as written.
 
 use std::fmt::Write as _;
 
@@ -38,13 +40,12 @@ impl Base {
 
 /// The variables of tools that read no configuration file, as `contracts/clients.json` lists
 /// them; `NDS_CACHE_BASE` feeds the project-scoped Gradle init script.
-pub const ENVIRONMENT: [(&str, &str); 7] = [
+pub const ENVIRONMENT: [(&str, &str); 6] = [
     ("RUSTUP_DIST_SERVER", "/rustup"),
     ("RUSTUP_UPDATE_ROOT", "/rustup/rustup"),
     ("FLUTTER_STORAGE_BASE_URL", "/flutter"),
     ("UV_PYTHON_INSTALL_MIRROR", "/python-build-standalone"),
     ("PLAYWRIGHT_DOWNLOAD_HOST", "/playwright"),
-    ("PUB_HOSTED_URL", "/pub"),
     ("NDS_CACHE_BASE", ""),
 ];
 
@@ -59,8 +60,6 @@ pub enum Target {
     Npm,
     /// `pip.conf`: the global index.
     Pip,
-    /// `uv.toml`: the default index.
-    Uv,
     /// The go command's environment file: `GOPROXY`, without a direct fallback.
     Go,
     /// The Gradle init script that builds pass with `--init-script`.
@@ -68,12 +67,11 @@ pub enum Target {
 }
 
 impl Target {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 6] = [
         Self::Environment,
         Self::Cargo,
         Self::Npm,
         Self::Pip,
-        Self::Uv,
         Self::Go,
         Self::Gradle,
     ];
@@ -84,7 +82,6 @@ impl Target {
             Self::Cargo => "cargo",
             Self::Npm => "npm",
             Self::Pip => "pip",
-            Self::Uv => "uv",
             Self::Go => "go",
             Self::Gradle => "gradle",
         }
@@ -112,7 +109,6 @@ impl Target {
             ),
             Self::Npm => format!("registry={url}/npm/\n"),
             Self::Pip => format!("[global]\nindex-url = {url}/pypi/simple/\n"),
-            Self::Uv => format!("[[index]]\nurl = \"{url}/pypi/simple/\"\ndefault = true\n"),
             Self::Go => format!("GOPROXY={url}/goproxy\n"),
             Self::Gradle => gradle.to_owned(),
         }
@@ -142,29 +138,13 @@ impl Target {
                 rest.lines()
                     .any(|line| line.trim().eq_ignore_ascii_case("[global]")),
             ),
-            Self::Uv => {
-                let table = toml_table(rest)?;
-                let default_index = table
-                    .get("index")
-                    .and_then(toml::Value::as_array)
-                    .is_some_and(|indexes| {
-                        indexes.iter().any(|index| {
-                            index.get("default").and_then(toml::Value::as_bool) == Some(true)
-                        })
-                    });
-                let pip_index = table
-                    .get("pip")
-                    .and_then(toml::Value::as_table)
-                    .is_some_and(|pip| pip.contains_key("index-url"));
-                refuse(table.contains_key("index-url") || default_index || pip_index)
-            }
             Self::Go => refuse(keys().any(|key| key == "GOPROXY")),
         }
     }
 
     /// Whether the format of the file must still parse after the change.
     fn toml(self) -> bool {
-        matches!(self, Self::Cargo | Self::Uv)
+        matches!(self, Self::Cargo)
     }
 }
 
@@ -256,6 +236,13 @@ pub fn unbound(target: Target, current: &str, gradle: &str) -> Result<Option<Str
     }
 }
 
+/// Refuses a file of the same tool that ranks below the binding's own and names a default source
+/// there: the binding would shadow it rather than leave it in force.
+pub fn yields(target: Target, current: &str) -> Result<(), BlockError> {
+    let (rest, _) = split(current)?;
+    target.check(&rest)
+}
+
 /// Whether the file holds the binding.
 pub fn is_bound(target: Target, current: &str, gradle: &str) -> bool {
     if target.owned() {
@@ -297,10 +284,12 @@ mod tests {
     #[test]
     fn the_environment_names_only_tools_without_a_configuration_file() {
         let text = bind(Target::Environment, None).unwrap();
-        assert!(text.contains("export PUB_HOSTED_URL='http://127.0.0.1:18740/pub'\n"));
+        assert!(text.contains("export RUSTUP_DIST_SERVER='http://127.0.0.1:18740/rustup'\n"));
         assert!(text.contains("export NDS_CACHE_BASE='http://127.0.0.1:18740'\n"));
         assert_eq!(text.matches("export ").count(), ENVIRONMENT.len());
         assert!(!text.contains("npm") && !text.contains("GOPROXY") && !text.contains("simple"));
+        // uv and pub record the index in their lockfiles, so neither is bound.
+        assert!(!text.contains("PUB_HOSTED_URL") && !text.contains("/pub'"));
         assert!(Base::new(0).is_none());
     }
 
@@ -354,18 +343,6 @@ mod tests {
             (Target::Npm, "registry = https://npm.example.internal/\n"),
             (Target::Npm, "Registry=https://npm.example.internal/\n"),
             (Target::Pip, "[global]\ntimeout = 60\n"),
-            (
-                Target::Uv,
-                "index-url = \"https://pypi.example.internal/simple\"\n",
-            ),
-            (
-                Target::Uv,
-                "[[index]]\nname = \"corp\"\nurl = \"https://pypi.example.internal/simple\"\ndefault = true\n",
-            ),
-            (
-                Target::Uv,
-                "[pip]\nindex-url = \"https://pypi.example.internal/simple\"\n",
-            ),
             (Target::Go, "GOPROXY=https://goproxy.example.internal\n"),
         ] {
             assert_eq!(
@@ -384,10 +361,6 @@ mod tests {
                 Target::Pip,
                 "[install]\nindex-url = https://pypi.example.internal/simple\n",
             ),
-            (
-                Target::Uv,
-                "[[index]]\nname = \"corp\"\nurl = \"https://pypi.example.internal/simple\"\n",
-            ),
             (Target::Go, "GOPRIVATE=example.internal\n"),
         ] {
             let updated = bind(target, Some(own)).unwrap();
@@ -397,6 +370,16 @@ mod tests {
             bind(Target::Cargo, Some("[build\n")),
             Err(BlockError::Invalid)
         );
+    }
+
+    #[test]
+    fn a_lower_file_yields_only_without_a_source_of_its_own() {
+        let private = "[source.crates-io]\nreplace-with = \"corp\"\n";
+        assert_eq!(yields(Target::Cargo, private), Err(BlockError::Conflict));
+        assert_eq!(yields(Target::Cargo, "[build]\njobs = 2\n"), Ok(()));
+        // A block of an earlier user binding is the module's own.
+        let bound = bind(Target::Cargo, Some("[build]\njobs = 2\n")).unwrap();
+        assert_eq!(yields(Target::Cargo, &bound), Ok(()));
     }
 
     #[test]
@@ -448,7 +431,6 @@ mod tests {
             ("source.nds-cache.registry", "sparse+{base}/crates-index/"),
             ("npm_config_registry", "{base}/npm/"),
             ("PIP_INDEX_URL", "{base}/pypi/simple/"),
-            ("UV_DEFAULT_INDEX", "{base}/pypi/simple/"),
             ("GOPROXY", "{base}/goproxy"),
         ] {
             assert!(listed(name, value), "{name}");

@@ -1,9 +1,10 @@
-//! `nds-cache`: binds the current user's tools, or one CI job home, to the NDS network cache.
+//! `nds-cache`: binds the current user's tools, or one CI lane's, to the NDS network cache.
+//! `--lane` reads the environment that the lane's jobs run with.
 
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  nds-cache (status | bind | unbind) --port <loopback port> [--root <job home>]";
+  nds-cache (status | bind | unbind) --port <loopback port> [--lane <lane root>]";
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn main() -> ExitCode {
@@ -21,14 +22,14 @@ async fn main() -> ExitCode {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     let (command, port, root) = match words.as_slice() {
         [command, "--port", port] => (*command, *port, None),
-        [command, "--port", port, "--root", root] => (*command, *port, Some(*root)),
+        [command, "--port", port, "--lane", root] => (*command, *port, Some(*root)),
         _ => return usage(),
     };
     let Some(base) = port.parse().ok().and_then(Base::new) else {
         return usage();
     };
     let scope = match root {
-        Some(root) => Scope::rooted(std::path::Path::new(root)),
+        Some(root) => Scope::lane(std::path::Path::new(root)),
         None => Scope::user(),
     };
     let client = match (scope, NativeIo::new(1)) {

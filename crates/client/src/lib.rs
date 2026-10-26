@@ -1,10 +1,10 @@
 //! Device side of the NDS network cache: binds the public download sources of one scope's tools
 //! to the cache through a loopback base, and reverses that exactly.
 //!
-//! A scope is the home of one user or of one CI job acting as its own home. Binding projects one
-//! binding onto its files: managed blocks in the user configuration of Cargo, npm and Bun, pip,
-//! uv and the go command, one environment file for the tools that read only variables, and the
-//! project-scoped Gradle init script. User files rank below a project's own configuration, so
+//! A scope is the home of one user, or one CI lane whose jobs run below its prefix. Binding
+//! projects one binding onto its files: managed blocks in the user configuration of Cargo, npm and
+//! Bun, pip and the go command, one environment file for the tools that read only variables, and
+//! the project-scoped Gradle init script. User files rank below a project's own configuration, so
 //! project pins, lockfiles and private registries stay in force; a user file that names a
 //! default registry of its own is refused, never overwritten. Every write is atomic, and a
 //! refusal or failure leaves the scope as it was.
