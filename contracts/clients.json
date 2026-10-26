@@ -254,7 +254,7 @@
         {
           "tool": "docker pull and FROM in builds",
           "setting": {"image": "{base}/v2/docker.io/library/alpine:3"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/docker.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
         }
       ]
@@ -268,7 +268,7 @@
         {
           "tool": "docker pull and FROM in builds",
           "setting": {"image": "{base}/v2/ghcr.io/linuxcontainers/alpine:latest"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/ghcr.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
         }
       ]
@@ -282,7 +282,7 @@
         {
           "tool": "docker pull and FROM in builds",
           "setting": {"image": "{base}/v2/gcr.io/distroless/static:latest"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/gcr.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
         }
       ]
@@ -296,7 +296,7 @@
         {
           "tool": "docker pull and FROM in builds",
           "setting": {"image": "{base}/v2/cgr.dev/chainguard/static:latest"},
-          "acceptance": "route only",
+          "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/cgr.dev/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
         }
       ]

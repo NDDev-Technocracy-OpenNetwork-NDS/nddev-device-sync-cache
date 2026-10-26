@@ -19,6 +19,11 @@ again from the allowlisted upstreams.
 4. Verify that `/v1/health` reports the commit, `/v1/ready` answers `200` and a known object returns
    `x-nds-cache: hit`.
 
+When Docker Hub refuses the digest-pinned base images with `429`, pull them through the cache by
+the same digest and tag them locally, for example `docker pull
+127.0.0.1:8740/docker.io/library/rust@sha256:<digest>` followed by `docker tag` to the
+Dockerfile's name. The digest pin verifies the content, and the daemon keeps its configuration.
+
 An upgrade repeats these steps with the new commit. Committed objects survive the container
 replacement. Temporary files of interrupted downloads are removed at start. A rollback deploys the
 previous image by its identity; the store format has no migrations, so every image of the same
