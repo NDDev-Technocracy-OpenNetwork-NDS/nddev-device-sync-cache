@@ -50,7 +50,7 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.store.evicted` | A commit evicted least recently used objects. |
 | `cache.store.read.failed` | A stored object could not be opened for a response. |
 | `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy; `status` is `304` when the client already held the object's entity tag. |
-| `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed, with its duration, in the trace of the request that started it; a `HEAD` on a missing object starts one too. |
+| `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed, with its duration, in the trace of the request that started it; a `HEAD` on a missing object starts one too. An OCI blob or manifest whose bytes lack the digest its path names fails with `digest_mismatch` and is not stored. |
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
 | `cache.index.config` | The cache answered the crates.io sparse index `config.json` for a loopback client base. |
@@ -69,6 +69,8 @@ expired heartbeat.
 | `406` with `not_acceptable` | The client accepts no representation the route serves, such as a PyPI client that takes only HTML pages. Use a client from `contracts/clients.json`. |
 | `400` with `host_not_loopback` | An index configuration or index document was requested through a host name that is not loopback. Point the client at the forwarded loopback address. |
 | `502` with `upstream_redirect` | Upstream redirected to a host outside the allowlist. |
+| `502` with `upstream_auth` | A registry's anonymous token service failed or answered with something other than a token. |
+| A pull fails with `digest_mismatch` | The registry served bytes that do not have the digest of their path; nothing was stored. Retry; a repeated mismatch is an upstream fault. |
 | `502` with `object_too_large` | The object exceeds `NDS_CACHE_MAX_OBJECT_BYTES`. |
 | `503` with `fetch_capacity` | All concurrent downloads are busy for longer than the admission wait; raise `NDS_CACHE_FETCHES` or wait. |
 | `504` with `upstream_timeout` | Upstream did not answer within the connect or read deadline. |

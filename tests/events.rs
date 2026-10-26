@@ -107,6 +107,19 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         assert_eq!(response.status().as_u16(), status);
         response.bytes().await.unwrap();
     }
+    assert_eq!(
+        harness.get("/oci/library/app/manifests/latest").await.0,
+        200
+    );
+    let mismatch = format!("/oci/library/app/blobs/sha256:{}", support::WRONG_DIGEST);
+    let _ = harness
+        .client
+        .get(format!("{}{mismatch}", harness.base))
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await;
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1100)).await;
@@ -151,7 +164,10 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         .into_iter()
         .chain(named("cache.fill.failed"))
     {
-        assert_eq!(fill["route"], "/origin/{path}");
+        assert!(
+            fill["route"] == "/origin/{path}" || fill["route"] == "/oci/{path}",
+            "{fill}"
+        );
         assert!(fill["duration_ms"].as_f64().is_some(), "{fill}");
         assert!(
             requests

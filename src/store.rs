@@ -111,6 +111,16 @@ pub enum Progress {
 }
 
 impl Pending {
+    /// The SHA-256 of the bytes written so far, in lowercase hex.
+    pub fn sha256(&self) -> String {
+        self.hasher
+            .clone()
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -359,13 +369,7 @@ impl Store {
         let meta = Meta {
             key: key.to_owned(),
             size: pending.size,
-            sha256: pending
-                .hasher
-                .clone()
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect(),
+            sha256: pending.sha256(),
             content_type: validators.content_type,
             etag: validators.etag,
             last_modified: validators.last_modified,

@@ -100,6 +100,9 @@ pub enum ServeError {
     Upstream(UpstreamError),
     #[error("store_failed")]
     Store(StoreError),
+    /// A content-addressed object whose bytes do not have the digest its path names.
+    #[error("digest_mismatch")]
+    Digest,
 }
 
 impl ServeError {
@@ -113,6 +116,8 @@ impl ServeError {
             Self::Upstream(UpstreamError::Redirect) => "upstream_redirect",
             Self::Upstream(UpstreamError::Status) => "upstream_status",
             Self::Upstream(UpstreamError::Body) => "upstream_body",
+            Self::Upstream(UpstreamError::Auth) => "upstream_auth",
+            Self::Digest => "digest_mismatch",
             Self::Store(StoreError::TooLarge) => "object_too_large",
             Self::Store(StoreError::Unowned) => "store_unowned",
             Self::Store(StoreError::Io) => "store_io",
@@ -124,7 +129,7 @@ impl ServeError {
             Self::Rejected(rejection) => rejection.status(),
             Self::NotFound => 404,
             Self::Busy => 503,
-            Self::Store(StoreError::TooLarge) => 502,
+            Self::Store(StoreError::TooLarge) | Self::Digest => 502,
             Self::Upstream(UpstreamError::Timeout) => 504,
             Self::Upstream(_) => 502,
             Self::Store(_) => 503,
@@ -252,6 +257,12 @@ impl Cache {
             .unwrap_or("unmatched")
     }
 
+    /// Whether `path` is an OCI distribution object, and the digest its path names, if any.
+    pub fn oci(&self, path: &str) -> Option<Option<String>> {
+        let target = self.routes.resolve(path, None).ok()?;
+        target.route.oci.then(|| target.digest().map(str::to_owned))
+    }
+
     fn fresh(&self, target: &Target<'_>, meta: &Meta) -> bool {
         target.freshness == Freshness::Immutable
             || now().saturating_sub(meta.fetched_at) < self.revalidate_after
@@ -334,7 +345,7 @@ impl Cache {
     ) -> Result<Fetched, ServeError> {
         let fetched = self
             .upstream
-            .fetch(&target.upstream_url(), target.media_type, stored)
+            .fetch(&target.upstream_url(), target.upstream_accept(), stored)
             .await;
         record(
             &self.upstream_state,
@@ -388,6 +399,7 @@ impl Cache {
             upstream_state: self.upstream_state.clone(),
             key: key.to_owned(),
             route: target.route.template,
+            digest: target.digest().map(str::to_owned),
             pending,
             validators,
             body,
@@ -477,6 +489,8 @@ struct Download {
     upstream_state: Arc<AtomicU8>,
     key: String,
     route: &'static str,
+    /// The digest a content-addressed object must have.
+    digest: Option<String>,
     pending: Pending,
     validators: Validators,
     body: Body,
@@ -500,7 +514,11 @@ async fn download(mut job: Download) {
         Ok(())
     }
     .await;
-    let committed = match written {
+    let verified = written.and_then(|()| match &job.digest {
+        Some(digest) if *digest != job.pending.sha256() => Err(ServeError::Digest),
+        _ => Ok(()),
+    });
+    let committed = match verified {
         Ok(()) => job
             .store
             .commit(&job.key, job.pending, job.validators)

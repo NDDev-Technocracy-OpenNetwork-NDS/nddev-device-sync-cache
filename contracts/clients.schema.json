@@ -33,7 +33,7 @@
       "required": ["id", "prefix", "upstream", "objects", "clients"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-        "prefix": {"type": "string", "pattern": "^/[a-z][a-z0-9-]*$"},
+        "prefix": {"type": "string", "description": "A path segment, or the OCI distribution segment and the registry host it serves.", "pattern": "^/[a-z][a-z0-9-]*(/[a-z0-9][a-z0-9.-]*)?$"},
         "upstream": {"type": "string", "format": "uri", "pattern": "^https://"},
         "objects": {"type": "string", "minLength": 1},
         "clients": {
