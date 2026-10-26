@@ -77,7 +77,9 @@ Devices and runners reach the loopback listener through `rds forward` of
 [`contracts/clients.json`](contracts/clients.json) is the client contract: every live route, the
 setting that sends each tool through it relative to the forwarded base address, its known limits and
 whether a real client or only the route has been accepted. A test keeps it equal to the service
-route table. Clients keep their own digest and signature checks.
+route table. Clients keep their own digest and signature checks. Gradle builds pass
+[`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
+`--init-script`; it points only the public Maven repositories at the forwarded base.
 
 ## Technology registry
 
