@@ -49,11 +49,12 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.store.pressure` | The store or its volume is close to full. |
 | `cache.store.evicted` | A commit evicted least recently used objects. |
 | `cache.store.read.failed` | A stored object could not be opened for a response. |
-| `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy. |
+| `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy; `status` is `304` when the client already held the object's entity tag. |
 | `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed, with its duration, in the trace of the request that started it; a `HEAD` on a missing object starts one too. |
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
-| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method or an object missing upstream. |
+| `cache.index.config` | The cache answered the crates.io sparse index `config.json` for a loopback client base. |
+| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, or an index configuration request from a host that is not loopback. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
 Alerts belong to the observability deployment. The cache supports these rules: a degraded store, repeated

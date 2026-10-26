@@ -1,5 +1,5 @@
 {
- "status": "design input for the later protocol increments; the toolchain download increment is live and contracts/clients.json is its client contract",
+ "status": "design input for the later protocol increments; toolchain downloads and the crates.io sparse index are live, and contracts/clients.json is their client contract",
  "evidence_levels": {
   "verified": "checked against the primary source on the registry snapshot date",
   "reported": "research result with a primary-source URL, not re-checked",

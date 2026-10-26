@@ -4,8 +4,9 @@ AGPL-3.0-only NDS module. [NDDev OpenNetwork](https://nddev.ai).
 
 `nddev-device-sync-cache` is the central network cache for NDDev devices and private self-hosted
 GitHub Actions runners. It proxies package registries, toolchain downloads and container images
-over the internal network, and it admits only the technology versions recorded in this
-repository's registry. Public repositories keep free GitHub-hosted runners and do not use it.
+over the internal network. Its registry admission increment will restrict them to the technology
+versions recorded in this repository's registry; until then the live routes proxy their whole
+upstream allowlist. Public repositories keep free GitHub-hosted runners and do not use it.
 
 ## Current state
 
@@ -32,6 +33,8 @@ every other path before any upstream connection:
 | `/gradle/` | Gradle distributions and their checksums |
 | `/go/` | Go toolchain archives and their checksums |
 | `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
+| `/crates-index/` | crates.io sparse index files; the cache generates `config.json` |
+| `/crates/` | crate archives of exact published versions |
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
