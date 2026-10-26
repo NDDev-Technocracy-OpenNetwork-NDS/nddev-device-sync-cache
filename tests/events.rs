@@ -95,6 +95,18 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         .await
         .unwrap();
     assert_eq!(held.status().as_u16(), 304);
+    let index = format!("{}/registry/files/index.json", harness.base);
+    for (accept, status) in [(support::INDEX_TYPES[0], 200), ("text/html", 406)] {
+        let response = harness
+            .client
+            .get(&index)
+            .header(axum::http::header::ACCEPT, accept)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), status);
+        response.bytes().await.unwrap();
+    }
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1100)).await;

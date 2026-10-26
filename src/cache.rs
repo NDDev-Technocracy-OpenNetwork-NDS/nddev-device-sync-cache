@@ -16,7 +16,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 use tracing::Instrument;
 
 use crate::{
-    domain::{Freshness, Rejection, Routes, Target},
+    domain::{Freshness, Links, Rejection, Routes, Target},
     store::{Eviction, Meta, Pending, Progress, Store, StoreError, Validators, now},
     upstream::{Body, Fetched, Upstream, UpstreamError},
 };
@@ -70,6 +70,8 @@ pub struct Object {
     pub served: Served,
     pub eviction: Eviction,
     pub upstream_error: Option<UpstreamError>,
+    /// Set for an index document, whose download links are rewritten as it is served.
+    pub links: Option<Links>,
 }
 
 /// An immutable object that is still downloading; clients follow its progress.
@@ -119,7 +121,8 @@ impl ServeError {
 
     pub fn status(&self) -> u16 {
         match self {
-            Self::Rejected(_) | Self::NotFound => 404,
+            Self::Rejected(rejection) => rejection.status(),
+            Self::NotFound => 404,
             Self::Busy => 503,
             Self::Store(StoreError::TooLarge) => 502,
             Self::Upstream(UpstreamError::Timeout) => 504,
@@ -210,6 +213,7 @@ fn stored(meta: Meta, path: PathBuf, served: Served) -> Object {
         served,
         eviction: Eviction::default(),
         upstream_error: None,
+        links: None,
     }
 }
 
@@ -243,7 +247,7 @@ impl Cache {
     /// The bounded telemetry route of a request path: its matched template or `unmatched`.
     pub fn template(&self, path: &str) -> &'static str {
         self.routes
-            .resolve(path)
+            .resolve(path, None)
             .map(|target| target.route.template)
             .unwrap_or("unmatched")
     }
@@ -258,15 +262,35 @@ impl Cache {
         fills.get(key).map(|fill| fill.follow(Served::Joined))
     }
 
-    pub async fn serve(&self, path: &str) -> Result<Delivery, ServeError> {
-        let target = self.routes.resolve(path).map_err(ServeError::Rejected)?;
+    /// Serves `path` in the representation `accept` selects. `base` is the loopback base address
+    /// the client used, if any; an index document needs it to point its links back here.
+    pub async fn serve(
+        &self,
+        path: &str,
+        accept: Option<&str>,
+        base: Option<&str>,
+    ) -> Result<Delivery, ServeError> {
+        let target = self
+            .routes
+            .resolve(path, accept)
+            .map_err(ServeError::Rejected)?;
+        let links = match target.index() {
+            Some(index) => Some(Links::new(
+                index,
+                base.ok_or(ServeError::Rejected(Rejection::HostNotLoopback))?,
+            )),
+            None => None,
+        };
         let key = target.key();
         if let Some((meta, path)) = self
             .store
             .get(&key)
             .filter(|(meta, _)| self.fresh(&target, meta))
         {
-            return Ok(Delivery::Stored(stored(meta, path, Served::Hit)));
+            return Ok(Delivery::Stored(Object {
+                links,
+                ..stored(meta, path, Served::Hit)
+            }));
         }
         if let Some(filling) = self.joined(&key) {
             return Ok(Delivery::Filling(filling));
@@ -282,7 +306,10 @@ impl Cache {
             let _guard = flight.lock().await;
             match target.freshness {
                 Freshness::Immutable => self.start(&target, &key).await,
-                Freshness::Revalidate => self.fill(&target, &key).await.map(Delivery::Stored),
+                Freshness::Revalidate => self
+                    .fill(&target, &key)
+                    .await
+                    .map(|object| Delivery::Stored(Object { links, ..object })),
             }
         };
         if let Ok(mut flights) = self.flights.lock()
@@ -305,7 +332,10 @@ impl Cache {
         target: &Target<'_>,
         stored: Option<&Validators>,
     ) -> Result<Fetched, ServeError> {
-        let fetched = self.upstream.fetch(&target.upstream_url(), stored).await;
+        let fetched = self
+            .upstream
+            .fetch(&target.upstream_url(), target.media_type, stored)
+            .await;
         record(
             &self.upstream_state,
             if fetched.is_ok() {

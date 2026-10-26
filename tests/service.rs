@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::http::{StatusCode, header};
-use support::Harness;
+use support::{Harness, INDEX_TYPES};
 
 #[tokio::test]
 async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
@@ -297,4 +297,90 @@ async fn a_client_holding_the_object_gets_not_modified() {
         .unwrap();
     assert_eq!(other.status(), StatusCode::OK);
     assert_eq!(harness.hits(), 1);
+}
+
+#[tokio::test]
+async fn index_documents_are_negotiated_and_link_back_to_the_client_base() {
+    let harness = Harness::start().await;
+    let url = format!("{}/registry/files/index.json", harness.base);
+    let fetch = |accept: &'static str| {
+        harness
+            .client
+            .get(&url)
+            .header(header::ACCEPT, accept)
+            .send()
+    };
+    let preferred = fetch("application/vnd.test.v1+json, application/json;q=0.5")
+        .await
+        .unwrap();
+    assert_eq!(preferred.status(), StatusCode::OK);
+    assert_eq!(preferred.headers()[header::CONTENT_TYPE], INDEX_TYPES[0]);
+    assert_eq!(preferred.headers()[header::VARY], "accept");
+    let etag = preferred.headers()[header::ETAG].clone();
+    let document: serde_json::Value =
+        serde_json::from_str(&preferred.text().await.unwrap()).unwrap();
+    assert_eq!(document["files"][0]["sha256"], "unchanged");
+    let link = document["files"][0]["url"].as_str().unwrap().to_owned();
+    assert_eq!(
+        link,
+        format!("{}/registry/files/immutable.bin", harness.base)
+    );
+    let (status, served, body) = harness.get(&link[harness.base.len()..]).await;
+    assert_eq!(
+        (status, served.as_str(), body.as_str()),
+        (200, "miss", "immutable payload")
+    );
+
+    let full = fetch("application/json").await.unwrap();
+    assert_eq!(full.headers()[header::CONTENT_TYPE], INDEX_TYPES[1]);
+    assert_eq!(
+        fetch("text/html").await.unwrap().status(),
+        StatusCode::NOT_ACCEPTABLE
+    );
+
+    let held = harness
+        .client
+        .get(&url)
+        .header(header::ACCEPT, INDEX_TYPES[0])
+        .header(header::IF_NONE_MATCH, etag.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(held.status(), StatusCode::NOT_MODIFIED);
+    let port = harness.base.rsplit(':').next().unwrap();
+    let elsewhere = harness
+        .client
+        .get(&url)
+        .header(header::ACCEPT, INDEX_TYPES[0])
+        .header(header::HOST, format!("localhost:{port}"))
+        .header(header::IF_NONE_MATCH, etag)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(elsewhere.status(), StatusCode::OK);
+    assert!(elsewhere.text().await.unwrap().contains(&format!(
+        "\"http://localhost:{port}/registry/files/immutable.bin\""
+    )));
+    let foreign = harness
+        .client
+        .get(&url)
+        .header(header::HOST, "mirror.example:8740")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(foreign.status(), StatusCode::BAD_REQUEST);
+
+    let accepts = harness.upstream.accepts.lock().unwrap().clone();
+    assert!(
+        INDEX_TYPES
+            .iter()
+            .all(|media_type| accepts.iter().any(|accept| accept == media_type)),
+        "{accepts:?}"
+    );
+    assert!(
+        accepts
+            .iter()
+            .all(|accept| INDEX_TYPES.contains(&accept.as_str())),
+        "{accepts:?}"
+    );
 }

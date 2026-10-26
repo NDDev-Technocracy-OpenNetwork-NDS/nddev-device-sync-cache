@@ -54,7 +54,7 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
 | `cache.index.config` | The cache answered the crates.io sparse index `config.json` for a loopback client base. |
-| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, or an index configuration request from a host that is not loopback. |
+| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
 Alerts belong to the observability deployment. The cache supports these rules: a degraded store, repeated
@@ -66,6 +66,8 @@ expired heartbeat.
 | Symptom | Cause and action |
 | --- | --- |
 | `404` with `route_unknown`, `path_invalid` or `path_not_allowed` | The client asks for a path outside the allowlist. Correct the client setting from `contracts/clients.json`, or propose an allowlist change with a real-socket test. |
+| `406` with `not_acceptable` | The client accepts no representation the route serves, such as a PyPI client that takes only HTML pages. Use a client from `contracts/clients.json`. |
+| `400` with `host_not_loopback` | An index configuration or index document was requested through a host name that is not loopback. Point the client at the forwarded loopback address. |
 | `502` with `upstream_redirect` | Upstream redirected to a host outside the allowlist. |
 | `502` with `object_too_large` | The object exceeds `NDS_CACHE_MAX_OBJECT_BYTES`. |
 | `503` with `fetch_capacity` | All concurrent downloads are busy for longer than the admission wait; raise `NDS_CACHE_FETCHES` or wait. |

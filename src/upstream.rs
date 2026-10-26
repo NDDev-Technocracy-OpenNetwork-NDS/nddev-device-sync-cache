@@ -93,13 +93,18 @@ impl Upstream {
         Ok(Self { client })
     }
 
-    /// Fetches an object. Stored validators make the request conditional.
+    /// Fetches an object, in `media_type` when the object is one representation of an index
+    /// document. Stored validators make the request conditional.
     pub async fn fetch(
         &self,
         url: &str,
+        media_type: Option<&str>,
         stored: Option<&Validators>,
     ) -> Result<Fetched, UpstreamError> {
         let mut request = self.client.get(url);
+        if let Some(media_type) = media_type {
+            request = request.header(header::ACCEPT, media_type);
+        }
         if let Some(stored) = stored {
             if let Some(etag) = &stored.etag {
                 request = request.header(header::IF_NONE_MATCH, etag);
