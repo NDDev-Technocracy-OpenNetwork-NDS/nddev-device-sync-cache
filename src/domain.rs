@@ -119,6 +119,20 @@ impl Routes {
                     "https://storage.googleapis.com/chrome-for-testing-public",
                     chrome_for_testing,
                 ),
+                route(
+                    "crates-index",
+                    "/crates-index",
+                    "/crates-index/{path}",
+                    "https://index.crates.io",
+                    crates_index,
+                ),
+                route(
+                    "crates",
+                    "/crates",
+                    "/crates/{path}",
+                    "https://static.crates.io/crates",
+                    crates,
+                ),
             ],
             redirect_hosts: [
                 "static.rust-lang.org",
@@ -313,6 +327,73 @@ fn chrome_for_testing(path: &str) -> Option<Freshness> {
         .then_some(Freshness::Immutable)
 }
 
+/// The sparse index configuration for a client that reached the cache at `host`. Only a
+/// loopback host, the forwarded listener, is accepted, so the download URL in the generated
+/// configuration can never send a client elsewhere.
+pub fn crates_index_config(host: &str) -> Option<String> {
+    // `port` keeps its leading colon, or is empty when the host names no port.
+    let (name, port) = match host.strip_prefix("[::1]") {
+        Some(rest) => ("[::1]", rest),
+        None => host.split_at(host.find(':').unwrap_or(host.len())),
+    };
+    let port_valid = match port.strip_prefix(':') {
+        None => port.is_empty(),
+        Some(digits) => {
+            digits.bytes().all(|byte| byte.is_ascii_digit())
+                && digits.parse::<u16>().is_ok_and(|port| port > 0)
+        }
+    };
+    (matches!(name, "127.0.0.1" | "localhost" | "[::1]") && port_valid).then(|| {
+        format!("{{\"dl\":\"http://{host}/crates/{{crate}}/{{crate}}-{{version}}.crate\"}}")
+    })
+}
+
+/// Crate names: ASCII letters, digits, `-` and `_`, starting with a letter.
+fn crate_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name.as_bytes()[0].is_ascii_alphabetic()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+/// One sparse index file at its prefix directory: `1/a`, `2/ab`, `3/a/abc` or `ab/cd/abcd...`,
+/// always lowercase. `config.json` is not proxied: the cache answers it itself.
+fn crates_index(path: &str) -> Option<Freshness> {
+    let segments: Vec<&str> = path[1..].split('/').collect();
+    let name = *segments.last()?;
+    if !crate_name(name) || name.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        return None;
+    }
+    let placed = match (name.len(), segments.as_slice()) {
+        (1, ["1", _]) | (2, ["2", _]) => true,
+        (3, ["3", first, _]) => *first == &name[..1],
+        (length, [first, second, _]) if length >= 4 => {
+            *first == &name[..2] && *second == &name[2..4]
+        }
+        _ => false,
+    };
+    placed.then_some(Freshness::Revalidate)
+}
+
+/// `/{crate}/{crate}-{version}.crate`, the archive of one published version.
+fn crates(path: &str) -> Option<Freshness> {
+    let mut segments = path[1..].split('/');
+    let (Some(name), Some(file), None) = (segments.next(), segments.next(), segments.next()) else {
+        return None;
+    };
+    let version = file
+        .strip_suffix(".crate")?
+        .strip_prefix(name)?
+        .strip_prefix('-')?;
+    let semver = !version.is_empty()
+        && version.as_bytes()[0].is_ascii_digit()
+        && version
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'));
+    (crate_name(name) && semver).then_some(Freshness::Immutable)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,6 +476,65 @@ mod tests {
             "/chrome-for-testing/156.0.8078.47/linux64/chrome-linux64.zip/extra",
         ] {
             assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
+    }
+
+    #[test]
+    fn classifies_crates_io_objects() {
+        use Freshness::*;
+        for (path, freshness) in [
+            ("/crates-index/1/a", Revalidate),
+            ("/crates-index/2/ab", Revalidate),
+            ("/crates-index/3/s/syn", Revalidate),
+            ("/crates-index/to/ki/tokio", Revalidate),
+            ("/crates-index/se/rd/serde_json", Revalidate),
+            ("/crates/tokio/tokio-1.54.1.crate", Immutable),
+            ("/crates/Inflector/Inflector-0.11.4.crate", Immutable),
+            (
+                "/crates/zstd-sys/zstd-sys-2.0.16+zstd.1.5.7.crate",
+                Immutable,
+            ),
+        ] {
+            let route = path[1..].split('/').next().unwrap();
+            assert_eq!(class(path), Ok((route, freshness)), "{path}");
+        }
+        for path in [
+            "/crates-index/config.json",
+            "/crates-index/to/ki/Tokio",
+            "/crates-index/to/kx/tokio",
+            "/crates-index/3/x/syn",
+            "/crates-index/1/ab",
+            "/crates-index/to/tokio",
+            "/crates/tokio/serde-1.0.0.crate",
+            "/crates/tokio/tokio-.crate",
+            "/crates/tokio/tokio-latest.crate",
+            "/crates/tokio/1.54.1/download",
+        ] {
+            assert_eq!(class(path), Err(Rejection::NotAllowed), "{path}");
+        }
+    }
+
+    #[test]
+    fn the_index_configuration_points_downloads_at_the_loopback_base() {
+        assert_eq!(
+            crates_index_config("127.0.0.1:18740").as_deref(),
+            Some(r#"{"dl":"http://127.0.0.1:18740/crates/{crate}/{crate}-{version}.crate"}"#)
+        );
+        for host in ["localhost:8740", "[::1]:8740", "127.0.0.1"] {
+            assert!(crates_index_config(host).is_some(), "{host}");
+        }
+        for host in [
+            "evil.example:8740",
+            "127.0.0.1:0",
+            "127.0.0.1:99999",
+            "127.0.0.1:87a0",
+            "127.0.0.1:",
+            "127.0.0.1:8740/x",
+            "[::1]x",
+            "localhost.evil.example",
+            "",
+        ] {
+            assert_eq!(crates_index_config(host), None, "{host}");
         }
     }
 

@@ -243,3 +243,58 @@ async fn a_failed_download_fails_its_clients_and_leaves_no_object() {
     );
     assert_eq!(harness.hits(), 2);
 }
+
+#[tokio::test]
+async fn the_index_configuration_follows_the_client_base() {
+    let harness = Harness::start().await;
+    let response = harness
+        .client
+        .get(format!("{}/crates-index/config.json", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let config: serde_json::Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+    assert_eq!(
+        config,
+        serde_json::json!({ "dl": format!("{}/crates/{{crate}}/{{crate}}-{{version}}.crate", harness.base) })
+    );
+    let foreign = harness
+        .client
+        .get(format!("{}/crates-index/config.json", harness.base))
+        .header(header::HOST, "mirror.example:8740")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(foreign.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn a_client_holding_the_object_gets_not_modified() {
+    let harness = Harness::start().await;
+    harness.get("/origin/files/immutable.bin").await;
+    harness.committed(1).await;
+    let url = format!("{}/origin/files/immutable.bin", harness.base);
+    let stored = harness.client.get(&url).send().await.unwrap();
+    let etag = stored.headers()[header::ETAG].to_str().unwrap().to_owned();
+    assert!(etag.starts_with("\"sha256-"), "{etag}");
+    let held = harness
+        .client
+        .get(&url)
+        .header(header::IF_NONE_MATCH, &etag)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(held.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(held.headers()[header::ETAG], etag.as_str());
+    assert!(held.bytes().await.unwrap().is_empty());
+    let other = harness
+        .client
+        .get(&url)
+        .header(header::IF_NONE_MATCH, "\"sha256-other\"")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::OK);
+    assert_eq!(harness.hits(), 1);
+}
