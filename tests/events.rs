@@ -71,6 +71,30 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     );
     assert_eq!(harness.get("/origin/files/missing.bin").await.0, 404);
     assert_eq!(harness.get("/elsewhere/files/a").await.0, 404);
+    assert_eq!(harness.get("/crates-index/config.json").await.0, 200);
+    let foreign = harness
+        .client
+        .get(format!("{}/crates-index/config.json", harness.base))
+        .header(axum::http::header::HOST, "mirror.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(foreign.status().as_u16(), 400);
+    let stored = harness
+        .client
+        .get(format!("{}/origin/files/stream.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    let etag = stored.headers()[axum::http::header::ETAG].clone();
+    let held = harness
+        .client
+        .get(format!("{}/origin/files/stream.bin", harness.base))
+        .header(axum::http::header::IF_NONE_MATCH, etag)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(held.status().as_u16(), 304);
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1100)).await;
@@ -96,6 +120,7 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     };
     for name in [
         "cache.store.opened",
+        "cache.index.config",
         "cache.miss",
         "cache.joined",
         "cache.hit",

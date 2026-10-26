@@ -52,8 +52,12 @@
         "setting": {
           "type": "object",
           "minProperties": 1,
-          "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
-          "additionalProperties": {"type": "string", "pattern": "^\\{base\\}/"}
+          "description": "Environment variables or tool configuration keys. A value is a URL under the forwarded base, optionally with a sparse+ scheme prefix, or the name of a tool-local source that another setting defines.",
+          "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"},
+          "additionalProperties": {
+            "type": "string",
+            "anyOf": [{"pattern": "^(sparse\\+)?\\{base\\}/"}, {"pattern": "^[a-z][a-z0-9-]*$"}]
+          }
         },
         "acceptance": {
           "description": "real client: this tool completed through the deployed service; route only: the route served real upstream objects to an HTTP client; pending: not yet exercised.",

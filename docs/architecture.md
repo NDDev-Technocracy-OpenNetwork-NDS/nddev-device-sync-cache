@@ -53,6 +53,9 @@ holds acceleration state only: losing it costs downloads, not data.
 
 ## Current limits
 
+- Registry admission is a later increment: the crates routes proxy every published crate, and
+  Cargo verifies each archive against its index checksum.
+
 - Clients that refuse plain HTTP distribution URLs, such as some Gradle wrapper settings and Gradle
   Maven repositories, need the forwarded endpoint behind a local TLS terminator or a later TLS
   listener.
@@ -80,7 +83,8 @@ store directory live in the private estate.
 
 1. Toolchain downloads: rustup distribution, Flutter storage, python-build-standalone releases,
    Playwright browsers, Gradle and Go distributions, Chrome for Testing archives.
-2. crates.io sparse index and crate files.
+2. crates.io sparse index and crate files. The cache generates the index `config.json` for the
+   loopback base address of each client, so downloads return through the cache.
 3. npm registry for Bun and npm.
 4. PyPI simple index for uv.
 5. Go module proxy, checksum database and toolchain modules.

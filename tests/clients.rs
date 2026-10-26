@@ -46,6 +46,17 @@ fn client_settings_stay_inside_their_route() {
         for client in route["clients"].as_array().unwrap() {
             for (name, value) in client["setting"].as_object().unwrap() {
                 let value = value.as_str().unwrap();
+                if !value.contains("{base}") {
+                    // The name of a tool-local source that another setting defines.
+                    assert!(
+                        value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_lowercase() || byte == b'-'),
+                        "{name} = {value} is neither under the base nor a source name"
+                    );
+                    continue;
+                }
+                let value = value.strip_prefix("sparse+").unwrap_or(value);
                 assert!(
                     value == mount.trim_end_matches('/') || value.starts_with(&mount),
                     "{name} = {value} leaves {mount}"
