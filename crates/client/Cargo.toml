@@ -21,7 +21,7 @@ toml = { version = "0.9.8", default-features = false, features = ["std", "parse"
 tracing = "0.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-nddev-device-sync-adapter-io = { version = "=0.0.1-alpha.4", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-agent", rev = "a45a0d980d1e39260dfc7e6d6cbda55b02991d35" }
+nddev-device-sync-adapter-io = { version = "=0.0.1-alpha.4", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-agent", rev = "f0e21ef6cab88958479de142370179b779beb2fe" }
 rustix = { version = "1.1.5", features = ["process"] }
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
 
