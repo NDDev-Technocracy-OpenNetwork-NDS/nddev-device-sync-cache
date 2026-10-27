@@ -6,5 +6,6 @@ license: AGPL-3.0-only
 repository: NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache
 standards_lock: standarts.lock
 telemetry_commit: 586597486d67a48e190d1970653927d83beb687f
+runtime_manifest: contracts/module.json
 platforms:
   - linux

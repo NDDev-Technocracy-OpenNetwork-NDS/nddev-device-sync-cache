@@ -9,6 +9,9 @@ ARG NDS_SOURCE_COMMIT
 ENV NDS_SOURCE_COMMIT=${NDS_SOURCE_COMMIT}
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src ./src
+# The workspace also holds the device client, which Cargo loads to resolve the workspace.
+COPY crates ./crates
+COPY contracts ./contracts
 RUN test -n "$NDS_SOURCE_COMMIT" \
     && cargo build --locked --release --bin nddev-device-sync-cache --jobs 4
 

@@ -1,0 +1,24 @@
+{
+  "id": "cache",
+  "version": "0.0.1-alpha.1",
+  "api_version": 1,
+  "kind": "integration",
+  "platforms": [
+    "linux"
+  ],
+  "capabilities": [
+    "read_module_health",
+    "manage_device_state"
+  ],
+  "permissions": [
+    "local_network",
+    "user_service",
+    "process_execution"
+  ],
+  "dependencies": [
+    {
+      "id": "rds",
+      "minimum_api": 1
+    }
+  ]
+}

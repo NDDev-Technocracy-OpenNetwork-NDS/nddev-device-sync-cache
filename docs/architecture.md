@@ -47,9 +47,9 @@ Mutable objects are small. They are downloaded completely before they are served
 upstream validators and are revalidated after a bounded age; when revalidation fails, the stored copy
 is served and the stale response is reported.
 
-Package registries name their downloads by absolute upstream URL inside index documents: npm
-package documents link tarballs, PyPI project pages link release files and pub package
-documents link archives. Bun, uv, pip and pub fetch those URLs as written, so the cache serves such a document with its download links pointed at the
+Package registries name their downloads by absolute upstream URL inside index documents: PyPI
+project pages link release files and pub package documents link archives. uv, pip and pub fetch
+those URLs as written, so the cache serves such a document with its download links pointed at the
 client's base address, the loopback address of its forward. Only a link prefix that opens a JSON
 string is rewritten, while the document streams; hashes, integrity values and the rest of the
 document stay as upstream sent them, and the store keeps the upstream bytes. A request whose host
@@ -63,6 +63,12 @@ highest, requests that one upstream and stores each representation as its own ob
 that accepts none of them gets `406`. The PyPI route serves only the JSON form, which uv and pip
 prefer.
 
+npm package documents keep the public tarball links upstream sent. npm replaces the public
+registry host in a link with its configured registry, so it downloads through the cache while
+`package-lock.json` keeps the public links. Bun follows the links as written and records a
+configured registry in `bun.lock` whenever it saves the file again, so it is not a client of this
+route and the device client leaves it unbound.
+
 OCI pulls name the registry after the cache's address, for example
 `127.0.0.1:8740/docker.io/library/alpine:3`. The cache answers the `/v2/` check itself, asks the
 registry for every image manifest type, takes an anonymous token from the registry's allowlisted
@@ -74,6 +80,24 @@ cache stores them only when their bytes have the digest of their path. Responses
 The store has a configured capacity. Commits that would exceed it evict the least recently used
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
 holds acceleration state only: losing it costs downloads, not data.
+
+## Device client
+
+The module's device side is the `nddev-device-sync-cache-client` adapter in `crates/client`, built
+on the ADR 0014 template: a `NetworkCache` port with `status`, `bind` and `unbind`, the adapter
+behind it on adapter-io's local authority, and the `nds-cache` command. A binding projects one
+base onto one scope: the home of a user, or a CI lane whose jobs run with `HOME` at the lane prefix
+and their workspaces below it. Configuration files that tools read for a user get managed blocks,
+because they rank below project configuration; only tools without such a file get variables, from
+one environment file. Tools whose lockfiles record the resolving index, uv and pub, are not bound.
+A lane's Cargo configuration sits at the prefix, found by directory discovery, so the jobs'
+`CARGO_HOME` store is never written. The projection refuses a scope root that is not the user's
+own real directory, a lane whose jobs' environment would not read its files, a link in place of a
+file, foreign edits of the files it owns, a user file that already names a default registry, and a
+lower-ranked Cargo home configuration that names a source. It checks every file before it writes any,
+writes each atomically and restores the written ones on a failure. A bound scope fails closed;
+there is no automatic switch back to direct downloads. RDS owns the persistent forward and the
+device identity, so the client holds no credential.
 
 ## Current limits
 
@@ -111,7 +135,7 @@ store directory live in the private estate.
 2. crates.io sparse index and crate files. The cache generates the index `config.json` for the
    loopback base address of each client, so downloads return through the cache.
 3. npm registry for Bun and npm, and the PyPI simple index for uv and pip. Their index documents
-   are served per negotiated representation with download links pointed at the client base.
+   are served per negotiated representation; PyPI file links point at the client base.
 4. pub hosted repository for Dart and Flutter, through the same index documents.
 5. Maven Central, Google Maven and the Gradle Plugin Portal; Gradle reaches a plain-HTTP repository
    only through its explicit insecure-protocol opt-in.

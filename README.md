@@ -35,7 +35,7 @@ every other path before any upstream connection:
 | `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
 | `/crates-index/` | crates.io sparse index files; the cache generates `config.json` |
 | `/crates/` | crate archives of exact published versions |
-| `/npm/` | npm package documents and tarballs, for Bun and npm |
+| `/npm/` | npm package documents and tarballs, for npm |
 | `/pypi/` | PyPI simple index project pages in their JSON form |
 | `/pypi-files/` | PyPI release files and their core metadata |
 | `/pub/` | pub.dev package documents and archives, for Dart and Flutter |
@@ -48,9 +48,10 @@ every other path before any upstream connection:
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
 upstream validators and served stale when upstream fails. npm package documents, PyPI project
-pages and pub package documents are stored per representation the client accepts and served
-with their download links pointed at the loopback base address the client used, so the
-downloads come back through the cache.
+pages and pub package documents are stored per representation the client accepts. PyPI and pub
+documents are served with their download links pointed at the loopback base address the client
+used, so the downloads come back through the cache. npm documents keep their public links, which
+npm fetches through its configured registry, so `package-lock.json` stays public.
 `GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while
@@ -81,6 +82,54 @@ whether a real client or only the route has been accepted. A test keeps it equal
 route table. Clients keep their own digest and signature checks. Gradle builds pass
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
+
+## Device client
+
+[`crates/client`](crates/client) is the device side of the module, the
+`nddev-device-sync-cache-client` adapter that NDS composes with its `NetworkCache` port and the
+`nds-cache` command. `nds-cache bind --port PORT` binds the current user's tools to the cache base
+`http://127.0.0.1:PORT`, the cache listener on the cache host or the local port of the RDS forward
+elsewhere; `--lane DIR` binds a CI lane instead. It writes managed blocks into the user
+configuration of Cargo, pip and the go command; one environment file for rustup, Flutter,
+Playwright, uv's Python downloads and npm; npm's global configuration file that this environment
+file names; and the Gradle init script. User files rank below a project's own configuration, so
+project pins, lockfiles and private registries stay in force; a user file that names a default
+registry of its own is refused, never overwritten. uv, pub and Bun stay unbound: their lockfiles
+record the index they resolved against, so a bound default index would fail `uv sync --locked`
+and `dart pub get --enforce-lockfile` on committed lockfiles, and `bun add` would write the cache
+address into `bun.lock`. Bun reads npm's user file and variables but not npm's global
+configuration file, so npm is bound there; the user's `.npmrc` must not name a default registry.
+Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
+the cache does not answer, and `unbind` restores the earlier files. The client holds no
+credential: RDS owns the forward and the device identity. Its runtime manifest is
+[`contracts/module.json`](contracts/module.json).
+
+### CI lanes
+
+A lane is one runner prefix whose jobs run with `HOME` at the prefix and their workspaces below it.
+`nds-cache bind --port PORT --lane PREFIX` runs as the lane's user with the environment its job
+steps see, so that the runner's own selections stay as they are:
+
+- **Cargo:** the lane gets `PREFIX/.cargo/config.toml`, which Cargo finds by directory discovery
+  for every workspace below the prefix. The jobs' `CARGO_HOME` is a store that lanes may share and
+  maintenance may evict, so it is never written; binding refuses when its `config.toml` names a
+  source, which the lane's file would shadow.
+- **pip, go:** their user files below `HOME`, which therefore has to be the prefix, with
+  `XDG_CONFIG_HOME` and `GOENV` unset or at their defaults there.
+- **Untouched:** `CARGO_HOME`, `RUSTUP_HOME`, `GOMODCACHE`, `GOCACHE`, `GRADLE_USER_HOME` and the
+  package caches.
+- **Not bound in a lane:** the environment-file tools, npm among them, and Gradle, unless a
+  workflow opts in. The
+  same goes for Cargo run outside the prefix, and for container jobs.
+
+All of a lane's files live in its prefix, so binding and unbinding one lane changes no other lane
+and no personal profile. Bind and unbind only while the lane runs no job. A binding persists
+across jobs until an explicit unbind.
+
+Bound means central-only. While the forward or the cache is down, a download that the job's local
+caches cannot serve fails visibly. Nothing falls back to the public source on its own. That
+differs from an optional acceleration layer: locked and offline builds keep working from the
+lane's local caches, and the way back to direct downloads is `unbind`.
 
 ## Technology registry
 
