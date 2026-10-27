@@ -77,11 +77,8 @@ async fn binding_writes_every_file_and_unbinding_restores_the_scope() {
     // The user's own configuration that binding has to keep.
     std::fs::create_dir_all(root.path().join(".cargo")).unwrap();
     std::fs::write(scope.path(Target::Cargo), "[build]\njobs = 2\n").unwrap();
-    std::fs::write(
-        scope.path(Target::Npm),
-        "@corp:registry=https://npm.example.internal/\n",
-    )
-    .unwrap();
+    let npm_user = root.path().join(".npmrc");
+    std::fs::write(&npm_user, "@corp:registry=https://npm.example.internal/\n").unwrap();
     let before = snapshot(root.path());
 
     let base = ready_cache();
@@ -98,9 +95,18 @@ async fn binding_writes_every_file_and_unbinding_restores_the_scope() {
         cargo.starts_with("[build]\njobs = 2\n")
             && cargo.contains(&format!("sparse+{url}/crates-index/"))
     );
-    let npm = std::fs::read_to_string(scope.path(Target::Npm)).unwrap();
-    assert!(npm.starts_with("@corp:registry=") && npm.contains(&format!("registry={url}/npm/")));
+    // npm gets its own global file, which the environment names; Bun reads neither.
+    assert_eq!(
+        std::fs::read_to_string(&npm_user).unwrap(),
+        "@corp:registry=https://npm.example.internal/\n"
+    );
+    let npmrc = scope.path(Target::Npm);
     for (target, needle) in [
+        (Target::Npm, format!("registry={url}/npm/")),
+        (
+            Target::Environment,
+            format!("export npm_config_globalconfig='{}'", npmrc.display()),
+        ),
         (Target::Pip, format!("index-url = {url}/pypi/simple/")),
         (Target::Go, format!("GOPROXY={url}/goproxy")),
         (
@@ -120,7 +126,7 @@ async fn binding_writes_every_file_and_unbinding_restores_the_scope() {
     let status = client.unbind(CancellationToken::new()).await.unwrap();
     assert!(status.bindings.iter().all(|binding| !binding.bound));
     assert_eq!(snapshot(root.path()), before);
-    for target in [Target::Environment, Target::Pip, Target::Go] {
+    for target in [Target::Environment, Target::Npm, Target::Pip, Target::Go] {
         assert!(!scope.path(target).parent().unwrap().exists(), "{target:?}");
     }
     assert!(root.path().join(".cargo").is_dir() && root.path().join(".config").is_dir());
@@ -147,6 +153,24 @@ async fn a_registry_of_the_user_refuses_the_whole_binding() {
     std::fs::write(
         scope.path(Target::Go),
         "GOPROXY=https://goproxy.example.internal\n",
+    )
+    .unwrap();
+    let before = snapshot(root.path());
+    let client = client(scope, ready_cache());
+    assert_eq!(
+        client.bind(CancellationToken::new()).await,
+        Err(Error::Conflict)
+    );
+    assert_eq!(snapshot(root.path()), before);
+}
+
+#[tokio::test]
+async fn a_default_registry_in_the_user_npmrc_refuses_the_binding() {
+    let root = tempfile::tempdir().unwrap();
+    let scope = lane(root.path(), &[]).unwrap();
+    std::fs::write(
+        root.path().join(".npmrc"),
+        "registry=https://npm.example.internal/\n",
     )
     .unwrap();
     let before = snapshot(root.path());
@@ -218,7 +242,7 @@ async fn links_are_refused() {
     let scope = lane(root.path(), &[]).unwrap();
     let elsewhere = root.path().join("elsewhere");
     std::fs::write(&elsewhere, "").unwrap();
-    std::os::unix::fs::symlink(&elsewhere, scope.path(Target::Npm)).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, root.path().join(".npmrc")).unwrap();
     let client = client(scope, ready_cache());
     assert_eq!(
         client.bind(CancellationToken::new()).await,

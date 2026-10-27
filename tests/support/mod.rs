@@ -323,7 +323,6 @@ impl Harness {
                         media_types: INDEX_TYPES,
                         links: vec![format!("http://{origin}/")],
                         mount: "/registry/",
-                        verbatim: &["application/json"],
                     }),
                     ..route("/registry", "/registry/{path}", format!("http://{origin}"))
                 },

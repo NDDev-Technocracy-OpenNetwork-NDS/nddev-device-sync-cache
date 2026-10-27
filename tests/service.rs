@@ -331,16 +331,8 @@ async fn index_documents_are_negotiated_and_link_back_to_the_client_base() {
         (200, "miss", "immutable payload")
     );
 
-    // The verbatim representation keeps the upstream links and still varies by Accept.
     let full = fetch("application/json").await.unwrap();
     assert_eq!(full.headers()[header::CONTENT_TYPE], INDEX_TYPES[1]);
-    assert_eq!(full.headers()[header::VARY], "accept");
-    let verbatim: serde_json::Value = serde_json::from_str(&full.text().await.unwrap()).unwrap();
-    let upstream = verbatim["files"][0]["url"].as_str().unwrap();
-    assert!(
-        !upstream.starts_with(&harness.base) && upstream.ends_with("/files/immutable.bin"),
-        "{upstream}"
-    );
     assert_eq!(
         fetch("text/html").await.unwrap().status(),
         StatusCode::NOT_ACCEPTABLE

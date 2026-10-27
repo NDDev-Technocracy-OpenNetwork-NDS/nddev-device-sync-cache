@@ -285,13 +285,12 @@ impl Cache {
             .routes
             .resolve(path, accept)
             .map_err(ServeError::Rejected)?;
-        let links = match (target.index(), target.media_type) {
-            (Some(index), Some(media_type)) => Some(Links::new(
+        let links = match target.index() {
+            Some(index) => Some(Links::new(
                 index,
-                media_type,
                 base.ok_or(ServeError::Rejected(Rejection::HostNotLoopback))?,
             )),
-            _ => None,
+            None => None,
         };
         let key = target.key();
         if let Some((meta, path)) = self

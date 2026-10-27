@@ -4,8 +4,10 @@
 //! lower precedence than a project's own configuration, so a project that names a private
 //! registry keeps it. Tools that only read variables get them from one environment file. A user
 //! file that already names a default registry of its own is refused, never overwritten. Tools whose
-//! lockfiles record the index they resolved against, uv and pub, stay unbound, so a committed
-//! lockfile keeps resolving and verifying as written.
+//! lockfiles record the index they resolved against, uv, pub and Bun, stay unbound, so a committed
+//! lockfile keeps resolving and verifying as written. Bun reads npm's user file and variables, so
+//! npm gets a global configuration file of its own, which the environment file names and Bun does
+//! not read; the user's and the project's `.npmrc` keep their precedence over it.
 
 use std::fmt::Write as _;
 
@@ -49,6 +51,17 @@ pub const ENVIRONMENT: [(&str, &str); 6] = [
     ("NDS_CACHE_BASE", ""),
 ];
 
+/// The variable that points npm at the binding's global configuration file.
+pub const NPM_GLOBALCONFIG: &str = "npm_config_globalconfig";
+
+/// What a projection needs besides the base: the contract's Gradle init script, and where the
+/// scope keeps npm's global configuration file, which the environment file names.
+#[derive(Clone, Copy, Debug)]
+pub struct Projection<'a> {
+    pub gradle: &'a str,
+    pub npmrc: &'a str,
+}
+
 /// One file of the projection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -56,7 +69,7 @@ pub enum Target {
     Environment,
     /// Cargo's `config.toml`: the crates.io source replacement.
     Cargo,
-    /// `.npmrc`, which npm and Bun both read: the default registry.
+    /// npm's global configuration file, which the environment file names: the default registry.
     Npm,
     /// `pip.conf`: the global index.
     Pip,
@@ -89,20 +102,22 @@ impl Target {
 
     /// Whether the module owns the whole file rather than one block in it.
     fn owned(self) -> bool {
-        matches!(self, Self::Environment | Self::Gradle)
+        matches!(self, Self::Environment | Self::Npm | Self::Gradle)
     }
 
     /// The managed content for the base, without the block markers.
-    fn content(self, base: &Base, gradle: &str) -> String {
+    fn content(self, base: &Base, projection: &Projection) -> String {
         let url = base.url();
         match self {
             Self::Environment => {
-                ENVIRONMENT
+                let mut text = ENVIRONMENT
                     .iter()
                     .fold(String::new(), |mut text, (name, path)| {
                         let _ = writeln!(text, "export {name}='{url}{path}'");
                         text
-                    })
+                    });
+                let _ = writeln!(text, "export {NPM_GLOBALCONFIG}='{}'", projection.npmrc);
+                text
             }
             Self::Cargo => format!(
                 "[source.crates-io]\nreplace-with = \"nds-cache\"\n\n[source.nds-cache]\nregistry = \"sparse+{url}/crates-index/\"\n"
@@ -110,7 +125,7 @@ impl Target {
             Self::Npm => format!("registry={url}/npm/\n"),
             Self::Pip => format!("[global]\nindex-url = {url}/pypi/simple/\n"),
             Self::Go => format!("GOPROXY={url}/goproxy\n"),
-            Self::Gradle => gradle.to_owned(),
+            Self::Gradle => projection.gradle.to_owned(),
         }
     }
 
@@ -186,13 +201,19 @@ pub fn bound(
     target: Target,
     current: Option<&str>,
     base: &Base,
-    gradle: &str,
+    projection: &Projection,
 ) -> Result<String, BlockError> {
-    let content = target.content(base, gradle);
+    // The environment file quotes the path for the shell that sources it.
+    if target == Target::Environment && projection.npmrc.contains(['\'', '\n']) {
+        return Err(BlockError::Invalid);
+    }
+    let content = target.content(base, projection);
     if target.owned() {
         return match current {
             None => Ok(owned_content(target, content)),
-            Some(text) if is_owned(target, text, gradle) => Ok(owned_content(target, content)),
+            Some(text) if is_owned(target, text, projection.gradle) => {
+                Ok(owned_content(target, content))
+            }
             Some(_) => Err(BlockError::Conflict),
         };
     }
@@ -243,6 +264,13 @@ pub fn yields(target: Target, current: &str) -> Result<(), BlockError> {
     target.check(&rest)
 }
 
+/// Refuses a file of the same tool that ranks above the binding's own unless it defers to it:
+/// it names no default source and holds no block of an earlier binding.
+pub fn defers(target: Target, current: &str) -> Result<(), BlockError> {
+    refuse(current.contains(BEGIN))?;
+    target.check(current)
+}
+
 /// Whether the file holds the binding.
 pub fn is_bound(target: Target, current: &str, gradle: &str) -> bool {
     if target.owned() {
@@ -272,13 +300,17 @@ mod tests {
     use super::*;
 
     const GRADLE: &str = "// gradle init\n";
+    const PROJECTION: Projection = Projection {
+        gradle: GRADLE,
+        npmrc: "/home/u/.config/nds-cache/npmrc",
+    };
 
     fn base() -> Base {
         Base::new(18740).unwrap()
     }
 
     fn bind(target: Target, current: Option<&str>) -> Result<String, BlockError> {
-        bound(target, current, &base(), GRADLE)
+        bound(target, current, &base(), &PROJECTION)
     }
 
     #[test]
@@ -286,11 +318,22 @@ mod tests {
         let text = bind(Target::Environment, None).unwrap();
         assert!(text.contains("export RUSTUP_DIST_SERVER='http://127.0.0.1:18740/rustup'\n"));
         assert!(text.contains("export NDS_CACHE_BASE='http://127.0.0.1:18740'\n"));
-        assert_eq!(text.matches("export ").count(), ENVIRONMENT.len());
-        assert!(!text.contains("npm") && !text.contains("GOPROXY") && !text.contains("simple"));
+        assert!(
+            text.contains("export npm_config_globalconfig='/home/u/.config/nds-cache/npmrc'\n")
+        );
+        assert_eq!(text.matches("export ").count(), ENVIRONMENT.len() + 1);
+        assert!(!text.contains("/npm/") && !text.contains("GOPROXY") && !text.contains("simple"));
         // uv and pub record the index in their lockfiles, so neither is bound.
         assert!(!text.contains("PUB_HOSTED_URL") && !text.contains("/pub'"));
         assert!(Base::new(0).is_none());
+        let quoted = Projection {
+            npmrc: "/home/o'brien/.config/nds-cache/npmrc",
+            ..PROJECTION
+        };
+        assert_eq!(
+            bound(Target::Environment, None, &base(), &quoted),
+            Err(BlockError::Invalid)
+        );
     }
 
     #[test]
@@ -302,7 +345,7 @@ mod tests {
             Target::Cargo,
             Some(&once),
             &Base::new(18741).unwrap(),
-            GRADLE,
+            &PROJECTION,
         )
         .unwrap();
         assert_eq!(moved.matches(BEGIN).count(), 1);
@@ -312,12 +355,12 @@ mod tests {
             Some(own)
         );
         // A file the binding created is removed again; one it found empty stays.
-        let created = bind(Target::Npm, None).unwrap();
+        let created = bind(Target::Pip, None).unwrap();
         assert!(created.contains(CREATED));
-        assert_eq!(unbound(Target::Npm, &created, GRADLE).unwrap(), None);
-        let found_empty = bind(Target::Npm, Some("")).unwrap();
+        assert_eq!(unbound(Target::Pip, &created, GRADLE).unwrap(), None);
+        let found_empty = bind(Target::Pip, Some("")).unwrap();
         assert_eq!(
-            unbound(Target::Npm, &found_empty, GRADLE)
+            unbound(Target::Pip, &found_empty, GRADLE)
                 .unwrap()
                 .as_deref(),
             Some("")
@@ -340,8 +383,6 @@ mod tests {
                 Target::Cargo,
                 "source.crates-io.replace-with = \"m\"\n[source.m]\nregistry = \"sparse+https://m/\"\n",
             ),
-            (Target::Npm, "registry = https://npm.example.internal/\n"),
-            (Target::Npm, "Registry=https://npm.example.internal/\n"),
             (Target::Pip, "[global]\ntimeout = 60\n"),
             (Target::Go, "GOPROXY=https://goproxy.example.internal\n"),
         ] {
@@ -353,10 +394,6 @@ mod tests {
         }
         // Scoped registries, other pip sections and other indexes stay the user's own.
         for (target, own) in [
-            (
-                Target::Npm,
-                "@corp:registry=https://npm.example.internal/\n# registry=old\n",
-            ),
             (
                 Target::Pip,
                 "[install]\nindex-url = https://pypi.example.internal/simple\n",
@@ -370,6 +407,24 @@ mod tests {
             bind(Target::Cargo, Some("[build\n")),
             Err(BlockError::Invalid)
         );
+    }
+
+    #[test]
+    fn the_user_npmrc_leaves_the_default_registry_to_the_binding() {
+        for foreign in [
+            "registry = https://npm.example.internal/\n",
+            "Registry=https://npm.example.internal/\n",
+            &format!("{BEGIN}\nregistry=http://127.0.0.1:18740/npm/\n{END}\n"),
+        ] {
+            assert_eq!(
+                defers(Target::Npm, foreign),
+                Err(BlockError::Conflict),
+                "{foreign}"
+            );
+        }
+        // Scoped registries and credentials stay the user's own.
+        let own = "@corp:registry=https://npm.example.internal/\n//npm.example.internal/:_authToken=x\n# registry=old\n";
+        assert_eq!(defers(Target::Npm, own), Ok(()));
     }
 
     #[test]
@@ -391,6 +446,13 @@ mod tests {
         );
         assert_eq!(
             bind(Target::Environment, Some("export A=1\n")),
+            Err(BlockError::Conflict)
+        );
+        assert_eq!(
+            bind(
+                Target::Npm,
+                Some("registry=https://npm.example.internal/\n")
+            ),
             Err(BlockError::Conflict)
         );
         assert_eq!(unbound(Target::Gradle, GRADLE, GRADLE), Ok(None));
@@ -429,7 +491,7 @@ mod tests {
         for (name, value) in [
             ("source.crates-io.replace-with", "nds-cache"),
             ("source.nds-cache.registry", "sparse+{base}/crates-index/"),
-            ("npm_config_registry", "{base}/npm/"),
+            ("registry", "{base}/npm/"),
             ("PIP_INDEX_URL", "{base}/pypi/simple/"),
             ("GOPROXY", "{base}/goproxy"),
         ] {
@@ -438,7 +500,7 @@ mod tests {
             assert!(
                 Target::ALL
                     .iter()
-                    .any(|target| target.content(&base(), GRADLE).contains(&written)),
+                    .any(|target| target.content(&base(), &PROJECTION).contains(&written)),
                 "{name}"
             );
         }

@@ -47,9 +47,9 @@ Mutable objects are small. They are downloaded completely before they are served
 upstream validators and are revalidated after a bounded age; when revalidation fails, the stored copy
 is served and the stale response is reported.
 
-Package registries name their downloads by absolute upstream URL inside index documents: npm
-package documents link tarballs, PyPI project pages link release files and pub package
-documents link archives. Bun, uv, pip and pub fetch those URLs as written, so the cache serves such a document with its download links pointed at the
+Package registries name their downloads by absolute upstream URL inside index documents: PyPI
+project pages link release files and pub package documents link archives. uv, pip and pub fetch
+those URLs as written, so the cache serves such a document with its download links pointed at the
 client's base address, the loopback address of its forward. Only a link prefix that opens a JSON
 string is rewritten, while the document streams; hashes, integrity values and the rest of the
 document stay as upstream sent them, and the store keeps the upstream bytes. A request whose host
@@ -63,12 +63,11 @@ highest, requests that one upstream and stores each representation as its own ob
 that accepts none of them gets `406`. The PyPI route serves only the JSON form, which uv and pip
 prefer.
 
-A route can serve a representation verbatim, with its links as upstream sent them. npm asks for
-the full package document and replaces the public registry host in its links with its configured
-registry, so it still downloads through the cache, while the `package-lock.json` it writes keeps
-the public links that every other machine can resolve. The npm route therefore serves the full
-document verbatim and rewrites only the install document, which Bun asks for and follows as
-written.
+npm package documents keep the public tarball links upstream sent. npm replaces the public
+registry host in a link with its configured registry, so it downloads through the cache while
+`package-lock.json` keeps the public links. Bun follows the links as written and records a
+configured registry in `bun.lock` whenever it saves the file again, so it is not a client of this
+route and the device client leaves it unbound.
 
 OCI pulls name the registry after the cache's address, for example
 `127.0.0.1:8740/docker.io/library/alpine:3`. The cache answers the `/v2/` check itself, asks the
@@ -136,7 +135,7 @@ store directory live in the private estate.
 2. crates.io sparse index and crate files. The cache generates the index `config.json` for the
    loopback base address of each client, so downloads return through the cache.
 3. npm registry for Bun and npm, and the PyPI simple index for uv and pip. Their index documents
-   are served per negotiated representation with download links pointed at the client base.
+   are served per negotiated representation; PyPI file links point at the client base.
 4. pub hosted repository for Dart and Flutter, through the same index documents.
 5. Maven Central, Google Maven and the Gradle Plugin Portal; Gradle reaches a plain-HTTP repository
    only through its explicit insecure-protocol opt-in.

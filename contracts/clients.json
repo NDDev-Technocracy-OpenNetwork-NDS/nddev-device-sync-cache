@@ -124,19 +124,13 @@
       "id": "npm",
       "prefix": "/npm",
       "upstream": "https://registry.npmjs.org",
-      "objects": "Package documents in the representation the client accepts, the install document or the full document, revalidated and served with their tarball links pointed at this route of the client's base address; tarballs of exact published versions, which clients check against the integrity in the document.",
+      "objects": "Package documents in the representation the client accepts, the install document or the full document, revalidated and served with the public tarball links upstream sent; tarballs of exact published versions, which clients check against the integrity in the document.",
       "clients": [
         {
-          "tool": "bun install",
-          "setting": {"BUN_CONFIG_REGISTRY": "{base}/npm/"},
-          "acceptance": "real client",
-          "limits": "A bun.lock written through the cache records the forwarded base in its tarball URLs, so create and update lockfiles against the public registry; bun install --frozen-lockfile with such a lockfile fetches its tarballs through the cache."
-        },
-        {
           "tool": "npm install and npm ci",
-          "setting": {"npm_config_registry": "{base}/npm/"},
+          "setting": {"registry": "{base}/npm/"},
           "acceptance": "real client",
-          "limits": "Audit, search, login and publish endpoints are not proxied; run npm without audit. npm asks for the full document, which the cache serves with its public tarball links; npm's default replace-registry-host fetches them through the cache, and the package-lock.json it writes keeps registry.npmjs.org. A project that sets replace-registry-host to never downloads tarballs directly."
+          "limits": "nds-cache bind writes the registry into a global configuration file of its own, which npm_config_globalconfig in the environment file names, because Bun reads npm's user file and variables but not that file; npm is bound where the environment file applies. The user's and the project's .npmrc rank above it, and while bound npm reads it in place of its default global file. npm's default replace-registry-host fetches the public tarball links of a package document through the cache, so package-lock.json keeps registry.npmjs.org; a project that sets replace-registry-host to never downloads tarballs directly. Audit, search, login and publish endpoints are not proxied; run npm without audit."
         }
       ]
     },
