@@ -255,3 +255,44 @@ async fn links_are_refused() {
     assert_eq!(lane(&linked_root, &[]), Err(Error::Conflict));
     assert!(lane(Path::new("relative"), &[]).is_err());
 }
+
+#[tokio::test]
+async fn a_scope_another_binder_holds_answers_busy_and_stays_unchanged() {
+    let root = tempfile::tempdir().unwrap();
+    let held = std::fs::File::open(root.path()).unwrap();
+    rustix::fs::flock(&held, rustix::fs::FlockOperation::LockExclusive).unwrap();
+    let client = client(lane(root.path(), &[]).unwrap(), ready_cache());
+    assert_eq!(
+        client.bind(CancellationToken::new()).await,
+        Err(Error::Busy)
+    );
+    assert!(snapshot(root.path()).is_empty());
+    drop(held);
+    assert!(client.bind(CancellationToken::new()).await.is_ok());
+}
+
+#[tokio::test]
+async fn binds_of_one_scope_run_one_at_a_time() {
+    let root = tempfile::tempdir().unwrap();
+    let base = ready_cache();
+    let scope = lane(root.path(), &[]).unwrap();
+    let (first, second) = (
+        client(scope.clone(), base.clone()),
+        client(scope.clone(), base),
+    );
+    let (one, two) = tokio::join!(
+        first.bind(CancellationToken::new()),
+        second.bind(CancellationToken::new())
+    );
+    assert!(one.is_ok() && two.is_ok(), "{one:?} {two:?}");
+    let cargo = std::fs::read_to_string(scope.path(Target::Cargo)).unwrap();
+    assert_eq!(cargo.matches(BEGIN).count(), 1);
+    assert!(
+        snapshot(root.path())
+            .iter()
+            .all(|(name, _)| !name.contains("nds-cache.") || !name.ends_with(".tmp")),
+        "no temporary file is left"
+    );
+    first.unbind(CancellationToken::new()).await.unwrap();
+    assert!(snapshot(root.path()).is_empty());
+}

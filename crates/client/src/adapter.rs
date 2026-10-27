@@ -216,6 +216,7 @@ impl NetworkCache for Client {
                 if !ready(base) {
                     return Err(Error::NotReady);
                 }
+                let _lock = ScopeLock::acquire(&scope.home)?;
                 // Every file is checked before any is written, so a refusal changes nothing.
                 if let Some(text) = scope.below.as_deref().map(read).transpose()?.flatten() {
                     binding::yields(Target::Cargo, &text)?;
@@ -246,6 +247,7 @@ impl NetworkCache for Client {
     async fn unbind(&self, cancellation: CancellationToken) -> Result<view::Status, Error> {
         let unbound = self
             .run(cancellation, |scope, base| {
+                let _lock = ScopeLock::acquire(&scope.home)?;
                 let mut changes = Vec::new();
                 for target in Target::ALL {
                     let path = scope.path(target);
@@ -281,17 +283,62 @@ fn report(name: &'static str, result: &Result<view::Status, Error>) {
     }
 }
 
-/// Writes every change, and on a failure restores the files already changed.
+/// Writes every change, each only while its file still holds what the preflight read, and on a
+/// failure restores the files already changed. A restore that fails leaves the scope `Uncertain`.
 fn apply(changes: &[(PathBuf, Option<String>, Option<String>)]) -> Result<(), Error> {
-    for (index, (path, _, updated)) in changes.iter().enumerate() {
-        if let Err(error) = place(path, updated.as_deref()) {
-            for (path, earlier, _) in &changes[..index] {
-                let _ = place(path, earlier.as_deref());
-            }
-            return Err(error);
+    apply_with(changes, place)
+}
+
+fn apply_with(
+    changes: &[(PathBuf, Option<String>, Option<String>)],
+    place: impl Fn(&Path, Option<&str>) -> Result<(), Error>,
+) -> Result<(), Error> {
+    for (index, (path, earlier, updated)) in changes.iter().enumerate() {
+        // The scope lock keeps other binders out; this catches an editor that wrote meanwhile.
+        let written = match read(path) {
+            Ok(current) if current == *earlier => place(path, updated.as_deref()),
+            Ok(_) => Err(Error::Conflict),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = written {
+            let restored = changes[..index]
+                .iter()
+                .all(|(path, earlier, _)| place(path, earlier.as_deref()).is_ok());
+            return Err(if restored { error } else { Error::Uncertain });
         }
     }
     Ok(())
+}
+
+/// How long a bind or unbind waits for another one of the same scope before it answers `Busy`.
+const SCOPE_WAIT: Duration = Duration::from_secs(10);
+
+/// An exclusive advisory lock on the scope's home directory, so that binds and unbinds of one
+/// scope, by NDS and by the CLI alike, run one at a time. Locking the directory itself leaves no
+/// file behind, and the lock ends when this is dropped or the process exits.
+struct ScopeLock {
+    _held: std::fs::File,
+}
+
+impl ScopeLock {
+    fn acquire(home: &Path) -> Result<Self, Error> {
+        use rustix::{
+            fs::{FlockOperation, flock},
+            io::Errno,
+        };
+        let directory = std::fs::File::open(home).map_err(|_| IoError::Unavailable)?;
+        let deadline = std::time::Instant::now() + SCOPE_WAIT;
+        loop {
+            match flock(&directory, FlockOperation::NonBlockingLockExclusive) {
+                Ok(()) => return Ok(Self { _held: directory }),
+                Err(Errno::WOULDBLOCK) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(Errno::WOULDBLOCK) => return Err(Error::Busy),
+                Err(_) => return Err(IoError::Unavailable.into()),
+            }
+        }
+    }
 }
 
 fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
@@ -339,9 +386,15 @@ fn place(path: &Path, content: Option<&str>) -> Result<(), Error> {
     if std::fs::symlink_metadata(parent).is_ok_and(|metadata| !metadata.is_dir()) {
         return Err(Error::Conflict);
     }
-    let temporary = path.with_extension("nds-cache.tmp");
+    // Each write gets its own temporary file, so two writers never share one.
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let serial = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temporary = path.with_extension(format!("nds-cache.{}.{serial}.tmp", std::process::id()));
     let written = (|| {
-        let mut file = std::fs::File::create(&temporary)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
         file.write_all(content.as_bytes())?;
         file.sync_all()?;
         if let Ok(metadata) = std::fs::metadata(path) {
@@ -373,4 +426,52 @@ fn ready(base: &Base) -> bool {
     }
     let mut head = [0u8; 12];
     stream.read_exact(&mut head).is_ok() && head.starts_with(b"HTTP/1.1 200")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_that_changed_after_the_preflight_is_left_alone() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        std::fs::write(&path, "edited\n").unwrap();
+        let changes = [(
+            path.clone(),
+            Some("before\n".to_owned()),
+            Some("bound\n".to_owned()),
+        )];
+        assert_eq!(apply(&changes), Err(Error::Conflict));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "edited\n");
+    }
+
+    #[test]
+    fn a_restore_that_fails_leaves_the_scope_uncertain() {
+        let root = tempfile::tempdir().unwrap();
+        let (first, second) = (root.path().join("a"), root.path().join("b"));
+        let changes = [
+            (first.clone(), None, Some("a".to_owned())),
+            (second.clone(), None, Some("b".to_owned())),
+        ];
+        // The second write fails; whether its restore works decides the answer.
+        let calls = &std::cell::Cell::new(0);
+        let failing = |restore_works: bool| {
+            calls.set(0);
+            move |path: &Path, content: Option<&str>| {
+                calls.set(calls.get() + 1);
+                match calls.get() {
+                    2 => Err(IoError::Unavailable.into()),
+                    3 if !restore_works => Err(IoError::Unavailable.into()),
+                    _ => place(path, content),
+                }
+            }
+        };
+        assert_eq!(
+            apply_with(&changes, failing(true)),
+            Err(IoError::Unavailable.into())
+        );
+        assert!(!first.exists() && !second.exists());
+        assert_eq!(apply_with(&changes, failing(false)), Err(Error::Uncertain));
+    }
 }
