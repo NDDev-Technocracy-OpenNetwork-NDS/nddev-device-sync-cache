@@ -41,6 +41,9 @@ pub struct Index {
     pub links: Vec<String>,
     /// The cache path that serves those downloads.
     pub mount: &'static str,
+    /// Representations served with their links as upstream sent them, for clients that point
+    /// those links at their configured registry themselves and keep them in their lockfiles.
+    pub verbatim: &'static [&'static str],
 }
 
 /// Leaves a subpath as the client sent it.
@@ -221,6 +224,10 @@ impl Routes {
                             "http://registry.npmjs.org/".into(),
                         ],
                         mount: "/npm/",
+                        // npm asks for the full document and replaces the public registry host
+                        // with its configured one, so package-lock.json keeps public links. Bun
+                        // asks for the install document and fetches its links as written.
+                        verbatim: &["application/json"],
                     }),
                     ..route(
                         "npm",
@@ -235,6 +242,7 @@ impl Routes {
                         media_types: &["application/vnd.pypi.simple.v1+json"],
                         links: vec!["https://files.pythonhosted.org/".into()],
                         mount: "/pypi-files/",
+                        verbatim: &[],
                     }),
                     ..route("pypi", "/pypi", "/pypi/{path}", "https://pypi.org", pypi)
                 },
@@ -250,6 +258,7 @@ impl Routes {
                         media_types: &["application/vnd.pub.v2+json"],
                         links: vec!["https://pub.dev/".into()],
                         mount: "/pub/",
+                        verbatim: &[],
                     }),
                     ..route("pub", "/pub", "/pub/{path}", "https://pub.dev", pub_hosted)
                 },
@@ -624,7 +633,8 @@ fn quality(media_type: &str, accept: &str) -> f32 {
 
 /// Streams an index document with its download links pointing at `{base}{mount}`. A link is
 /// rewritten only where it opens a JSON string, so hashes and other values stay as upstream
-/// sent them, and a link split across chunks is held until it completes.
+/// sent them, and a link split across chunks is held until it completes. A verbatim
+/// representation passes through unchanged.
 pub struct Links {
     links: Vec<Vec<u8>>,
     replacement: Vec<u8>,
@@ -633,11 +643,13 @@ pub struct Links {
 }
 
 impl Links {
-    pub fn new(index: &Index, base: &str) -> Self {
+    pub fn new(index: &Index, media_type: &str, base: &str) -> Self {
+        let rewritten = !index.verbatim.contains(&media_type);
         Self {
             links: index
                 .links
                 .iter()
+                .filter(|_| rewritten)
                 .map(|link| format!("\"{link}").into_bytes())
                 .collect(),
             replacement: format!("\"{base}{}", index.mount).into_bytes(),
@@ -1513,7 +1525,11 @@ mod tests {
         let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://registry.npmjs.org/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         let expected = br#"{"versions":{"1.0.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         for size in 1..=document.len() {
-            let mut links = Links::new(&index, "http://127.0.0.1:18740");
+            let mut links = Links::new(
+                &index,
+                "application/vnd.npm.install-v1+json",
+                "http://127.0.0.1:18740",
+            );
             let mut out = Vec::new();
             for chunk in document.chunks(size) {
                 out.extend(links.push(chunk));
@@ -1525,6 +1541,22 @@ mod tests {
                 "chunk size {size}"
             );
         }
+    }
+
+    #[test]
+    fn the_full_npm_document_keeps_its_public_links() {
+        let routes = Routes::production();
+        let npm = routes
+            .routes()
+            .iter()
+            .find(|route| route.id == "npm")
+            .unwrap();
+        let index = npm.index.clone().unwrap();
+        let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz"}}}}"#;
+        let mut links = Links::new(&index, "application/json", "http://127.0.0.1:18740");
+        let mut out = links.push(document);
+        out.extend(links.finish());
+        assert_eq!(out, document);
     }
 
     #[test]

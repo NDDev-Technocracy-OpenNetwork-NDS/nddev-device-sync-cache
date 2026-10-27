@@ -63,6 +63,13 @@ highest, requests that one upstream and stores each representation as its own ob
 that accepts none of them gets `406`. The PyPI route serves only the JSON form, which uv and pip
 prefer.
 
+A route can serve a representation verbatim, with its links as upstream sent them. npm asks for
+the full package document and replaces the public registry host in its links with its configured
+registry, so it still downloads through the cache, while the `package-lock.json` it writes keeps
+the public links that every other machine can resolve. The npm route therefore serves the full
+document verbatim and rewrites only the install document, which Bun asks for and follows as
+written.
+
 OCI pulls name the registry after the cache's address, for example
 `127.0.0.1:8740/docker.io/library/alpine:3`. The cache answers the `/v2/` check itself, asks the
 registry for every image manifest type, takes an anonymous token from the registry's allowlisted
