@@ -99,7 +99,15 @@ record the index they resolved against, so a bound default index would fail `uv 
 and `dart pub get --enforce-lockfile` on committed lockfiles, and `bun add` would write the cache
 address into `bun.lock`. Bun reads npm's user file and variables but not npm's global
 configuration file, so npm is bound there; the user's `.npmrc` must not name a default registry.
-Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
+Binds and unbinds of one scope run one at a time, under an exclusive lock on the scope's home
+directory that leaves no file behind; one that waits more than 10 s answers `busy`. Each file is
+re-read right before its write and written only while it still holds what the preflight read, so
+an edit made meanwhile answers `conflict`. This check is advisory, among binders that take the
+lock, not an atomic compare-and-swap against every editor. On a failure the files already written
+are restored, each only while it still holds what the client wrote; a file edited since stays as
+it is, and then, as when a restore fails, the answer is `uncertain` and the status has to be read
+back. Files are written through a private temporary file of their own; a new file stays private,
+and an existing one keeps its permissions. Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
 the cache does not answer, and `unbind` restores the earlier files. The client holds no
 credential: RDS owns the forward and the device identity. Its runtime manifest is
 [`contracts/module.json`](contracts/module.json).

@@ -39,6 +39,12 @@ pub enum Error {
     /// Binding needs a cache that answers on its base.
     #[error("the cache does not answer on its base")]
     NotReady,
+    /// Another bind or unbind of the same scope is in progress; nothing was changed.
+    #[error("another bind or unbind of this scope is in progress")]
+    Busy,
+    /// A change failed and could not be fully undone; read the scope's status back.
+    #[error("the scope may be partly changed; read its status back")]
+    Uncertain,
     #[error("the network cache client is not supported on this platform")]
     UnsupportedPlatform,
 }
@@ -61,6 +67,8 @@ impl Error {
             Self::Conflict => "conflict",
             Self::Invalid => "invalid",
             Self::NotReady => "not_ready",
+            Self::Busy => "busy",
+            Self::Uncertain => "uncertain",
             Self::UnsupportedPlatform => "unsupported_platform",
         }
     }
