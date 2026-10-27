@@ -93,9 +93,11 @@ one environment file. Tools whose lockfiles record the resolving index, uv and p
 A lane's Cargo configuration sits at the prefix, found by directory discovery, so the jobs'
 `CARGO_HOME` store is never written. The projection refuses a scope root that is not the user's
 own real directory, a lane whose jobs' environment would not read its files, a link in place of a
-file, foreign edits of the files it owns, a user file that already names a default registry, and a
-lower-ranked Cargo home configuration that names a source. It checks every file before it writes any,
-writes each atomically and restores the written ones on a failure. A bound scope fails closed;
+file, foreign edits of the files it owns, a user file that already names a default registry, a
+file above its 1 MiB read bound or one the binding would grow past it, and a lower-ranked Cargo
+home configuration that names a source. It checks every file before it writes any, writes each
+atomically and restores the written ones on a failure; a failure it cannot undo, or a read-back
+that fails after the writes, answers `uncertain`. A bound scope fails closed;
 there is no automatic switch back to direct downloads. RDS owns the persistent forward and the
 device identity, so the client holds no credential.
 

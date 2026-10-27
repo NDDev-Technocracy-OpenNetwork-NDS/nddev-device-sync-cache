@@ -7,7 +7,7 @@
 //! the project-scoped Gradle init script. User files rank below a project's own configuration, so
 //! project pins, lockfiles and private registries stay in force; a user file that names a
 //! default registry of its own is refused, never overwritten. Every write is atomic, and a
-//! refusal or failure leaves the scope as it was.
+//! refusal or failure leaves the scope as it was; only [`Error::Uncertain`] says it may be changed.
 //!
 //! A bound scope fails closed: its tools reach only the cache, which reports itself not ready
 //! when it does not answer, and `unbind` is the explicit way back to direct downloads. The base is
@@ -42,7 +42,8 @@ pub enum Error {
     /// Another bind or unbind of the same scope is in progress; nothing was changed.
     #[error("another bind or unbind of this scope is in progress")]
     Busy,
-    /// A change failed and could not be fully undone; read the scope's status back.
+    /// The scope may be changed: a change failed and could not be fully undone, or the scope
+    /// could not be read back after its writes; read its status back.
     #[error("the scope may be partly changed; read its status back")]
     Uncertain,
     #[error("the network cache client is not supported on this platform")]
