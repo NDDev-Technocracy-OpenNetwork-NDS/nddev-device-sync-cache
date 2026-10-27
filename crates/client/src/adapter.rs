@@ -11,7 +11,7 @@ use std::{
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const PROBE: Duration = Duration::from_secs(3);
@@ -234,10 +234,14 @@ impl NetworkCache for Client {
                     let path = scope.path(target);
                     let current = read(&path)?;
                     let updated = binding::bound(target, current.as_deref(), base, &projection)?;
+                    // A file the binding grows past the limit could not be read back or unbound.
+                    if updated.len() as u64 > FILE_LIMIT {
+                        return Err(Error::Invalid);
+                    }
                     changes.push((path, current, Some(updated)));
                 }
                 apply(&changes)?;
-                status(scope, base)
+                read_back(scope, base, &changes)
             })
             .await;
         report("cache.client.bound", &bound);
@@ -266,7 +270,7 @@ impl NetworkCache for Client {
                         let _ = std::fs::remove_dir(parent);
                     }
                 }
-                status(scope, base)
+                read_back(scope, base, &changes)
             })
             .await;
         report("cache.client.unbound", &unbound);
@@ -358,6 +362,22 @@ impl ScopeLock {
     }
 }
 
+/// The status once the changes were applied. Written files stand, so a failure to read the scope
+/// back then is `Uncertain`, never a refusal that would claim nothing changed.
+fn read_back(
+    scope: &Scope,
+    base: &Base,
+    changes: &[(PathBuf, Option<String>, Option<String>)],
+) -> Result<view::Status, Error> {
+    status(scope, base).map_err(|error| {
+        if changes.is_empty() {
+            error
+        } else {
+            Error::Uncertain
+        }
+    })
+}
+
 fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
     let mut bindings = Vec::new();
     for target in Target::ALL {
@@ -374,19 +394,48 @@ fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
     })
 }
 
-/// The content of a regular file, `None` when absent; a link is refused.
+/// The most a scope file may hold; the configuration files the client edits stay far below it.
+const FILE_LIMIT: u64 = 1 << 20;
+
+/// The content of a regular file of at most `FILE_LIMIT` bytes, `None` when absent; a link or
+/// any other kind of file is refused, also one that replaced the file after the first look, and a
+/// larger file is invalid.
 fn read(path: &Path) -> Result<Option<String>, Error> {
+    use rustix::{
+        fs::{Mode, OFlags},
+        io::Errno,
+    };
     match std::fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(IoError::Unavailable.into()),
         Ok(metadata) if !metadata.is_file() => return Err(Error::Conflict),
         Ok(_) => {}
     }
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(Some(text)),
-        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => Err(Error::Invalid),
-        Err(_) => Err(IoError::Unavailable.into()),
+    // The open follows no link and waits on no pipe; the checks hold for the file it opened.
+    let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC;
+    let file = match rustix::fs::open(path, flags, Mode::empty()) {
+        Ok(file) => std::fs::File::from(file),
+        Err(Errno::NOENT) => return Ok(None),
+        Err(Errno::LOOP) => return Err(Error::Conflict),
+        Err(_) => return Err(IoError::Unavailable.into()),
+    };
+    let metadata = file.metadata().map_err(|_| IoError::Unavailable)?;
+    if !metadata.is_file() {
+        return Err(Error::Conflict);
     }
+    if metadata.len() > FILE_LIMIT {
+        return Err(Error::Invalid);
+    }
+    let mut content = Vec::new();
+    file.take(FILE_LIMIT + 1)
+        .read_to_end(&mut content)
+        .map_err(|_| IoError::Unavailable)?;
+    if content.len() as u64 > FILE_LIMIT {
+        return Err(Error::Invalid);
+    }
+    String::from_utf8(content)
+        .map(Some)
+        .map_err(|_| Error::Invalid)
 }
 
 /// Atomically replaces a file, keeping the permissions of an existing one, or removes it.
@@ -436,23 +485,63 @@ fn place_via(path: &Path, content: &str, temporary: &Path) -> Result<(), Error> 
     Ok(())
 }
 
-/// Whether the cache answers `200` to `/v1/ready` on the base, within a short deadline.
+/// Whether the cache answers `200` to `/v1/ready` on the base within `PROBE` in total.
 fn ready(base: &Base) -> bool {
-    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, base.port()));
-    let Ok(mut stream) = TcpStream::connect_timeout(&address, PROBE) else {
+    answers(base.port(), PROBE)
+}
+
+/// Whether `/v1/ready` on the loopback port answers `200` within `budget` in total. The connect,
+/// every write and every read get only the time left of one deadline, so a peer that sends a byte
+/// at a time cannot stretch the probe.
+fn answers(port: u16, budget: Duration) -> bool {
+    let deadline = Instant::now() + budget;
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    let Some(Ok(mut stream)) =
+        remaining(deadline).map(|left| TcpStream::connect_timeout(&address, left))
+    else {
         return false;
     };
-    let _ = stream.set_read_timeout(Some(PROBE));
-    let _ = stream.set_write_timeout(Some(PROBE));
-    let request = format!(
-        "GET /v1/ready HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
-        base.port()
-    );
-    if stream.write_all(request.as_bytes()).is_err() {
-        return false;
-    }
+    let request =
+        format!("GET /v1/ready HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
     let mut head = [0u8; 12];
-    stream.read_exact(&mut head).is_ok() && head.starts_with(b"HTTP/1.1 200")
+    within(deadline, request.len(), |done, left| {
+        stream.set_write_timeout(Some(left))?;
+        stream.write(&request.as_bytes()[done..])
+    }) && within(deadline, head.len(), |done, left| {
+        stream.set_read_timeout(Some(left))?;
+        stream.read(&mut head[done..])
+    }) && remaining(deadline).is_some()
+        && head.starts_with(b"HTTP/1.1 200")
+}
+
+/// The time left until `deadline`, `None` once it has passed.
+fn remaining(deadline: Instant) -> Option<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|left| !left.is_zero())
+}
+
+/// Moves `length` bytes through `step`, which gets the bytes moved so far and the time left, and
+/// must give up by then. It ends unfinished once the deadline has passed, or when a step fails or
+/// moves nothing; an interrupted step is tried again within the same deadline.
+fn within(
+    deadline: Instant,
+    length: usize,
+    mut step: impl FnMut(usize, Duration) -> std::io::Result<usize>,
+) -> bool {
+    let mut done = 0;
+    while done < length {
+        let Some(left) = remaining(deadline) else {
+            return false;
+        };
+        match step(done, left) {
+            Ok(0) => return false,
+            Ok(moved) => done += moved,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return false,
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -568,6 +657,160 @@ mod tests {
         assert_eq!(
             std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
             0o644
+        );
+    }
+
+    #[test]
+    fn a_file_above_the_limit_or_not_text_is_invalid() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        let at_limit = "#".repeat(FILE_LIMIT as usize);
+        std::fs::write(&path, &at_limit).unwrap();
+        assert_eq!(read(&path), Ok(Some(at_limit)));
+        std::fs::write(&path, "#".repeat(FILE_LIMIT as usize + 1)).unwrap();
+        assert_eq!(read(&path), Err(Error::Invalid));
+        std::fs::write(&path, [0xff, 0xfe]).unwrap();
+        assert_eq!(read(&path), Err(Error::Invalid));
+        assert_eq!(read(&root.path().join("absent")), Ok(None));
+        assert_eq!(read(root.path()), Err(Error::Conflict));
+    }
+
+    /// A listener that answers `connections` connections, one after another, with a ready head
+    /// sent one byte per `gap`. It stops when a connection does not come within ten seconds or a
+    /// peer went away, every socket step has a deadline, and dropping it joins its thread.
+    struct Trickling {
+        port: u16,
+        server: Option<std::thread::JoinHandle<usize>>,
+    }
+
+    impl Trickling {
+        fn new(connections: usize, gap: Duration) -> Self {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let mut served = 0;
+                while served < connections {
+                    let deadline = Instant::now() + Duration::from_secs(10);
+                    let Some(mut stream) = accept(&listener, deadline) else {
+                        break;
+                    };
+                    served += 1;
+                    for byte in b"HTTP/1.1 200 OK\r\n\r\n" {
+                        std::thread::sleep(gap);
+                        if stream.write_all(&[*byte]).is_err() {
+                            break;
+                        }
+                    }
+                }
+                served
+            });
+            Self {
+                port,
+                server: Some(server),
+            }
+        }
+
+        /// Joins the listener's thread; the answer is how many connections it served.
+        fn finish(mut self) -> usize {
+            self.server
+                .take()
+                .map_or(0, |server| server.join().unwrap())
+        }
+    }
+
+    impl Drop for Trickling {
+        fn drop(&mut self) {
+            if let Some(server) = self.server.take() {
+                let _ = server.join();
+            }
+        }
+    }
+
+    /// The next connection that comes before `deadline`, with one-second socket deadlines and its
+    /// request read.
+    fn accept(listener: &std::net::TcpListener, deadline: Instant) -> Option<TcpStream> {
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let limit = Some(Duration::from_secs(1));
+                    stream.set_nonblocking(false).ok()?;
+                    stream.set_read_timeout(limit).ok()?;
+                    stream.set_write_timeout(limit).ok()?;
+                    stream.set_nodelay(true).ok()?;
+                    stream.read(&mut [0u8; 512]).ok().filter(|read| *read > 0)?;
+                    return Some(stream);
+                }
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::WouldBlock
+                        && Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => return None,
+            }
+        }
+    }
+
+    #[test]
+    fn a_peer_that_trickles_its_answer_cannot_stretch_the_probe() {
+        let peer = Trickling::new(2, Duration::from_millis(100));
+        // Every byte comes well within the budget, the twelve of the head only after 1.2 s.
+        let started = Instant::now();
+        assert!(!answers(peer.port, Duration::from_millis(400)));
+        assert!(started.elapsed() < Duration::from_millis(1200));
+        // Given the time for the whole head, the same peer is ready.
+        assert!(answers(peer.port, Duration::from_secs(10)));
+        // With no time left the probe does not connect at all.
+        assert!(!answers(peer.port, Duration::ZERO));
+        assert_eq!(peer.finish(), 2);
+    }
+
+    #[test]
+    fn a_transfer_ends_at_its_deadline_or_at_a_failed_step() {
+        use std::io::{Error as Failure, ErrorKind};
+        let later = Instant::now() + Duration::from_secs(10);
+        assert!(!within(Instant::now(), 1, |_, _| unreachable!()));
+        // A timeout that cannot be set fails its step.
+        assert!(!within(later, 1, |_, _| Err(Failure::from(
+            ErrorKind::InvalidInput
+        ))));
+        assert!(!within(later, 1, |_, _| Ok(0)));
+        let mut steps = Vec::new();
+        assert!(within(later, 3, |done, _| {
+            steps.push(done);
+            if steps.len() == 1 {
+                Err(Failure::from(ErrorKind::Interrupted))
+            } else {
+                Ok(1)
+            }
+        }));
+        assert_eq!(steps, [0, 0, 1, 2]);
+    }
+
+    #[test]
+    fn a_scope_that_cannot_be_read_back_after_a_write_is_uncertain() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_owned();
+        let config = home.join(".config");
+        let scope = Scope::new(
+            home.clone(),
+            config.clone(),
+            home.join(".cargo"),
+            go_env(&home, &config),
+            None,
+        )
+        .unwrap();
+        let cargo = scope.path(Target::Cargo);
+        std::fs::create_dir_all(cargo.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(home.join("elsewhere"), &cargo).unwrap();
+        let base = Base::new(1).unwrap();
+        assert_eq!(status(&scope, &base), Err(Error::Conflict));
+        // With nothing written the refusal stands; after a write it cannot claim no change.
+        assert_eq!(read_back(&scope, &base, &[]), Err(Error::Conflict));
+        assert_eq!(
+            read_back(&scope, &base, &[change(&cargo)]),
+            Err(Error::Uncertain)
         );
     }
 }

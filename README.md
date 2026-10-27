@@ -105,8 +105,11 @@ re-read right before its write and written only while it still holds what the pr
 an edit made meanwhile answers `conflict`. This check is advisory, among binders that take the
 lock, not an atomic compare-and-swap against every editor. On a failure the files already written
 are restored, each only while it still holds what the client wrote; a file edited since stays as
-it is, and then, as when a restore fails, the answer is `uncertain` and the status has to be read
-back. Files are written through a private temporary file of their own; a new file stays private,
+it is, and then, as when a restore fails or the scope cannot be read back after its writes, the
+answer is `uncertain` and the status has to be read back. A scope file is read only while it is a
+regular file of at most 1 MiB; a larger one, or one the binding would grow past that, answers
+`invalid`. The readiness probe has 3 s in total: the connect, every write and every read get only
+what is left of that deadline, and one whose socket timeout cannot be set answers not ready. Files are written through a private temporary file of their own; a new file stays private,
 and an existing one keeps its permissions. Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
 the cache does not answer, and `unbind` restores the earlier files. The client holds no
 credential: RDS owns the forward and the device identity. Its runtime manifest is
