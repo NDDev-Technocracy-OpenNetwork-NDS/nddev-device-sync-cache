@@ -738,7 +738,7 @@ mod tests {
                     stream.set_read_timeout(limit).ok()?;
                     stream.set_write_timeout(limit).ok()?;
                     stream.set_nodelay(true).ok()?;
-                    stream.read(&mut [0u8; 512]).ok()?;
+                    stream.read(&mut [0u8; 512]).ok().filter(|read| *read > 0)?;
                     return Some(stream);
                 }
                 Err(error)
