@@ -284,7 +284,9 @@ fn report(name: &'static str, result: &Result<view::Status, Error>) {
 }
 
 /// Writes every change, each only while its file still holds what the preflight read, and on a
-/// failure restores the files already changed. A restore that fails leaves the scope `Uncertain`.
+/// failure undoes the files already written. The re-read is advisory: the scope lock keeps
+/// cooperating binders out, and the re-read catches an editor that wrote since the preflight, but
+/// it is no atomic compare-and-swap against every other writer.
 fn apply(changes: &[(PathBuf, Option<String>, Option<String>)]) -> Result<(), Error> {
     apply_with(changes, place)
 }
@@ -294,20 +296,35 @@ fn apply_with(
     place: impl Fn(&Path, Option<&str>) -> Result<(), Error>,
 ) -> Result<(), Error> {
     for (index, (path, earlier, updated)) in changes.iter().enumerate() {
-        // The scope lock keeps other binders out; this catches an editor that wrote meanwhile.
         let written = match read(path) {
             Ok(current) if current == *earlier => place(path, updated.as_deref()),
             Ok(_) => Err(Error::Conflict),
             Err(error) => Err(error),
         };
         if let Err(error) = written {
-            let restored = changes[..index]
-                .iter()
-                .all(|(path, earlier, _)| place(path, earlier.as_deref()).is_ok());
-            return Err(if restored { error } else { Error::Uncertain });
+            return Err(if undo(&changes[..index], &place) {
+                error
+            } else {
+                Error::Uncertain
+            });
         }
     }
     Ok(())
+}
+
+/// Restores the files already written, the last first, each only while it still holds what this
+/// change wrote: a file someone edited since stays as they left it. Every file is attempted;
+/// the answer is whether all were restored.
+fn undo(
+    written: &[(PathBuf, Option<String>, Option<String>)],
+    place: &impl Fn(&Path, Option<&str>) -> Result<(), Error>,
+) -> bool {
+    let mut restored = true;
+    for (path, earlier, updated) in written.iter().rev() {
+        let ours = matches!(read(path), Ok(current) if current == *updated);
+        restored &= ours && place(path, earlier.as_deref()).is_ok();
+    }
+    restored
 }
 
 /// How long a bind or unbind waits for another one of the same scope before it answers `Busy`.
@@ -390,20 +407,30 @@ fn place(path: &Path, content: Option<&str>) -> Result<(), Error> {
     static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let serial = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let temporary = path.with_extension(format!("nds-cache.{}.{serial}.tmp", std::process::id()));
+    place_via(path, content, &temporary)
+}
+
+/// Writes through a temporary file that this call creates itself, private from its first byte.
+/// An existing file's permissions are applied before the rename; a new file stays private. A
+/// temporary name that already exists belongs to someone else and is left as it is.
+fn place_via(path: &Path, content: &str, temporary: &Path) -> Result<(), Error> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(temporary)
+        .map_err(|_| IoError::Unavailable)?;
     let written = (|| {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
         file.write_all(content.as_bytes())?;
         file.sync_all()?;
         if let Ok(metadata) = std::fs::metadata(path) {
-            std::fs::set_permissions(&temporary, metadata.permissions())?;
+            std::fs::set_permissions(temporary, metadata.permissions())?;
         }
-        std::fs::rename(&temporary, path)
+        std::fs::rename(temporary, path)
     })();
     if written.is_err() {
-        let _ = std::fs::remove_file(&temporary);
+        let _ = std::fs::remove_file(temporary);
         return Err(IoError::Unavailable.into());
     }
     Ok(())
@@ -446,32 +473,101 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "edited\n");
     }
 
+    fn change(path: &Path) -> (PathBuf, Option<String>, Option<String>) {
+        (
+            path.to_owned(),
+            None,
+            Some(format!("bound {}", path.display())),
+        )
+    }
+
     #[test]
-    fn a_restore_that_fails_leaves_the_scope_uncertain() {
+    fn a_failed_restore_is_uncertain_and_every_later_restore_is_still_tried() {
         let root = tempfile::tempdir().unwrap();
-        let (first, second) = (root.path().join("a"), root.path().join("b"));
-        let changes = [
-            (first.clone(), None, Some("a".to_owned())),
-            (second.clone(), None, Some("b".to_owned())),
-        ];
-        // The second write fails; whether its restore works decides the answer.
-        let calls = &std::cell::Cell::new(0);
-        let failing = |restore_works: bool| {
-            calls.set(0);
-            move |path: &Path, content: Option<&str>| {
-                calls.set(calls.get() + 1);
-                match calls.get() {
-                    2 => Err(IoError::Unavailable.into()),
-                    3 if !restore_works => Err(IoError::Unavailable.into()),
-                    _ => place(path, content),
-                }
+        let paths: Vec<PathBuf> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|name| root.path().join(name))
+            .collect();
+        let changes: Vec<_> = paths.iter().map(|path| change(path)).collect();
+        // d's write fails; the undo runs c, b, a, and c's restore fails.
+        let failing = |path: &Path, content: Option<&str>| {
+            if path.ends_with("d") || (path.ends_with("c") && content.is_none()) {
+                Err(IoError::Unavailable.into())
+            } else {
+                place(path, content)
+            }
+        };
+        assert_eq!(apply_with(&changes, failing), Err(Error::Uncertain));
+        assert!(paths[2].exists(), "c could not be restored");
+        assert!(
+            !paths[0].exists() && !paths[1].exists(),
+            "a and b were restored"
+        );
+        // With every restore working, the write's own error stands.
+        let changes: Vec<_> = paths[..2].iter().map(|path| change(path)).collect();
+        let second_fails = |path: &Path, content: Option<&str>| {
+            if path.ends_with("b") && content.is_some() {
+                Err(IoError::Unavailable.into())
+            } else {
+                place(path, content)
             }
         };
         assert_eq!(
-            apply_with(&changes, failing(true)),
+            apply_with(&changes, second_fails),
             Err(IoError::Unavailable.into())
         );
-        assert!(!first.exists() && !second.exists());
-        assert_eq!(apply_with(&changes, failing(false)), Err(Error::Uncertain));
+        assert!(!paths[0].exists() && !paths[1].exists());
+    }
+
+    #[test]
+    fn an_edit_made_after_the_write_survives_the_undo() {
+        let root = tempfile::tempdir().unwrap();
+        let (first, second) = (root.path().join("a"), root.path().join("b"));
+        let changes = [change(&first), change(&second)];
+        // Someone edits a after it was written, then b's write fails.
+        let edited = |path: &Path, content: Option<&str>| {
+            if path.ends_with("b") {
+                std::fs::write(root.path().join("a"), "theirs").unwrap();
+                return Err(IoError::Unavailable.into());
+            }
+            place(path, content)
+        };
+        assert_eq!(apply_with(&changes, edited), Err(Error::Uncertain));
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "theirs");
+    }
+
+    #[test]
+    fn a_temporary_name_someone_else_holds_is_left_alone() {
+        let root = tempfile::tempdir().unwrap();
+        let (path, temporary) = (
+            root.path().join("config.toml"),
+            root.path().join("taken.tmp"),
+        );
+        std::fs::write(&temporary, "theirs").unwrap();
+        assert_eq!(
+            place_via(&path, "bound", &temporary),
+            Err(IoError::Unavailable.into())
+        );
+        assert_eq!(std::fs::read_to_string(&temporary).unwrap(), "theirs");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_new_file_is_private_and_an_existing_one_keeps_its_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let (new, existing) = (root.path().join("new"), root.path().join("existing"));
+        place(&new, Some("bound")).unwrap();
+        assert_eq!(
+            std::fs::metadata(&new).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        std::fs::write(&existing, "own").unwrap();
+        std::fs::set_permissions(&existing, std::fs::Permissions::from_mode(0o644)).unwrap();
+        place(&existing, Some("bound")).unwrap();
+        assert_eq!(
+            std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
     }
 }
