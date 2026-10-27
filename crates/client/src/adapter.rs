@@ -234,10 +234,14 @@ impl NetworkCache for Client {
                     let path = scope.path(target);
                     let current = read(&path)?;
                     let updated = binding::bound(target, current.as_deref(), base, &projection)?;
+                    // A file the binding grows past the limit could not be read back or unbound.
+                    if updated.len() as u64 > FILE_LIMIT {
+                        return Err(Error::Invalid);
+                    }
                     changes.push((path, current, Some(updated)));
                 }
                 apply(&changes)?;
-                status(scope, base)
+                read_back(scope, base, &changes)
             })
             .await;
         report("cache.client.bound", &bound);
@@ -266,7 +270,7 @@ impl NetworkCache for Client {
                         let _ = std::fs::remove_dir(parent);
                     }
                 }
-                status(scope, base)
+                read_back(scope, base, &changes)
             })
             .await;
         report("cache.client.unbound", &unbound);
@@ -358,6 +362,22 @@ impl ScopeLock {
     }
 }
 
+/// The status once the changes were applied. Written files stand, so a failure to read the scope
+/// back then is `Uncertain`, never a refusal that would claim nothing changed.
+fn read_back(
+    scope: &Scope,
+    base: &Base,
+    changes: &[(PathBuf, Option<String>, Option<String>)],
+) -> Result<view::Status, Error> {
+    status(scope, base).map_err(|error| {
+        if changes.is_empty() {
+            error
+        } else {
+            Error::Uncertain
+        }
+    })
+}
+
 fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
     let mut bindings = Vec::new();
     for target in Target::ALL {
@@ -374,19 +394,48 @@ fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
     })
 }
 
-/// The content of a regular file, `None` when absent; a link is refused.
+/// The most a scope file may hold; the configuration files the client edits stay far below it.
+const FILE_LIMIT: u64 = 1 << 20;
+
+/// The content of a regular file of at most `FILE_LIMIT` bytes, `None` when absent; a link or
+/// any other kind of file is refused, also one that replaced the file after the first look, and a
+/// larger file is invalid.
 fn read(path: &Path) -> Result<Option<String>, Error> {
+    use rustix::{
+        fs::{Mode, OFlags},
+        io::Errno,
+    };
     match std::fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(IoError::Unavailable.into()),
         Ok(metadata) if !metadata.is_file() => return Err(Error::Conflict),
         Ok(_) => {}
     }
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(Some(text)),
-        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => Err(Error::Invalid),
-        Err(_) => Err(IoError::Unavailable.into()),
+    // The open follows no link and waits on no pipe; the checks hold for the file it opened.
+    let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC;
+    let file = match rustix::fs::open(path, flags, Mode::empty()) {
+        Ok(file) => std::fs::File::from(file),
+        Err(Errno::NOENT) => return Ok(None),
+        Err(Errno::LOOP) => return Err(Error::Conflict),
+        Err(_) => return Err(IoError::Unavailable.into()),
+    };
+    let metadata = file.metadata().map_err(|_| IoError::Unavailable)?;
+    if !metadata.is_file() {
+        return Err(Error::Conflict);
     }
+    if metadata.len() > FILE_LIMIT {
+        return Err(Error::Invalid);
+    }
+    let mut content = Vec::new();
+    file.take(FILE_LIMIT + 1)
+        .read_to_end(&mut content)
+        .map_err(|_| IoError::Unavailable)?;
+    if content.len() as u64 > FILE_LIMIT {
+        return Err(Error::Invalid);
+    }
+    String::from_utf8(content)
+        .map(Some)
+        .map_err(|_| Error::Invalid)
 }
 
 /// Atomically replaces a file, keeping the permissions of an existing one, or removes it.
@@ -442,8 +491,9 @@ fn ready(base: &Base) -> bool {
     let Ok(mut stream) = TcpStream::connect_timeout(&address, PROBE) else {
         return false;
     };
-    let _ = stream.set_read_timeout(Some(PROBE));
-    let _ = stream.set_write_timeout(Some(PROBE));
+    if !deadlined(&stream, PROBE) {
+        return false;
+    }
     let request = format!(
         "GET /v1/ready HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
         base.port()
@@ -453,6 +503,12 @@ fn ready(base: &Base) -> bool {
     }
     let mut head = [0u8; 12];
     stream.read_exact(&mut head).is_ok() && head.starts_with(b"HTTP/1.1 200")
+}
+
+/// Whether every read and write on the stream now gives up after `limit`; a probe without that
+/// deadline is no probe.
+fn deadlined(stream: &TcpStream, limit: Duration) -> bool {
+    stream.set_read_timeout(Some(limit)).is_ok() && stream.set_write_timeout(Some(limit)).is_ok()
 }
 
 #[cfg(test)]
@@ -568,6 +624,58 @@ mod tests {
         assert_eq!(
             std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
             0o644
+        );
+    }
+
+    #[test]
+    fn a_file_above_the_limit_or_not_text_is_invalid() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        let at_limit = "#".repeat(FILE_LIMIT as usize);
+        std::fs::write(&path, &at_limit).unwrap();
+        assert_eq!(read(&path), Ok(Some(at_limit)));
+        std::fs::write(&path, "#".repeat(FILE_LIMIT as usize + 1)).unwrap();
+        assert_eq!(read(&path), Err(Error::Invalid));
+        std::fs::write(&path, [0xff, 0xfe]).unwrap();
+        assert_eq!(read(&path), Err(Error::Invalid));
+        assert_eq!(read(&root.path().join("absent")), Ok(None));
+        assert_eq!(read(root.path()), Err(Error::Conflict));
+    }
+
+    #[test]
+    fn a_probe_whose_deadline_cannot_be_set_is_no_probe() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let stream = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        // The standard library refuses a zero timeout, as the platform may refuse any other.
+        assert!(!deadlined(&stream, Duration::ZERO));
+        assert!(deadlined(&stream, PROBE));
+        assert_eq!(stream.read_timeout().unwrap(), Some(PROBE));
+        assert_eq!(stream.write_timeout().unwrap(), Some(PROBE));
+    }
+
+    #[test]
+    fn a_scope_that_cannot_be_read_back_after_a_write_is_uncertain() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_owned();
+        let config = home.join(".config");
+        let scope = Scope::new(
+            home.clone(),
+            config.clone(),
+            home.join(".cargo"),
+            go_env(&home, &config),
+            None,
+        )
+        .unwrap();
+        let cargo = scope.path(Target::Cargo);
+        std::fs::create_dir_all(cargo.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(home.join("elsewhere"), &cargo).unwrap();
+        let base = Base::new(1).unwrap();
+        assert_eq!(status(&scope, &base), Err(Error::Conflict));
+        // With nothing written the refusal stands; after a write it cannot claim no change.
+        assert_eq!(read_back(&scope, &base, &[]), Err(Error::Conflict));
+        assert_eq!(
+            read_back(&scope, &base, &[change(&cargo)]),
+            Err(Error::Uncertain)
         );
     }
 }

@@ -257,6 +257,30 @@ async fn links_are_refused() {
 }
 
 #[tokio::test]
+async fn a_file_past_the_limit_or_one_the_binding_would_grow_past_it_is_refused() {
+    const LIMIT: usize = 1 << 20;
+    let root = tempfile::tempdir().unwrap();
+    let cargo = root.path().join(".cargo").join("config.toml");
+    std::fs::create_dir_all(cargo.parent().unwrap()).unwrap();
+    let client = client(lane(root.path(), &[]).unwrap(), ready_cache());
+    // One file the client could not read back, and one the binding's block would push past.
+    for size in [LIMIT + 1, LIMIT - 8] {
+        std::fs::write(&cargo, format!("{}\n", "#".repeat(size - 1))).unwrap();
+        let before = snapshot(root.path());
+        assert_eq!(
+            client.bind(CancellationToken::new()).await,
+            Err(Error::Invalid)
+        );
+        assert_eq!(snapshot(root.path()), before);
+    }
+    std::fs::write(&cargo, format!("{}\n", "#".repeat(LIMIT))).unwrap();
+    assert_eq!(
+        client.unbind(CancellationToken::new()).await,
+        Err(Error::Invalid)
+    );
+}
+
+#[tokio::test]
 async fn a_scope_another_binder_holds_answers_busy_and_stays_unchanged() {
     let root = tempfile::tempdir().unwrap();
     let held = std::fs::File::open(root.path()).unwrap();
