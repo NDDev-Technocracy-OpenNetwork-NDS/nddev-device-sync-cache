@@ -675,37 +675,95 @@ mod tests {
         assert_eq!(read(root.path()), Err(Error::Conflict));
     }
 
-    /// A listener that answers every connection with a ready head, one byte per `gap`.
-    fn trickling(gap: Duration) -> u16 {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            for mut stream in listener.incoming().flatten() {
-                std::thread::spawn(move || {
-                    let _ = stream.set_nodelay(true);
-                    let _ = stream.read(&mut [0u8; 512]);
+    /// A listener that answers `connections` connections, one after another, with a ready head
+    /// sent one byte per `gap`. It stops when a connection does not come within ten seconds or a
+    /// peer went away, every socket step has a deadline, and dropping it joins its thread.
+    struct Trickling {
+        port: u16,
+        server: Option<std::thread::JoinHandle<usize>>,
+    }
+
+    impl Trickling {
+        fn new(connections: usize, gap: Duration) -> Self {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let mut served = 0;
+                while served < connections {
+                    let deadline = Instant::now() + Duration::from_secs(10);
+                    let Some(mut stream) = accept(&listener, deadline) else {
+                        break;
+                    };
+                    served += 1;
                     for byte in b"HTTP/1.1 200 OK\r\n\r\n" {
                         std::thread::sleep(gap);
                         if stream.write_all(&[*byte]).is_err() {
-                            return;
+                            break;
                         }
                     }
-                });
+                }
+                served
+            });
+            Self {
+                port,
+                server: Some(server),
             }
-        });
-        port
+        }
+
+        /// Joins the listener's thread; the answer is how many connections it served.
+        fn finish(mut self) -> usize {
+            self.server
+                .take()
+                .map_or(0, |server| server.join().unwrap())
+        }
+    }
+
+    impl Drop for Trickling {
+        fn drop(&mut self) {
+            if let Some(server) = self.server.take() {
+                let _ = server.join();
+            }
+        }
+    }
+
+    /// The next connection that comes before `deadline`, with one-second socket deadlines and its
+    /// request read.
+    fn accept(listener: &std::net::TcpListener, deadline: Instant) -> Option<TcpStream> {
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let limit = Some(Duration::from_secs(1));
+                    stream.set_nonblocking(false).ok()?;
+                    stream.set_read_timeout(limit).ok()?;
+                    stream.set_write_timeout(limit).ok()?;
+                    stream.set_nodelay(true).ok()?;
+                    stream.read(&mut [0u8; 512]).ok()?;
+                    return Some(stream);
+                }
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::WouldBlock
+                        && Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => return None,
+            }
+        }
     }
 
     #[test]
     fn a_peer_that_trickles_its_answer_cannot_stretch_the_probe() {
-        let port = trickling(Duration::from_millis(100));
+        let peer = Trickling::new(2, Duration::from_millis(100));
         // Every byte comes well within the budget, the twelve of the head only after 1.2 s.
         let started = Instant::now();
-        assert!(!answers(port, Duration::from_millis(400)));
+        assert!(!answers(peer.port, Duration::from_millis(400)));
         assert!(started.elapsed() < Duration::from_millis(1200));
         // Given the time for the whole head, the same peer is ready.
-        assert!(answers(port, Duration::from_secs(10)));
-        assert!(!answers(port, Duration::ZERO));
+        assert!(answers(peer.port, Duration::from_secs(10)));
+        // With no time left the probe does not connect at all.
+        assert!(!answers(peer.port, Duration::ZERO));
+        assert_eq!(peer.finish(), 2);
     }
 
     #[test]
