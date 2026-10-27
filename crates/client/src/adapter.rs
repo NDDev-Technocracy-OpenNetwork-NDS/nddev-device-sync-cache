@@ -11,7 +11,7 @@ use std::{
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const PROBE: Duration = Duration::from_secs(3);
@@ -485,30 +485,63 @@ fn place_via(path: &Path, content: &str, temporary: &Path) -> Result<(), Error> 
     Ok(())
 }
 
-/// Whether the cache answers `200` to `/v1/ready` on the base, within a short deadline.
+/// Whether the cache answers `200` to `/v1/ready` on the base within `PROBE` in total.
 fn ready(base: &Base) -> bool {
-    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, base.port()));
-    let Ok(mut stream) = TcpStream::connect_timeout(&address, PROBE) else {
-        return false;
-    };
-    if !deadlined(&stream, PROBE) {
-        return false;
-    }
-    let request = format!(
-        "GET /v1/ready HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
-        base.port()
-    );
-    if stream.write_all(request.as_bytes()).is_err() {
-        return false;
-    }
-    let mut head = [0u8; 12];
-    stream.read_exact(&mut head).is_ok() && head.starts_with(b"HTTP/1.1 200")
+    answers(base.port(), PROBE)
 }
 
-/// Whether every read and write on the stream now gives up after `limit`; a probe without that
-/// deadline is no probe.
-fn deadlined(stream: &TcpStream, limit: Duration) -> bool {
-    stream.set_read_timeout(Some(limit)).is_ok() && stream.set_write_timeout(Some(limit)).is_ok()
+/// Whether `/v1/ready` on the loopback port answers `200` within `budget` in total. The connect,
+/// every write and every read get only the time left of one deadline, so a peer that sends a byte
+/// at a time cannot stretch the probe.
+fn answers(port: u16, budget: Duration) -> bool {
+    let deadline = Instant::now() + budget;
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    let Some(Ok(mut stream)) =
+        remaining(deadline).map(|left| TcpStream::connect_timeout(&address, left))
+    else {
+        return false;
+    };
+    let request =
+        format!("GET /v1/ready HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    let mut head = [0u8; 12];
+    within(deadline, request.len(), |done, left| {
+        stream.set_write_timeout(Some(left))?;
+        stream.write(&request.as_bytes()[done..])
+    }) && within(deadline, head.len(), |done, left| {
+        stream.set_read_timeout(Some(left))?;
+        stream.read(&mut head[done..])
+    }) && remaining(deadline).is_some()
+        && head.starts_with(b"HTTP/1.1 200")
+}
+
+/// The time left until `deadline`, `None` once it has passed.
+fn remaining(deadline: Instant) -> Option<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|left| !left.is_zero())
+}
+
+/// Moves `length` bytes through `step`, which gets the bytes moved so far and the time left, and
+/// must give up by then. It ends unfinished once the deadline has passed, or when a step fails or
+/// moves nothing; an interrupted step is tried again within the same deadline.
+fn within(
+    deadline: Instant,
+    length: usize,
+    mut step: impl FnMut(usize, Duration) -> std::io::Result<usize>,
+) -> bool {
+    let mut done = 0;
+    while done < length {
+        let Some(left) = remaining(deadline) else {
+            return false;
+        };
+        match step(done, left) {
+            Ok(0) => return false,
+            Ok(moved) => done += moved,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return false,
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -642,15 +675,59 @@ mod tests {
         assert_eq!(read(root.path()), Err(Error::Conflict));
     }
 
-    #[test]
-    fn a_probe_whose_deadline_cannot_be_set_is_no_probe() {
+    /// A listener that answers every connection with a ready head, one byte per `gap`.
+    fn trickling(gap: Duration) -> u16 {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let stream = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
-        // The standard library refuses a zero timeout, as the platform may refuse any other.
-        assert!(!deadlined(&stream, Duration::ZERO));
-        assert!(deadlined(&stream, PROBE));
-        assert_eq!(stream.read_timeout().unwrap(), Some(PROBE));
-        assert_eq!(stream.write_timeout().unwrap(), Some(PROBE));
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let _ = stream.set_nodelay(true);
+                    let _ = stream.read(&mut [0u8; 512]);
+                    for byte in b"HTTP/1.1 200 OK\r\n\r\n" {
+                        std::thread::sleep(gap);
+                        if stream.write_all(&[*byte]).is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn a_peer_that_trickles_its_answer_cannot_stretch_the_probe() {
+        let port = trickling(Duration::from_millis(100));
+        // Every byte comes well within the budget, the twelve of the head only after 1.2 s.
+        let started = Instant::now();
+        assert!(!answers(port, Duration::from_millis(400)));
+        assert!(started.elapsed() < Duration::from_millis(1200));
+        // Given the time for the whole head, the same peer is ready.
+        assert!(answers(port, Duration::from_secs(10)));
+        assert!(!answers(port, Duration::ZERO));
+    }
+
+    #[test]
+    fn a_transfer_ends_at_its_deadline_or_at_a_failed_step() {
+        use std::io::{Error as Failure, ErrorKind};
+        let later = Instant::now() + Duration::from_secs(10);
+        assert!(!within(Instant::now(), 1, |_, _| unreachable!()));
+        // A timeout that cannot be set fails its step.
+        assert!(!within(later, 1, |_, _| Err(Failure::from(
+            ErrorKind::InvalidInput
+        ))));
+        assert!(!within(later, 1, |_, _| Ok(0)));
+        let mut steps = Vec::new();
+        assert!(within(later, 3, |done, _| {
+            steps.push(done);
+            if steps.len() == 1 {
+                Err(Failure::from(ErrorKind::Interrupted))
+            } else {
+                Ok(1)
+            }
+        }));
+        assert_eq!(steps, [0, 0, 1, 2]);
     }
 
     #[test]
