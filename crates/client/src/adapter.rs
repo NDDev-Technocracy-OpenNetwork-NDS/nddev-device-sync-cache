@@ -2,7 +2,7 @@
 
 use crate::{
     Error, IoError, LocalIo, NetworkCache,
-    binding::{self, Base, Target},
+    binding::{self, Base, Projection, Target},
     view,
 };
 use nddev_device_sync_adapter_io::CancellationToken;
@@ -116,7 +116,7 @@ impl Scope {
         match target {
             Target::Environment => self.config.join("nds-cache").join("environment.sh"),
             Target::Cargo => self.cargo_home.join("config.toml"),
-            Target::Npm => self.home.join(".npmrc"),
+            Target::Npm => self.config.join("nds-cache").join("npmrc"),
             Target::Pip => pip_config(&self.home, &self.config),
             Target::Go => self.go_env.clone(),
             Target::Gradle => self
@@ -124,6 +124,11 @@ impl Scope {
                 .join("nds-cache")
                 .join("nds-cache.init.gradle.kts"),
         }
+    }
+
+    /// npm's user file, which ranks above the binding's global one.
+    fn npm_user(&self) -> PathBuf {
+        self.home.join(".npmrc")
     }
 }
 
@@ -215,11 +220,19 @@ impl NetworkCache for Client {
                 if let Some(text) = scope.below.as_deref().map(read).transpose()?.flatten() {
                     binding::yields(Target::Cargo, &text)?;
                 }
+                if let Some(text) = read(&scope.npm_user())? {
+                    binding::defers(Target::Npm, &text)?;
+                }
+                let npmrc = scope.path(Target::Npm);
+                let projection = Projection {
+                    gradle: GRADLE,
+                    npmrc: npmrc.to_str().ok_or(Error::Invalid)?,
+                };
                 let mut changes = Vec::new();
                 for target in Target::ALL {
                     let path = scope.path(target);
                     let current = read(&path)?;
-                    let updated = binding::bound(target, current.as_deref(), base, GRADLE)?;
+                    let updated = binding::bound(target, current.as_deref(), base, &projection)?;
                     changes.push((path, current, Some(updated)));
                 }
                 apply(&changes)?;

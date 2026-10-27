@@ -37,7 +37,8 @@ pub const OCI_MANIFEST_TYPES: &str = "application/vnd.oci.image.index.v1+json, a
 pub struct Index {
     /// Representations in preference order; each one is stored as its own object.
     pub media_types: &'static [&'static str],
-    /// Upstream download URL prefixes, rewritten where they open a JSON string.
+    /// Upstream download URL prefixes, rewritten where they open a JSON string. Empty when the
+    /// clients resolve the links through their configured registry themselves.
     pub links: Vec<String>,
     /// The cache path that serves those downloads.
     pub mount: &'static str,
@@ -215,11 +216,10 @@ impl Routes {
                     canonical: npm_path,
                     index: Some(Index {
                         media_types: &["application/vnd.npm.install-v1+json", "application/json"],
-                        // Early package versions name their tarballs with plain HTTP.
-                        links: vec![
-                            "https://registry.npmjs.org/".into(),
-                            "http://registry.npmjs.org/".into(),
-                        ],
+                        // The documents keep their public tarball links: npm replaces the public
+                        // registry host with its configured one, so package-lock.json stays
+                        // resolvable without the cache.
+                        links: Vec::new(),
                         mount: "/npm/",
                     }),
                     ..route(
@@ -1503,13 +1503,14 @@ mod tests {
 
     #[test]
     fn links_point_at_the_client_base_however_the_document_is_split() {
-        let routes = Routes::production();
-        let npm = routes
-            .routes()
-            .iter()
-            .find(|route| route.id == "npm")
-            .unwrap();
-        let index = npm.index.clone().unwrap();
+        let index = Index {
+            media_types: &["application/json"],
+            links: vec![
+                "https://registry.npmjs.org/".into(),
+                "http://registry.npmjs.org/".into(),
+            ],
+            mount: "/npm/",
+        };
         let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://registry.npmjs.org/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         let expected = br#"{"versions":{"1.0.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         for size in 1..=document.len() {
@@ -1525,6 +1526,22 @@ mod tests {
                 "chunk size {size}"
             );
         }
+    }
+
+    #[test]
+    fn npm_documents_keep_their_public_links() {
+        let routes = Routes::production();
+        let npm = routes
+            .routes()
+            .iter()
+            .find(|route| route.id == "npm")
+            .unwrap();
+        let index = npm.index.clone().unwrap();
+        let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz"}}}}"#;
+        let mut links = Links::new(&index, "http://127.0.0.1:18740");
+        let mut out = links.push(document);
+        out.extend(links.finish());
+        assert_eq!(out, document);
     }
 
     #[test]
