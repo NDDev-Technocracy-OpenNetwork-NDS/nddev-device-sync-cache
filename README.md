@@ -150,6 +150,30 @@ caches cannot serve fails visibly. Nothing falls back to the public source on it
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
 
+## Egress relay
+
+Some device uplinks throttle direct downloads that the cache does not carry: a tool archive from
+a release page, a source checkout, an API call. `nds-cache-egress --listen 127.0.0.1:PORT` runs
+on the cache host as a loopback-only HTTPS relay that devices reach through the same kind of
+owned forward as the cache, and that jobs select with `HTTPS_PROXY=http://127.0.0.1:PORT` and
+`NO_PROXY=127.0.0.1,localhost`.
+
+- **CONNECT only.** It answers `CONNECT host:port` and splices bytes, so TLS stays end to end
+  between the job and the origin; nothing is inspected, rewritten or stored. Other methods answer
+  `405`; plain-HTTP requests are not relayed.
+- **Public destinations only.** The destination must resolve to a public address on an allowed
+  port, `443` unless `--allow-port` selects others. Loopback, private, link-local, shared,
+  documentation, benchmark, multicast and reserved ranges answer `403`, also through IPv4-mapped
+  IPv6, so a device never reaches a service of the cache host or a private network through it.
+- **Bounds.** A request head is at most 8 KiB (`431`) and must arrive within 10 s (`408`); resolving
+  and connecting take at most 15 s (`502`); at most 512 tunnels are open (`--max-connections`,
+  then `503`).
+- **Events.** One stderr line per listener state and tunnel, with its outcome and refusal reason,
+  never a host name or an address.
+
+The relay is not a cache: what a job can fetch through a cache route belongs on that route, so it
+accumulates on the cache host's disk and keeps the central-only guarantee of the binding.
+
 ## Technology registry
 
 [`registry/stack.json`](registry/stack.json) records, for every technology used by core
