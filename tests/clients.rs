@@ -65,3 +65,31 @@ fn client_settings_stay_inside_their_route() {
         }
     }
 }
+
+#[test]
+fn a_route_reached_through_another_names_a_route_with_clients() {
+    let contract = contract();
+    let routes = contract["routes"].as_array().unwrap();
+    for route in routes {
+        let Some(through) = route["through"].as_str() else {
+            continue;
+        };
+        let parent = routes
+            .iter()
+            .find(|candidate| candidate["id"] == through)
+            .unwrap_or_else(|| panic!("{through} is not a route"));
+        assert!(
+            parent["through"].is_null(),
+            "{through} is itself reached through another"
+        );
+        assert!(!parent["clients"].as_array().unwrap().is_empty());
+        assert!(
+            route["prefix"]
+                .as_str()
+                .unwrap()
+                .starts_with(&format!("{}/", parent["prefix"].as_str().unwrap())),
+            "{} is not under {through}",
+            route["id"]
+        );
+    }
+}

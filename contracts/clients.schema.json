@@ -33,15 +33,18 @@
       "required": ["id", "prefix", "upstream", "objects", "clients"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-        "prefix": {"type": "string", "description": "A path segment, or the OCI distribution segment and the registry host it serves.", "pattern": "^/[a-z][a-z0-9-]*(/[a-z0-9][a-z0-9.-]*)?$"},
+        "prefix": {"type": "string", "description": "A path segment, the OCI distribution segment and the registry host it serves, or the checksum database a module proxy route mirrors.", "pattern": "^/[a-z][a-z0-9-]*(/[a-z0-9][a-z0-9.-]*)?$|^/[a-z][a-z0-9-]*/sumdb/[a-z0-9][a-z0-9.-]*$"},
         "upstream": {"type": "string", "format": "uri", "pattern": "^https://"},
         "objects": {"type": "string", "minLength": 1},
+        "through": {"type": "string", "description": "The route whose clients reach this one without a setting of their own.", "pattern": "^[a-z][a-z0-9-]*$"},
         "clients": {
           "type": "array",
-          "minItems": 1,
           "items": {"$ref": "#/$defs/client"}
         }
-      }
+      },
+      "if": {"required": ["through"]},
+      "then": {"properties": {"clients": {"maxItems": 0}}},
+      "else": {"properties": {"clients": {"minItems": 1}}}
     },
     "client": {
       "type": "object",

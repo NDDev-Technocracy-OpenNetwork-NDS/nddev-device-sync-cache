@@ -226,6 +226,14 @@
       ]
     },
     {
+      "id": "gosumdb",
+      "prefix": "/goproxy/sumdb/sum.golang.org",
+      "upstream": "https://sum.golang.org",
+      "objects": "The Go checksum database: lookups and tiles, fixed once published, and the newest signed tree head, revalidated. The cache answers /supported itself, so the go command of a goproxy client reaches the database only here.",
+      "through": "goproxy",
+      "clients": []
+    },
+    {
       "id": "goproxy",
       "prefix": "/goproxy",
       "upstream": "https://proxy.golang.org",
@@ -235,7 +243,7 @@
           "tool": "go mod download, go build and GOTOOLCHAIN switches",
           "setting": {"GOPROXY": "{base}/goproxy"},
           "acceptance": "real client",
-          "limits": "Checksum database requests are not proxied: the go command then verifies against sum.golang.org directly, as with proxy.golang.org, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
+          "limits": "The go command finds the checksum database through this proxy (the gosumdb route) and verifies its signed notes with the database's own key, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
         }
       ]
     },

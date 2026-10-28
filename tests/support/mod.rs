@@ -117,6 +117,37 @@ async fn immutable(State(state): State<Arc<Upstream>>) -> Response {
         .into_response()
 }
 
+/// A signed note in the checksum database's form; the cache passes it through byte for byte.
+pub const SUMDB_NOTE: &str = "go.sum database tree\n42\nAAAA=\n\n— sum.golang.org Az3grnmrIUEDFqHzAzNHhTz3c5bbg6F4yPtBzwEDvwwJ/8cbxFn9JdLW5LhvfLWnwCyAqMtX7lRTP/Ur1aszc0bQaQw=\n";
+
+async fn sumdb_latest(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        SUMDB_NOTE,
+    )
+        .into_response()
+}
+
+async fn sumdb_lookup(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    let record = format!("40\ngithub.com/google/uuid v1.6.0 h1:x\n\n{SUMDB_NOTE}");
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        record,
+    )
+        .into_response()
+}
+
+async fn sumdb_tile(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    (
+        [(header::CONTENT_TYPE, "application/octet-stream")],
+        vec![7u8; 8192],
+    )
+        .into_response()
+}
+
 async fn slow(State(state): State<Arc<Upstream>>) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -259,6 +290,12 @@ impl Harness {
                 .route("/files/stream.bin", get(stream))
                 .route("/files/broken.bin", get(broken_stream))
                 .route("/files/index.json", get(index))
+                .route("/sumdb/latest", get(sumdb_latest))
+                .route(
+                    "/sumdb/lookup/github.com/google/uuid@v1.6.0",
+                    get(sumdb_lookup),
+                )
+                .route("/sumdb/tile/8/0/x001/234", get(sumdb_tile))
                 .route("/token", get(registry_token))
                 .route("/v2/library/app/manifests/latest", get(registry_manifest))
                 .route("/v2/library/app/blobs/{digest}", get(registry_blob))
@@ -303,6 +340,7 @@ impl Harness {
             accept,
             index: None,
             oci: false,
+            answers: &[],
         };
         let routes = Routes::new(
             vec![
@@ -312,6 +350,16 @@ impl Harness {
                     "/redirector/{path}",
                     format!("http://{redirector}"),
                 ),
+                // The checksum database's own rules, over a local upstream.
+                Route {
+                    accept: nddev_device_sync_cache::domain::go_sumdb,
+                    answers: &["/supported"],
+                    ..route(
+                        "/gosumdb",
+                        "/gosumdb/{path}",
+                        format!("http://{origin}/sumdb"),
+                    )
+                },
                 Route {
                     accept: oci_accept,
                     oci: true,
