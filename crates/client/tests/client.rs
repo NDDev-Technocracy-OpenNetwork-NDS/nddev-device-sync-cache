@@ -132,6 +132,74 @@ async fn binding_writes_every_file_and_unbinding_restores_the_scope() {
     assert!(root.path().join(".cargo").is_dir() && root.path().join(".config").is_dir());
 }
 
+/// The kinds the status reports as bound.
+fn bound(status: &nddev_device_sync_cache_client::view::Status) -> Vec<&'static str> {
+    status
+        .bindings
+        .iter()
+        .filter(|binding| binding.bound)
+        .map(|binding| binding.kind)
+        .collect()
+}
+
+#[tokio::test]
+async fn only_the_bound_projection_in_force_is_bound() {
+    let work = tempfile::tempdir().unwrap();
+    let (root, shared) = (work.path().join("lane"), work.path().join("shared/cargo"));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&shared).unwrap();
+    let scope = lane(&root, &[("CARGO_HOME", &shared)]).unwrap();
+    let base = ready_cache();
+    let client = client(scope.clone(), base.clone());
+    client.bind(CancellationToken::new()).await.unwrap();
+    let all = ["environment", "cargo", "npm", "pip", "go", "gradle"];
+    let status = client.status(CancellationToken::new()).await.unwrap();
+    assert_eq!(bound(&status), all);
+
+    // A binding of another port is stale for this one, except the script that reads the base.
+    let other = self::client(scope.clone(), ready_cache());
+    let status = other.status(CancellationToken::new()).await.unwrap();
+    assert_eq!(bound(&status), ["gradle"]);
+
+    // A block that still carries the marker but names another source is not the binding.
+    let cargo = scope.path(Target::Cargo);
+    let written = std::fs::read_to_string(&cargo).unwrap();
+    let elsewhere = written.replace(
+        &format!("sparse+{}/crates-index/", base.url()),
+        "sparse+https://unselected.invalid/index/",
+    );
+    assert!(elsewhere.contains(BEGIN) && elsewhere != written);
+    std::fs::write(&cargo, &elsewhere).unwrap();
+    let status = client.status(CancellationToken::new()).await.unwrap();
+    assert!(
+        status.ready && !bound(&status).contains(&"cargo"),
+        "{status:?}"
+    );
+    client.bind(CancellationToken::new()).await.unwrap();
+    assert_eq!(std::fs::read_to_string(&cargo).unwrap(), written);
+
+    // A source in the jobs' Cargo home and a default registry in the user's npmrc each take that
+    // tool out of the binding, as they would refuse binding it.
+    std::fs::write(
+        shared.join("config.toml"),
+        "[source.crates-io]\nreplace-with = \"corp\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join(".npmrc"),
+        "registry=https://npm.example.internal/\n",
+    )
+    .unwrap();
+    let status = client.status(CancellationToken::new()).await.unwrap();
+    assert_eq!(bound(&status), ["environment", "pip", "go", "gradle"]);
+    std::fs::remove_file(shared.join("config.toml")).unwrap();
+    std::fs::remove_file(root.join(".npmrc")).unwrap();
+    let status = client.status(CancellationToken::new()).await.unwrap();
+    assert_eq!(bound(&status), all);
+    client.unbind(CancellationToken::new()).await.unwrap();
+    assert!(snapshot(&root).is_empty());
+}
+
 #[tokio::test]
 async fn a_cache_that_does_not_answer_is_not_bound() {
     let root = tempfile::tempdir().unwrap();

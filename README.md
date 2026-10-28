@@ -112,7 +112,11 @@ regular file of at most 1 MiB; a larger one, or one the binding would grow past 
 `invalid`. The readiness probe has 3 s in total: the connect, every write and every read get only
 what is left of that deadline, and one whose socket timeout cannot be set answers not ready. Files are written through a private temporary file of their own; a new file stays private,
 and an existing one keeps its permissions. Binding needs a ready cache and changes nothing on any refusal; a bound scope fails closed when
-the cache does not answer, and `unbind` restores the earlier files. The client holds no
+the cache does not answer, and `unbind` restores the earlier files. `status` reports a file as
+bound only while binding again would change nothing and refuse nothing: the file holds exactly
+the projection of the given port, and the same tool's files that rank next to it leave it in
+force, so an edited block, a binding of another port or a default registry in the user's `.npmrc`
+reads as unbound. The client holds no
 credential: RDS owns the forward and the device identity. Its runtime manifest is
 [`contracts/module.json`](contracts/module.json).
 

@@ -106,10 +106,11 @@ impl Scope {
     }
 
     /// Whether an empty directory may go when the binding's file in it does: a directory below
-    /// the configuration home, or the Cargo home.
+    /// the configuration home, the Cargo home, or the go command's own at its default place.
     fn removable(&self, directory: &Path) -> bool {
         (directory.starts_with(&self.config) && directory != self.config)
             || directory == self.cargo_home
+            || go_env(&self.home, &self.config).parent() == Some(directory)
     }
 
     pub fn path(&self, target: Target) -> PathBuf {
@@ -225,10 +226,7 @@ impl NetworkCache for Client {
                     binding::defers(Target::Npm, &text)?;
                 }
                 let npmrc = scope.path(Target::Npm);
-                let projection = Projection {
-                    gradle: GRADLE,
-                    npmrc: npmrc.to_str().ok_or(Error::Invalid)?,
-                };
+                let projection = projection(&npmrc)?;
                 let mut changes = Vec::new();
                 for target in Target::ALL {
                     let path = scope.path(target);
@@ -378,13 +376,38 @@ fn read_back(
     })
 }
 
+/// What the projection of a scope needs besides the base; a path the environment file cannot
+/// carry is invalid.
+fn projection(npmrc: &Path) -> Result<Projection<'_>, Error> {
+    Ok(Projection {
+        gradle: GRADLE,
+        npmrc: npmrc.to_str().ok_or(Error::Invalid)?,
+    })
+}
+
+/// A file is bound only while binding the scope again would change nothing and refuse nothing:
+/// it holds exactly this base's projection, and the same tool's files that rank next to it leave
+/// it in force, as binding checks them.
 fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
+    let npmrc = scope.path(Target::Npm);
+    let projection = projection(&npmrc)?;
+    let cargo = scope
+        .below
+        .as_deref()
+        .is_none_or(|below| leaves(below, Target::Cargo, binding::yields));
+    let npm = leaves(&scope.npm_user(), Target::Npm, binding::defers);
     let mut bindings = Vec::new();
     for target in Target::ALL {
         let current = read(&scope.path(target))?;
+        let in_force = match target {
+            Target::Cargo => cargo,
+            Target::Npm => npm,
+            _ => true,
+        };
         bindings.push(view::Binding {
             kind: target.name(),
-            bound: current.is_some_and(|text| binding::is_bound(target, &text, GRADLE)),
+            bound: in_force
+                && current.is_some_and(|text| binding::is_bound(target, &text, base, &projection)),
         });
     }
     Ok(view::Status {
@@ -392,6 +415,20 @@ fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
         ready: ready(base),
         bindings,
     })
+}
+
+/// Whether a file of the tool next to the binding's own leaves the binding in force: absent, or
+/// one that binding accepts.
+fn leaves(
+    path: &Path,
+    target: Target,
+    accepts: fn(Target, &str) -> Result<(), binding::BlockError>,
+) -> bool {
+    match read(path) {
+        Ok(None) => true,
+        Ok(Some(text)) => accepts(target, &text).is_ok(),
+        Err(_) => false,
+    }
 }
 
 /// The most a scope file may hold; the configuration files the client edits stay far below it.
