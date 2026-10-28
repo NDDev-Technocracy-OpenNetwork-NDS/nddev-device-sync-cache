@@ -271,13 +271,11 @@ pub fn defers(target: Target, current: &str) -> Result<(), BlockError> {
     target.check(current)
 }
 
-/// Whether the file holds the binding.
-pub fn is_bound(target: Target, current: &str, gradle: &str) -> bool {
-    if target.owned() {
-        is_owned(target, current, gradle)
-    } else {
-        current.contains(BEGIN)
-    }
+/// Whether the file holds exactly the binding of this base and projection: binding it again would
+/// change nothing. An edited block, another port, a setting of the file's own that conflicts, or
+/// content after the block is not bound.
+pub fn is_bound(target: Target, current: &str, base: &Base, projection: &Projection) -> bool {
+    bound(target, Some(current), base, projection).is_ok_and(|updated| updated == current)
 }
 
 fn owned_content(target: Target, content: String) -> String {
@@ -460,6 +458,83 @@ mod tests {
             unbound(Target::Gradle, "// edited\n", GRADLE),
             Err(BlockError::Conflict)
         );
+    }
+
+    #[test]
+    fn only_the_exact_projection_of_the_base_is_bound() {
+        let other = Base::new(18741).unwrap();
+        for target in Target::ALL {
+            let text = bind(target, None).unwrap();
+            assert!(is_bound(target, &text, &base(), &PROJECTION), "{target:?}");
+            // The Gradle script reads the base from the environment file.
+            let stale = is_bound(target, &text, &other, &PROJECTION);
+            assert_eq!(stale, target == Target::Gradle, "{target:?}");
+        }
+        let cargo = bind(Target::Cargo, Some("[build]\njobs = 2\n")).unwrap();
+        let elsewhere = cargo.replace(
+            "sparse+http://127.0.0.1:18740/crates-index/",
+            "sparse+https://unselected.invalid/index/",
+        );
+        let edited = |text: &str| {
+            text.replace(
+                "\nexport NDS_CACHE_BASE",
+                "\nexport A='1'\nexport NDS_CACHE_BASE",
+            )
+        };
+        let environment = bind(Target::Environment, None).unwrap();
+        let moved = Projection {
+            npmrc: "/home/v/.config/nds-cache/npmrc",
+            ..PROJECTION
+        };
+        for (target, text, projection) in [
+            (Target::Cargo, elsewhere, PROJECTION),
+            (
+                Target::Cargo,
+                format!("{cargo}[net]\nretry = 1\n"),
+                PROJECTION,
+            ),
+            (Target::Cargo, format!("{cargo}{cargo}"), PROJECTION),
+            (
+                Target::Cargo,
+                cargo.replace(
+                    "[build]\njobs = 2\n",
+                    "[source.crates-io]\nreplace-with = \"corp\"\n",
+                ),
+                PROJECTION,
+            ),
+            (Target::Environment, edited(&environment), PROJECTION),
+            (Target::Environment, environment.clone(), moved),
+            (
+                Target::Environment,
+                format!("{environment}{environment}"),
+                PROJECTION,
+            ),
+            (
+                Target::Npm,
+                bind(Target::Npm, None).unwrap().replace("/npm/", "/other/"),
+                PROJECTION,
+            ),
+            (
+                Target::Go,
+                bind(Target::Go, None)
+                    .unwrap()
+                    .replace("/goproxy", "/goproxy,direct"),
+                PROJECTION,
+            ),
+            (
+                Target::Pip,
+                bind(Target::Pip, None)
+                    .unwrap()
+                    .replace("/simple/", "/other/"),
+                PROJECTION,
+            ),
+            (Target::Gradle, format!("{GRADLE}// edited\n"), PROJECTION),
+        ] {
+            assert!(
+                !is_bound(target, &text, &base(), &projection),
+                "{target:?}: {text}"
+            );
+        }
     }
 
     #[test]
