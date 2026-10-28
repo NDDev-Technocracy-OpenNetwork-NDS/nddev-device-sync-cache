@@ -1,0 +1,24 @@
+[package]
+name = "nddev-device-sync-cache-egress"
+version = "0.0.1-alpha.1"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+authors = ["NDDev OpenNetwork"]
+homepage = "https://nddev.ai"
+repository = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache"
+publish = false
+
+[[bin]]
+name = "nds-cache-egress"
+path = "src/main.rs"
+
+[dependencies]
+thiserror = "2.0"
+tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "deny"
