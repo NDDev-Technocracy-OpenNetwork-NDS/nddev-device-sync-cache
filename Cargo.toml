@@ -11,9 +11,9 @@ build = "build.rs"
 publish = false
 
 [workspace]
-members = ["crates/client", "crates/egress"]
+members = ["crates/client", "crates/egress", "crates/pool"]
 # Commands without --workspace cover the device client as well as the service.
-default-members = [".", "crates/client", "crates/egress"]
+default-members = [".", "crates/client", "crates/egress", "crates/pool"]
 
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }

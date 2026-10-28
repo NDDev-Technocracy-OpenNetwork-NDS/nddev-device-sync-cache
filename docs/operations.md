@@ -62,6 +62,10 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
+The forward pool (`nds-forward-pool`) writes `event=pool.listen outcome=ready|failed`,
+`event=pool.upstream outcome=healthy|unhealthy kind=primary|fallback` on every change, and
+`event=pool.connection outcome=refused reason=no_upstream` when no upstream connects.
+
 The egress relay (`nds-cache-egress`) writes plain stderr lines instead of telemetry events:
 `event=egress.listen outcome=ready|failed` and `event=egress.tunnel outcome=opened|refused`, with
 `reason=malformed|method|too_large|timeout|port|forbidden|unreachable|capacity` on a refusal.
