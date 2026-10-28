@@ -51,8 +51,14 @@ async fn main() -> ExitCode {
     };
     let listener = match tokio::net::TcpListener::bind(listen).await {
         Ok(listener) => listener,
-        Err(_) => {
-            tracing::error!(module = "cache", event.name = "egress.listen.failed", outcome = "error", error.type = "io");
+        Err(error) => {
+            let class = match error.kind() {
+                std::io::ErrorKind::AddrInUse => "address_in_use",
+                std::io::ErrorKind::AddrNotAvailable => "address_unavailable",
+                std::io::ErrorKind::PermissionDenied => "permission_denied",
+                _ => "io",
+            };
+            tracing::error!(module = "cache", event.name = "egress.listen.failed", outcome = "error", error.type = class);
             return ExitCode::FAILURE;
         }
     };
@@ -64,7 +70,7 @@ async fn main() -> ExitCode {
     match serve(listener, policy, limits, shutdown()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => {
-            tracing::error!(module = "cache", event.name = "egress.accept.failed", outcome = "error", error.type = "io");
+            tracing::error!(module = "cache", event.name = "egress.failed", outcome = "error", error.type = "io");
             ExitCode::FAILURE
         }
     }

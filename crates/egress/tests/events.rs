@@ -16,6 +16,63 @@ use tokio::{
 #[derive(Clone, Default)]
 struct Capture(Arc<Mutex<Vec<u8>>>);
 
+#[test]
+fn the_real_binary_reports_a_typed_bind_failure_without_the_address() {
+    use std::{
+        net::TcpListener,
+        process::{Command, Stdio},
+        time::Instant,
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_nds-cache-egress"))
+        .env_clear()
+        .args(["--listen", &address])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut timed_out = false;
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            timed_out = true;
+            let _ = child.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+    drop(listener);
+    assert!(!timed_out, "owned startup child did not finish");
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.len() <= 65536 && output.stderr.len() <= 65536);
+    let text = String::from_utf8(output.stdout).unwrap();
+    let events: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    for event in &events {
+        nddev_device_sync_telemetry::decode_event(event.clone()).unwrap();
+    }
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event.name"] == "egress.listen.failed"
+                && event["error.type"] == "address_in_use")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["event.name"] == "egress.listening")
+    );
+    assert!(!text.contains(&address));
+    assert!(output.stderr.is_empty());
+}
+
 impl Write for Capture {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0.lock().unwrap().extend_from_slice(bytes);

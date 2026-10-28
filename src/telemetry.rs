@@ -53,6 +53,7 @@ pub fn config(identity: &Identity, debug: Option<DebugWindow>) -> Config {
         target_prefixes: vec![
             "nddev_device_sync_cache".into(),
             "nddev_device_sync_cache_egress".into(),
+            "nds_cache_egress".into(),
         ],
         default_module: "cache".into(),
         debug,

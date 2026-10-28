@@ -274,7 +274,11 @@ impl Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         if !self.finished {
-            self.finish("stopped", "cancelled");
+            if std::thread::panicking() {
+                self.finish("error", "task_panicked");
+            } else {
+                self.finish("stopped", "cancelled");
+            }
         }
     }
 }

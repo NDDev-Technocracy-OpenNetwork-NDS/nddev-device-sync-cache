@@ -63,8 +63,9 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
 The egress relay (`nds-cache-egress`) uses the same SDK and canonical envelope with
-`module = cache`. `egress.listening`, `egress.listen.failed` and `egress.accept.failed`
-describe the listener. `egress.tunnel.opened`, `egress.tunnel.refused` and
+`module = cache`. `egress.listening`, `egress.listen.failed` and `egress.failed`
+describe listener/service state; bind errors distinguish address-in-use, unavailable address
+and permission denial. `egress.tunnel.opened`, `egress.tunnel.refused` and
 `egress.tunnel.finished` describe tunnel admission and its terminal outcome; refusals carry
 only a fixed `error.type`. Shutdown reports cancelled admitted tunnels after closing admission
 and joins their tasks before the SDK reports process stop. Destinations, addresses, request
