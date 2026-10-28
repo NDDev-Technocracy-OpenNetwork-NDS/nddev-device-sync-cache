@@ -200,6 +200,141 @@ async fn only_the_bound_projection_in_force_is_bound() {
     assert!(snapshot(&root).is_empty());
 }
 
+/// What Cargo reads in place of the binding's file, or follows outside every checked file.
+const SHADOWS: [(&str, &str); 2] = [
+    (
+        "config",
+        "[source.crates-io]\nreplace-with = \"other\"\n[source.other]\nregistry = \"sparse+https://unselected.invalid/index/\"\n",
+    ),
+    ("config.toml", "include = [\"other.toml\"]\n"),
+];
+
+#[tokio::test]
+async fn a_cargo_file_the_binding_cannot_check_refuses_it_and_unbinds_cargo() {
+    let work = tempfile::tempdir().unwrap();
+    let (root, shared) = (work.path().join("lane"), work.path().join("shared/cargo"));
+    std::fs::create_dir_all(root.join(".cargo")).unwrap();
+    std::fs::create_dir_all(&shared).unwrap();
+    let scope = lane(&root, &[("CARGO_HOME", &shared)]).unwrap();
+    let client = client(scope.clone(), ready_cache());
+    // In the lane's own Cargo directory and in the jobs' Cargo home alike.
+    for directory in [root.join(".cargo"), shared.clone()] {
+        for (name, text) in SHADOWS {
+            let path = directory.join(name);
+            std::fs::write(&path, text).unwrap();
+            let before = (snapshot(&root), snapshot(&shared));
+            assert_eq!(
+                client.bind(CancellationToken::new()).await,
+                Err(Error::Conflict),
+                "{}",
+                path.display()
+            );
+            assert_eq!((snapshot(&root), snapshot(&shared)), before);
+            std::fs::remove_file(&path).unwrap();
+        }
+    }
+    // A bound lane whose Cargo file is shadowed or includes one later no longer binds Cargo.
+    client.bind(CancellationToken::new()).await.unwrap();
+    let cargo = std::fs::read_to_string(scope.path(Target::Cargo)).unwrap();
+    for directory in [root.join(".cargo"), shared.clone()] {
+        for (name, text) in SHADOWS {
+            let path = directory.join(name);
+            if name == "config.toml" && directory == root.join(".cargo") {
+                std::fs::write(&path, format!("{text}{cargo}")).unwrap();
+            } else {
+                std::fs::write(&path, text).unwrap();
+            }
+            let status = client.status(CancellationToken::new()).await.unwrap();
+            assert_eq!(
+                bound(&status),
+                ["environment", "npm", "pip", "go", "gradle"],
+                "{}",
+                path.display()
+            );
+            if name == "config.toml" && directory == root.join(".cargo") {
+                std::fs::write(&path, &cargo).unwrap();
+            } else {
+                std::fs::remove_file(&path).unwrap();
+            }
+        }
+    }
+    let status = client.status(CancellationToken::new()).await.unwrap();
+    assert!(status.bindings.iter().all(|binding| binding.bound));
+    client.unbind(CancellationToken::new()).await.unwrap();
+    assert!(snapshot(&root).is_empty());
+}
+
+/// The `nds-cache` command for the user's own scope at `home`, with only these variables.
+fn user(home: &Path, command: &str, base: &Base) -> (Option<i32>, serde_json::Value) {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_nds-cache"))
+        .args([command, "--port", &base.port().to_string()])
+        .env_clear()
+        .env("HOME", home)
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    let report = serde_json::from_slice(&output.stdout).unwrap();
+    (output.status.code(), report)
+}
+
+#[test]
+fn a_user_cargo_home_the_binding_cannot_check_refuses_it_and_unbinds_cargo() {
+    let home = tempfile::tempdir().unwrap();
+    let cargo = home.path().join(".cargo");
+    std::fs::create_dir_all(&cargo).unwrap();
+    let base = ready_cache();
+    for (name, text) in SHADOWS {
+        std::fs::write(cargo.join(name), text).unwrap();
+        let before = snapshot(home.path());
+        let (code, report) = user(home.path(), "bind", &base);
+        assert_eq!(
+            (code, report["error"].as_str()),
+            (Some(2), Some("conflict"))
+        );
+        assert_eq!(snapshot(home.path()), before);
+        std::fs::remove_file(cargo.join(name)).unwrap();
+    }
+    assert_eq!(user(home.path(), "bind", &base).0, Some(0));
+    let written = std::fs::read_to_string(cargo.join("config.toml")).unwrap();
+    for (name, text) in SHADOWS {
+        let path = cargo.join(name);
+        let shadowing = if name == "config" {
+            text.to_owned()
+        } else {
+            format!("{text}{written}")
+        };
+        std::fs::write(&path, shadowing).unwrap();
+        let (code, report) = user(home.path(), "status", &base);
+        let cargo_bound = report["bindings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|binding| binding["kind"] == "cargo")
+            .unwrap()["bound"]
+            .clone();
+        assert_eq!(
+            (code, cargo_bound),
+            (Some(0), serde_json::Value::Bool(false)),
+            "{name}"
+        );
+        if name == "config" {
+            std::fs::remove_file(&path).unwrap();
+        } else {
+            std::fs::write(&path, &written).unwrap();
+        }
+    }
+    let (_, report) = user(home.path(), "status", &base);
+    assert!(
+        report["bindings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|binding| binding["bound"] == true)
+    );
+    assert_eq!(user(home.path(), "unbind", &base).0, Some(0));
+    assert_eq!(snapshot(home.path()), Vec::<(String, String)>::new());
+}
+
 #[tokio::test]
 async fn a_cache_that_does_not_answer_is_not_bound() {
     let root = tempfile::tempdir().unwrap();
