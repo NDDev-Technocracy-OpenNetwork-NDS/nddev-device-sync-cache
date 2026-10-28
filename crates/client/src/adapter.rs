@@ -131,6 +131,21 @@ impl Scope {
     fn npm_user(&self) -> PathBuf {
         self.home.join(".npmrc")
     }
+
+    /// The Cargo files the jobs read for the scope: its own, and the jobs' below it.
+    fn cargo_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        std::iter::once(self.path(Target::Cargo)).chain(self.below.clone())
+    }
+}
+
+/// Whether an extensionless `config` stands beside a Cargo file. Cargo then reads that file in
+/// its place, so a binding there would not be in force and a check of it would not hold.
+fn superseded(cargo: &Path) -> Result<bool, Error> {
+    match std::fs::symlink_metadata(cargo.with_file_name("config")) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(IoError::Unavailable.into()),
+    }
 }
 
 /// An existing real directory, not a link, that the current user owns.
@@ -219,6 +234,11 @@ impl NetworkCache for Client {
                 }
                 let _lock = ScopeLock::acquire(&scope.home)?;
                 // Every file is checked before any is written, so a refusal changes nothing.
+                for cargo in scope.cargo_files() {
+                    if superseded(&cargo)? {
+                        return Err(Error::Conflict);
+                    }
+                }
                 if let Some(text) = scope.below.as_deref().map(read).transpose()?.flatten() {
                     binding::yields(Target::Cargo, &text)?;
                 }
@@ -392,9 +412,12 @@ fn status(scope: &Scope, base: &Base) -> Result<view::Status, Error> {
     let npmrc = scope.path(Target::Npm);
     let projection = projection(&npmrc)?;
     let cargo = scope
-        .below
-        .as_deref()
-        .is_none_or(|below| leaves(below, Target::Cargo, binding::yields));
+        .cargo_files()
+        .all(|cargo| matches!(superseded(&cargo), Ok(false)))
+        && scope
+            .below
+            .as_deref()
+            .is_none_or(|below| leaves(below, Target::Cargo, binding::yields));
     let npm = leaves(&scope.npm_user(), Target::Npm, binding::defers);
     let mut bindings = Vec::new();
     for target in Target::ALL {

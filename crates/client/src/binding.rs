@@ -140,12 +140,16 @@ impl Target {
         };
         match self {
             Self::Environment | Self::Gradle => Ok(()),
+            // A file Cargo includes could name a source of its own; it is never followed.
             Self::Cargo => {
                 let table = toml_table(rest)?;
                 let sources = table.get("source").and_then(toml::Value::as_table);
-                refuse(sources.is_some_and(|sources| {
-                    sources.contains_key("crates-io") || sources.contains_key("nds-cache")
-                }))
+                refuse(
+                    table.contains_key("include")
+                        || sources.is_some_and(|sources| {
+                            sources.contains_key("crates-io") || sources.contains_key("nds-cache")
+                        }),
+                )
             }
             Self::Npm => refuse(keys().any(|key| key.eq_ignore_ascii_case("registry"))),
             // A second `[global]` section is invalid for pip; its other sections stay its own.
@@ -383,6 +387,10 @@ mod tests {
             ),
             (Target::Pip, "[global]\ntimeout = 60\n"),
             (Target::Go, "GOPROXY=https://goproxy.example.internal\n"),
+            // An included file is never followed, so including one at all is refused.
+            (Target::Cargo, "include = [\"other.toml\"]\n"),
+            (Target::Cargo, "include = \"other.toml\"\n"),
+            (Target::Cargo, "[[include]]\npath = \"other.toml\"\n"),
         ] {
             assert_eq!(
                 bind(target, Some(foreign)),
@@ -429,6 +437,8 @@ mod tests {
     fn a_lower_file_yields_only_without_a_source_of_its_own() {
         let private = "[source.crates-io]\nreplace-with = \"corp\"\n";
         assert_eq!(yields(Target::Cargo, private), Err(BlockError::Conflict));
+        let including = "include = [\"other.toml\"]\n";
+        assert_eq!(yields(Target::Cargo, including), Err(BlockError::Conflict));
         assert_eq!(yields(Target::Cargo, "[build]\njobs = 2\n"), Ok(()));
         // A block of an earlier user binding is the module's own.
         let bound = bind(Target::Cargo, Some("[build]\njobs = 2\n")).unwrap();
@@ -494,6 +504,11 @@ mod tests {
                 PROJECTION,
             ),
             (Target::Cargo, format!("{cargo}{cargo}"), PROJECTION),
+            (
+                Target::Cargo,
+                format!("include = [\"other.toml\"]\n{cargo}"),
+                PROJECTION,
+            ),
             (
                 Target::Cargo,
                 cargo.replace(
