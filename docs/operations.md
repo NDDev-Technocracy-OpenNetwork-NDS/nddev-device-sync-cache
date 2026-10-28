@@ -62,6 +62,10 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
+The egress relay (`nds-cache-egress`) writes plain stderr lines instead of telemetry events:
+`event=egress.listen outcome=ready|failed` and `event=egress.tunnel outcome=opened|refused`, with
+`reason=malformed|method|too_large|timeout|port|forbidden|unreachable|capacity` on a refusal.
+
 Alerts belong to the observability deployment. The cache supports these rules: a degraded store, repeated
 storage pressure, a degraded upstream that does not recover, a rising rate of failed fills and an
 expired heartbeat.
