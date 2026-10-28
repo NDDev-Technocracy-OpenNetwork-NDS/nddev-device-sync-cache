@@ -163,7 +163,7 @@ nds-forward-pool --listen 127.0.0.1:8740 \
   --http-probe /v1/ready
 ```
 
-- **End-to-end probes.** Every 2 s each upstream is probed through the whole path:
+- **End-to-end probes.** Every 2 s (`--interval SECONDS`) each upstream is probed through the whole path:
   `--http-probe PATH` expects `HTTP/1.x 200`, `--banner-probe PREFIX` expects the server's first
   bytes, such as `SSH-`. A frozen tunnel fails the probe within 3 s although its listener accepts.
 - **Spread, then fall back.** New connections go round robin over the healthy primaries, so flows

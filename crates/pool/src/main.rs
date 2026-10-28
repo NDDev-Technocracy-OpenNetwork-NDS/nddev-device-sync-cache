@@ -6,7 +6,7 @@ use std::{net::SocketAddr, process::ExitCode, sync::Arc};
 const USAGE: &str = "usage:
   nds-forward-pool --listen <loopback address:port>
     (--primary <loopback address:port>)... [--fallback <loopback address:port>]...
-    (--http-probe <path> | --banner-probe <prefix>)";
+    (--http-probe <path> | --banner-probe <prefix>) [--interval <seconds, 1 to 300>]";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -14,6 +14,7 @@ async fn main() -> ExitCode {
     let mut listen: Option<SocketAddr> = None;
     let mut upstreams = Vec::new();
     let mut probe = None;
+    let mut interval = std::time::Duration::from_secs(2);
     let mut words = arguments.iter();
     while let Some(word) = words.next() {
         let Some(value) = words.next() else {
@@ -35,6 +36,10 @@ async fn main() -> ExitCode {
                 probe = Some(Probe::Http(value.clone()));
             }
             "--banner-probe" if !value.is_empty() => probe = Some(Probe::Banner(value.clone())),
+            "--interval" => match value.parse::<u64>() {
+                Ok(seconds @ 1..=300) => interval = std::time::Duration::from_secs(seconds),
+                _ => return usage(),
+            },
             _ => return usage(),
         }
     }
@@ -51,7 +56,9 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let pool = Arc::new(Pool::new(upstreams, probe));
+    let mut pool = Pool::new(upstreams, probe);
+    pool.interval = interval;
+    let pool = Arc::new(pool);
     // Connections wait for the first round of probes, so the first ones never go to a
     // forward that is still down after a restart.
     pool.check().await;
