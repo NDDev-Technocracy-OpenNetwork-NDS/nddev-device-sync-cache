@@ -95,7 +95,9 @@ configuration of Cargo, pip and the go command; one environment file for rustup,
 Playwright, uv's Python downloads and npm; npm's global configuration file that this environment
 file names; and the Gradle init script. User files rank below a project's own configuration, so
 project pins, lockfiles and private registries stay in force; a user file that names a default
-registry of its own is refused, never overwritten. uv, pub and Bun stay unbound: their lockfiles
+registry of its own is refused, never overwritten. So is a Cargo directory that holds the
+extensionless `config`, which Cargo reads instead of `config.toml`, and a Cargo file that uses
+`include`: the client never follows an included path. uv, pub and Bun stay unbound: their lockfiles
 record the index they resolved against, so a bound default index would fail `uv sync --locked`
 and `dart pub get --enforce-lockfile` on committed lockfiles, and `bun add` would write the cache
 address into `bun.lock`. Bun reads npm's user file and variables but not npm's global
@@ -129,7 +131,8 @@ steps see, so that the runner's own selections stay as they are:
 - **Cargo:** the lane gets `PREFIX/.cargo/config.toml`, which Cargo finds by directory discovery
   for every workspace below the prefix. The jobs' `CARGO_HOME` is a store that lanes may share and
   maintenance may evict, so it is never written; binding refuses when its `config.toml` names a
-  source, which the lane's file would shadow.
+  source, which the lane's file would shadow, includes another file, or stands beside an
+  extensionless `config`.
 - **pip, go:** their user files below `HOME`, which therefore has to be the prefix, with
   `XDG_CONFIG_HOME` and `GOENV` unset or at their defaults there.
 - **Untouched:** `CARGO_HOME`, `RUSTUP_HOME`, `GOMODCACHE`, `GOCACHE`, `GRADLE_USER_HOME` and the
