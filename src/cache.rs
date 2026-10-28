@@ -86,6 +86,8 @@ pub struct Filling {
 pub enum Delivery {
     Stored(Object),
     Filling(Filling),
+    /// A subpath the cache answers itself, with an empty success.
+    Answered,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -285,6 +287,9 @@ impl Cache {
             .routes
             .resolve(path, accept)
             .map_err(ServeError::Rejected)?;
+        if target.answered {
+            return Ok(Delivery::Answered);
+        }
         let links = match target.index() {
             Some(index) => Some(Links::new(
                 index,

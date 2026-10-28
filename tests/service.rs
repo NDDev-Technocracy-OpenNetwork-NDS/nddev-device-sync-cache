@@ -36,6 +36,53 @@ async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
 }
 
 #[tokio::test]
+async fn the_checksum_database_answers_supported_and_passes_its_signed_notes_through() {
+    let harness = Harness::start().await;
+    // go asks whether the proxy mirrors the database; the cache says so without its upstream.
+    assert_eq!(
+        harness.get("/gosumdb/supported").await,
+        (200, "hit".into(), String::new())
+    );
+    assert_eq!(harness.hits(), 0);
+    let lookup = "/gosumdb/lookup/github.com/google/uuid@v1.6.0";
+    let record = format!(
+        "40\ngithub.com/google/uuid v1.6.0 h1:x\n\n{}",
+        support::SUMDB_NOTE
+    );
+    assert_eq!(
+        harness.get(lookup).await,
+        (200, "miss".into(), record.clone())
+    );
+    harness.committed(1).await;
+    assert_eq!(harness.get(lookup).await, (200, "hit".into(), record));
+    let tile = harness
+        .client
+        .get(format!("{}/gosumdb/tile/8/0/x001/234", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(tile.status(), 200);
+    assert_eq!(
+        tile.bytes().await.unwrap().as_ref(),
+        vec![7u8; 8192].as_slice()
+    );
+    harness.committed(2).await;
+    // The newest tree head changes, so it is asked of the upstream again once stale.
+    let latest = harness.get("/gosumdb/latest").await;
+    assert_eq!((latest.0, latest.2.as_str()), (200, support::SUMDB_NOTE));
+    assert_eq!(harness.hits(), 3);
+    // Paths the database protocol does not have never reach the upstream.
+    for path in [
+        "/gosumdb/lookup/github.com/Google/uuid@v1.6.0",
+        "/gosumdb/tile/8/0/1/234",
+        "/gosumdb/supported/extra",
+    ] {
+        assert_ne!(harness.get(path).await.0, 200, "{path}");
+    }
+    assert_eq!(harness.hits(), 3);
+}
+
+#[tokio::test]
 async fn concurrent_misses_share_one_upstream_fetch() {
     let harness = Arc::new(Harness::start().await);
     let requests = (0..8)
