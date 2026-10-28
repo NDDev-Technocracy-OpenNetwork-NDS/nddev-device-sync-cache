@@ -1113,8 +1113,14 @@ dependencies = [
 name = "nddev-device-sync-cache-egress"
 version = "0.0.1-alpha.1"
 dependencies = [
+ "nddev-device-sync-cache",
+ "nddev-device-sync-telemetry",
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "serde_json",
  "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

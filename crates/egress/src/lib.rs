@@ -4,22 +4,24 @@
 //! existing forward, the same way they reach the cache. It answers only `CONNECT host:port` and
 //! splices bytes, so TLS stays end to end between the client and the origin: nothing is
 //! inspected, rewritten or stored. A destination must be a public address on an allowed port;
-//! loopback, private, link-local and other special-purpose ranges are refused, so a device can
-//! never reach a service of the cache host or of a private network through it. Events carry the
+//! loopback, private, link-local, translation and other special-purpose ranges are refused.
+//! This address policy does not authenticate the origin or replace host routing/firewall policy.
+//! Events carry the
 //! outcome only, never a host name or an address.
 
+use nddev_device_sync_telemetry::{finish_operation_span, operation_span};
 use std::{
+    future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    task::JoinSet,
 };
+use tracing::Instrument;
 
 /// Which destinations the relay opens.
 #[derive(Clone, Debug)]
@@ -121,7 +123,7 @@ pub fn parse_connect(head: &[u8]) -> Result<(String, u16), Refusal> {
     else {
         return Err(Refusal::Malformed);
     };
-    if !version.starts_with("HTTP/1.") {
+    if !matches!(version, "HTTP/1.0" | "HTTP/1.1") {
         return Err(Refusal::Malformed);
     }
     if method != "CONNECT" {
@@ -144,15 +146,14 @@ pub fn parse_connect(head: &[u8]) -> Result<(String, u16), Refusal> {
     Ok((host.to_ascii_lowercase(), port))
 }
 
-/// Whether an address is reachable on the public internet: not loopback, private, link-local,
-/// shared, documentation, benchmark, multicast, broadcast, reserved or unspecified.
+/// Whether a destination is admitted by the relay's public-address policy. IPv6 is native
+/// global unicast only, excluding protocol assignments, transition and documentation ranges.
+/// See IANA's IPv4/IPv6 Special-Purpose Address Registries and IPv6 Global Unicast Address Space:
+/// <https://www.iana.org/assignments/iana-ipv6-special-registry/>.
 pub fn public(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(v4) => public_v4(v4),
-        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
-            Some(v4) => public_v4(v4),
-            None => public_v6(v6),
-        },
+        IpAddr::V6(v6) => public_v6(v6),
     }
 }
 
@@ -168,42 +169,117 @@ fn public_v4(address: Ipv4Addr) -> bool {
         || a == 0
         || (a == 100 && (64..128).contains(&b))
         || (a == 192 && b == 0 && c == 0)
+        || (a == 192 && b == 88 && c == 99)
         || (a == 198 && (b == 18 || b == 19))
         || a >= 240)
 }
 
 fn public_v6(address: Ipv6Addr) -> bool {
     let segments = address.segments();
-    !(address.is_unspecified()
-        || address.is_loopback()
-        || address.is_multicast()
-        || (segments[0] & 0xfe00) == 0xfc00
-        || (segments[0] & 0xffc0) == 0xfe80
-        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
-        || (segments[0] == 0x0100 && segments[1] == 0 && segments[2] == 0 && segments[3] == 0)
-        || address.to_ipv4().is_some_and(|_| segments[0..6] == [0; 6]))
+    // Admit 2000::/3 only. This excludes mapped/compatible addresses and the standard
+    // NAT64 prefixes; special/transition ranges inside the block are excluded below.
+    (segments[0] & 0xe000) == 0x2000
+        && !((segments[0] == 0x2001 && (segments[1] & 0xfe00) == 0)
+            || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+            || segments[0] == 0x2002
+            || (segments[0] == 0x3fff && (segments[1] & 0xf000) == 0))
 }
 
-/// Accepts tunnels until the listener fails; every connection is handled on its own task.
-pub async fn serve(listener: TcpListener, policy: Policy, limits: Limits) -> std::io::Result<()> {
+/// Owns at most `connections` tunnel tasks and one serial capacity response. Shutdown closes
+/// admission, drops the listener and joins every tunnel before returning. The request-head
+/// timeout also bounds writing a protocol response; established tunnels last until peer close
+/// or shutdown. No destination, client address or payload enters telemetry.
+pub async fn serve(
+    listener: TcpListener,
+    policy: Policy,
+    limits: Limits,
+    shutdown: impl Future<Output = ()>,
+) -> std::io::Result<()> {
     let policy = Arc::new(policy);
-    let open = Arc::new(AtomicUsize::new(0));
-    loop {
-        let (stream, _) = listener.accept().await?;
-        let (policy, open) = (policy.clone(), open.clone());
-        tokio::spawn(async move {
-            if open.fetch_add(1, Ordering::AcqRel) >= limits.connections {
-                open.fetch_sub(1, Ordering::AcqRel);
-                refuse(stream, Refusal::Capacity).await;
-                return;
+    let mut tasks = JoinSet::new();
+    tokio::pin!(shutdown);
+    let mut result = loop {
+        tokio::select! {
+            biased;
+            _ = &mut shutdown => break Ok(()),
+            joined = tasks.join_next(), if !tasks.is_empty() => {
+                if joined.is_some_and(|result| result.is_err()) {
+                    break Err(std::io::Error::other("tunnel_task_failed"));
+                }
             }
-            handle(stream, &policy, limits).await;
-            open.fetch_sub(1, Ordering::AcqRel);
+            accepted = listener.accept() => {
+                let stream = match accepted {
+                    Ok((stream, _)) => stream,
+                    Err(error) => break Err(error),
+                };
+                let span = match operation_span("cache", "transport") {
+                    Ok(span) => span,
+                    Err(_) => break Err(std::io::Error::other("telemetry_invalid")),
+                };
+                if tasks.len() >= limits.connections {
+                    // No task is spawned for a refusal, so slow readers cannot evade capacity.
+                    tokio::select! {
+                        biased;
+                        _ = &mut shutdown => break Ok(()),
+                        _ = refuse(stream, Refusal::Capacity, limits.head_timeout).instrument(span.clone()) => {
+                            finish_operation_span(&span, true);
+                        }
+                    }
+                } else {
+                    let policy = policy.clone();
+                    // Construct before spawn: even an unpolled/cancelled task has a terminal event.
+                    let terminal = Terminal::new(span.clone());
+                    tasks.spawn(async move {
+                        handle(stream, &policy, limits, terminal).await;
+                    }.instrument(span));
+                }
+            }
+        }
+    };
+    drop(listener);
+    tasks.abort_all();
+    while let Some(joined) = tasks.join_next().await {
+        if joined.is_err_and(|error| !error.is_cancelled()) && result.is_ok() {
+            result = Err(std::io::Error::other("tunnel_task_failed"));
+        }
+    }
+    result
+}
+
+struct Terminal {
+    started: Instant,
+    finished: bool,
+    span: tracing::Span,
+}
+
+impl Terminal {
+    fn new(span: tracing::Span) -> Self {
+        Self {
+            started: Instant::now(),
+            finished: false,
+            span,
+        }
+    }
+
+    fn finish(&mut self, outcome: &'static str, error: &'static str) {
+        finish_operation_span(&self.span, outcome == "error");
+        self.span.in_scope(|| {
+            tracing::info!(module = "cache", event.name = "egress.tunnel.finished", outcome,
+                error.type = error, duration_ms = self.started.elapsed().as_secs_f64() * 1000.0);
         });
+        self.finished = true;
     }
 }
 
-async fn handle(mut client: TcpStream, policy: &Policy, limits: Limits) {
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.finish("stopped", "cancelled");
+        }
+    }
+}
+
+async fn handle(mut client: TcpStream, policy: &Policy, limits: Limits, mut terminal: Terminal) {
     let destination = match tokio::time::timeout(
         limits.head_timeout,
         read_head(&mut client, limits.head_bytes),
@@ -220,19 +296,36 @@ async fn handle(mut client: TcpStream, policy: &Policy, limits: Limits) {
     let mut upstream = match upstream {
         Ok(upstream) => upstream,
         Err(refusal) => {
-            refuse(client, refusal).await;
+            refuse(client, refusal, limits.head_timeout).await;
+            terminal.finish("error", refusal.code());
             return;
         }
     };
-    if client
-        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        .await
-        .is_err()
+    match tokio::time::timeout(
+        limits.head_timeout,
+        client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n"),
+    )
+    .await
     {
-        return;
+        Ok(Ok(())) => {}
+        Ok(Err(_)) => {
+            terminal.finish("error", "io");
+            return;
+        }
+        Err(_) => {
+            terminal.finish("error", "timeout");
+            return;
+        }
     }
-    report("opened", None);
-    let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+    tracing::info!(
+        module = "cache",
+        event.name = "egress.tunnel.opened",
+        outcome = "ok"
+    );
+    match tokio::io::copy_bidirectional(&mut client, &mut upstream).await {
+        Ok(_) => terminal.finish("ok", "none"),
+        Err(_) => terminal.finish("error", "io"),
+    }
 }
 
 /// Reads up to the blank line that ends the head; a tunnel's own bytes follow only after `200`.
@@ -287,24 +380,17 @@ async fn open(
         .map_err(|_| Refusal::Unreachable)?
 }
 
-async fn refuse(mut client: TcpStream, refusal: Refusal) {
-    report("refused", Some(refusal));
+async fn refuse(mut client: TcpStream, refusal: Refusal, timeout: Duration) {
+    tracing::warn!(module = "cache", event.name = "egress.tunnel.refused", outcome = "error", error.type = refusal.code());
     let response = format!(
         "HTTP/1.1 {}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
         refusal.status()
     );
-    let _ = client.write_all(response.as_bytes()).await;
-    let _ = client.shutdown().await;
-}
-
-fn report(outcome: &str, refusal: Option<Refusal>) {
-    match refusal {
-        Some(refusal) => eprintln!(
-            "event=egress.tunnel outcome={outcome} reason={}",
-            refusal.code()
-        ),
-        None => eprintln!("event=egress.tunnel outcome={outcome}"),
-    }
+    let _ = tokio::time::timeout(timeout, async {
+        let _ = client.write_all(response.as_bytes()).await;
+        let _ = client.shutdown().await;
+    })
+    .await;
 }
 
 #[cfg(test)]
@@ -343,6 +429,10 @@ mod tests {
                 b"CONNECT example.com:443 SPDY/3\r\n\r\n",
                 Refusal::Malformed,
             ),
+            (
+                b"CONNECT example.com:443 HTTP/1.bad\r\n\r\n",
+                Refusal::Malformed,
+            ),
             (b"\xff\xfe\r\n\r\n", Refusal::Malformed),
         ] {
             assert_eq!(parse_connect(head), Err(refusal), "{head:?}");
@@ -351,7 +441,12 @@ mod tests {
 
     #[test]
     fn only_public_addresses_are_destinations() {
-        for public_address in ["140.82.121.4", "185.199.109.133", "2606:4700::1111"] {
+        for public_address in [
+            "140.82.121.4",
+            "185.199.109.133",
+            "2606:4700::1111",
+            "2001:4860:4860::8888",
+        ] {
             assert!(public(public_address.parse().unwrap()), "{public_address}");
         }
         for special in [
@@ -363,6 +458,7 @@ mod tests {
             "100.64.0.1",
             "0.0.0.0",
             "192.0.0.8",
+            "192.88.99.1",
             "198.18.0.1",
             "224.0.0.1",
             "255.255.255.255",
@@ -374,8 +470,17 @@ mod tests {
             "2001:db8::1",
             "::ffff:127.0.0.1",
             "::ffff:10.0.0.1",
+            "::ffff:8.8.8.8",
             "::127.0.0.1",
+            "64:ff9b::a00:1",
+            "64:ff9b:1::a00:1",
             "100::1",
+            "100:0:0:1::1",
+            "2001:2::1",
+            "2001:20::1",
+            "2002:a00:1::1",
+            "3fff::1",
+            "5f00::1",
             "ff02::1",
         ] {
             assert!(!public(special.parse().unwrap()), "{special}");
