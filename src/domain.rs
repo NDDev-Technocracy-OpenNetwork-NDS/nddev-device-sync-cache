@@ -26,6 +26,8 @@ pub struct Route {
     /// Set for an OCI distribution route: manifests are requested in every image manifest
     /// type, and content-addressed objects are checked against the digest in their path.
     pub oci: bool,
+    /// Subpaths the cache answers itself, with an empty success and no upstream request.
+    pub answers: &'static [&'static str],
 }
 
 /// The manifest types an OCI route requests; the registry answers with the one it holds.
@@ -57,6 +59,8 @@ pub struct Target<'a> {
     pub freshness: Freshness,
     /// The negotiated representation of an index document.
     pub media_type: Option<&'static str>,
+    /// Set when the cache answers the subpath itself.
+    pub answered: bool,
 }
 
 impl Target<'_> {
@@ -148,6 +152,7 @@ impl Routes {
             accept,
             index: None,
             oci: false,
+            answers: &[],
         };
         let oci = |id, prefix, template, upstream: &str| Route {
             oci: true,
@@ -275,8 +280,19 @@ impl Routes {
                     "https://plugins.gradle.org/m2",
                     maven,
                 ),
-                // Checksum database requests stay outside: the go command then verifies against
-                // sum.golang.org directly, as with proxy.golang.org itself.
+                // The Go checksum database through the proxy. The go command asks the proxy whether
+                // it mirrors the database and then reaches it only here; the signed notes and
+                // tiles pass through unchanged, so go still verifies them with the database's key.
+                Route {
+                    answers: &["/supported"],
+                    ..route(
+                        "gosumdb",
+                        "/goproxy/sumdb/sum.golang.org",
+                        "/goproxy/sumdb/sum.golang.org/{path}",
+                        "https://sum.golang.org",
+                        go_sumdb,
+                    )
+                },
                 route(
                     "goproxy",
                     "/goproxy",
@@ -375,6 +391,15 @@ impl Routes {
         if !valid_subpath(checked) {
             return Err(Rejection::InvalidPath);
         }
+        if route.answers.contains(&subpath.as_ref()) {
+            return Ok(Target {
+                route,
+                subpath: subpath.into_owned(),
+                freshness: Freshness::Immutable,
+                media_type: None,
+                answered: true,
+            });
+        }
         let freshness = (route.accept)(&subpath).ok_or(Rejection::NotAllowed)?;
         let media_type = match (&route.index, freshness) {
             (Some(index), Freshness::Revalidate) => {
@@ -387,6 +412,7 @@ impl Routes {
             subpath: subpath.into_owned(),
             freshness,
             media_type,
+            answered: false,
         })
     }
 
@@ -888,6 +914,54 @@ fn go_module(path: &str) -> Option<Freshness> {
     (version_valid && matches!(kind, "info" | "mod" | "zip")).then_some(Freshness::Immutable)
 }
 
+/// The checksum database protocol. `/latest` is the newest signed tree head and changes;
+/// `/lookup/{module}@{version}` is one record, and `/tile/{height}/{level}/{index}` (level `data`
+/// for the records themselves, `.p/{width}` for a partial tile) is fixed once published.
+pub fn go_sumdb(path: &str) -> Option<Freshness> {
+    if path == "/latest" {
+        return Some(Freshness::Revalidate);
+    }
+    if let Some(record) = path.strip_prefix("/lookup/") {
+        let (module, version) = record.rsplit_once('@')?;
+        let version = version.strip_suffix("/go.mod").unwrap_or(version);
+        let version_valid = version
+            .strip_prefix('v')
+            .is_some_and(|number| number.as_bytes().first().is_some_and(u8::is_ascii_digit))
+            && version
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b".-+!".contains(&byte));
+        return (go_module_path(module) && version_valid).then_some(Freshness::Immutable);
+    }
+    let tile = path.strip_prefix("/tile/")?;
+    let (tile, width) = match tile.split_once(".p/") {
+        Some((tile, width)) => (tile, Some(width)),
+        None => (tile, None),
+    };
+    let digits = |part: &str, most: usize| {
+        (1..=most).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_digit())
+    };
+    let mut parts = tile.split('/');
+    let (Some(height), Some(level)) = (parts.next(), parts.next()) else {
+        return None;
+    };
+    let index: Vec<&str> = parts.collect();
+    let index_valid = !index.is_empty()
+        && index.len() <= 8
+        && index.iter().enumerate().all(|(position, element)| {
+            let element = if position + 1 < index.len() {
+                element.strip_prefix('x').unwrap_or("")
+            } else {
+                element
+            };
+            element.len() == 3 && element.bytes().all(|byte| byte.is_ascii_digit())
+        });
+    (digits(height, 2)
+        && (level == "data" || digits(level, 2))
+        && index_valid
+        && width.is_none_or(|width| digits(width, 3)))
+    .then_some(Freshness::Immutable)
+}
+
 /// Checksum files that Maven repositories publish beside every file.
 const MAVEN_CHECKSUMS: [&str; 4] = ["md5", "sha1", "sha256", "sha512"];
 
@@ -1314,6 +1388,52 @@ mod tests {
     }
 
     #[test]
+    fn classifies_go_checksum_database_objects() {
+        use Freshness::*;
+        let routes = Routes::production();
+        let supported = routes
+            .resolve("/goproxy/sumdb/sum.golang.org/supported", None)
+            .unwrap();
+        assert!(supported.answered);
+        assert_eq!(supported.route.id, "gosumdb");
+        for (path, freshness) in [
+            ("/goproxy/sumdb/sum.golang.org/latest", Revalidate),
+            (
+                "/goproxy/sumdb/sum.golang.org/lookup/github.com/google/uuid@v1.6.0",
+                Immutable,
+            ),
+            (
+                "/goproxy/sumdb/sum.golang.org/lookup/github.com/!azure/azure-sdk-for-go@v68.0.0+incompatible",
+                Immutable,
+            ),
+            ("/goproxy/sumdb/sum.golang.org/tile/8/0/x150/367", Immutable),
+            ("/goproxy/sumdb/sum.golang.org/tile/8/1/586.p/13", Immutable),
+            (
+                "/goproxy/sumdb/sum.golang.org/tile/8/data/x150/367",
+                Immutable,
+            ),
+            ("/goproxy/sumdb/sum.golang.org/tile/8/2/002", Immutable),
+        ] {
+            assert_eq!(class(path), Ok(("gosumdb", freshness)), "{path}");
+            assert!(!routes.resolve(path, None).unwrap().answered, "{path}");
+        }
+        for path in [
+            "/goproxy/sumdb/sum.golang.org/lookup/github.com/Google/uuid@v1.6.0",
+            "/goproxy/sumdb/sum.golang.org/lookup/github.com/google/uuid@latest",
+            "/goproxy/sumdb/sum.golang.org/lookup/uuid@v1.6.0",
+            "/goproxy/sumdb/sum.golang.org/tile/8/0/150/367",
+            "/goproxy/sumdb/sum.golang.org/tile/8/0/x15/367",
+            "/goproxy/sumdb/sum.golang.org/tile/8/x/x150/367",
+            "/goproxy/sumdb/sum.golang.org/tile/8/1/586.p/1234",
+            "/goproxy/sumdb/sum.golang.org/tile/8/1",
+            "/goproxy/sumdb/sum.golang.org/latest/",
+            "/goproxy/sumdb/sum.golang.org/supported/x",
+        ] {
+            assert!(class(path).is_err(), "{path}");
+        }
+    }
+
+    #[test]
     fn classifies_go_module_objects() {
         use Freshness::*;
         for (path, freshness) in [
@@ -1339,8 +1459,7 @@ mod tests {
             assert_eq!(class(path), Ok(("goproxy", freshness)), "{path}");
         }
         for path in [
-            "/goproxy/sumdb/sum.golang.org/supported",
-            "/goproxy/sumdb/sum.golang.org/lookup/github.com/google/uuid@v1.6.0",
+            "/goproxy/sumdb/other.example/supported",
             "/goproxy/github.com/Google/uuid/@v/list",
             "/goproxy/uuid/@v/list",
             "/goproxy/github.com/google/uuid/@v/v1.6.0.tar.gz",

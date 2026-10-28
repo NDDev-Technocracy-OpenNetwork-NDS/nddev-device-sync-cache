@@ -187,6 +187,7 @@ async fn serve(
                         object.served
                     }
                     Delivery::Filling(filling) => filling.served,
+                    Delivery::Answered => Served::Hit,
                 };
                 let head = method == Method::HEAD;
                 let validator = headers
@@ -195,11 +196,12 @@ async fn serve(
                 // OCI clients read the digest of what they receive from the registry's header.
                 let content_digest = app.cache.oci(uri.path()).map(|path_digest| match &delivery {
                     Delivery::Stored(object) => Some(object.meta.sha256.clone()),
-                    Delivery::Filling(_) => path_digest,
+                    Delivery::Filling(_) | Delivery::Answered => path_digest,
                 });
                 let responded = match delivery {
                     Delivery::Stored(object) => respond(object, head, validator).await,
                     Delivery::Filling(filling) => respond_filling(filling, head).await,
+                    Delivery::Answered => Ok(answered()),
                 }
                 .map(|mut response| {
                     if let Some(digest) = content_digest {
@@ -286,6 +288,16 @@ async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Respon
 /// Serves a stored object. A client that already holds it, by the object's entity tag, gets
 /// `304 Not Modified`; sparse registry clients such as Cargo revalidate this way. An index
 /// document streams with its links rewritten, so its length is not declared.
+// An empty success the cache gives itself, such as the checksum database's `/supported`.
+fn answered() -> Response {
+    let mut response = StatusCode::OK.into_response();
+    response.headers_mut().insert(
+        "x-nds-cache",
+        HeaderValue::from_static(Served::Hit.as_str()),
+    );
+    response
+}
+
 async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io::Result<Response> {
     let index = object.links.is_some();
     let etag = match &object.links {
