@@ -112,14 +112,16 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         200
     );
     let mismatch = format!("/oci/library/app/blobs/sha256:{}", support::WRONG_DIGEST);
-    let _ = harness
+    // A fast checksum rejection can abort HTTP before headers are flushed or
+    // while the client reads the body. Neither boundary is promised by HTTP.
+    if let Ok(response) = harness
         .client
         .get(format!("{}{mismatch}", harness.base))
         .send()
         .await
-        .unwrap()
-        .bytes()
-        .await;
+    {
+        let _ = response.bytes().await;
+    }
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1100)).await;
@@ -159,6 +161,16 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     ] {
         assert!(!named(name).is_empty(), "{name} was not emitted");
     }
+    let rejected_digest = named("cache.fill.failed")
+        .into_iter()
+        .find(|event| event["route"] == "/oci/{path}" && event["error.type"] == "digest_mismatch")
+        .expect("the actual OCI checksum rejection must reach the canonical event stream");
+    assert!(
+        named("cache.fill.committed")
+            .iter()
+            .all(|event| event["trace_id"] != rejected_digest["trace_id"]),
+        "a rejected checksum was committed"
+    );
     let requests: Vec<&serde_json::Value> = named("cache.miss");
     for fill in named("cache.fill.committed")
         .into_iter()
