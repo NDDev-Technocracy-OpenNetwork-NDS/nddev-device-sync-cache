@@ -49,7 +49,9 @@ every other path before any upstream connection:
 
 Release artifacts stream to every client while the cache downloads them once, and stay immutable
 after the complete download is committed. Channel and index documents are revalidated with their
-upstream validators and served stale when upstream fails. npm package documents, PyPI project
+upstream validators and served stale when upstream fails. A pending GET keeps its streaming
+framing open until verification and commit, even after every upstream byte arrived; only stored
+GETs and HEADs advertise a known length. npm package documents, PyPI project
 pages and pub package documents are stored per representation the client accepts. PyPI and pub
 documents are served with their download links pointed at the loopback base address the client
 used, so the downloads come back through the cache. npm documents keep their public links, which

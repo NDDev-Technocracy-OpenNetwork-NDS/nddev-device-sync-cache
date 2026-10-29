@@ -44,6 +44,12 @@ request that started it, so its completion or failure is reported in that trace 
 transfer never becomes a cached object; a failed download ends every following response early and
 leaves nothing behind. Concurrent requests for one missing object share one upstream fetch.
 
+A pending GET does not advertise upstream `Content-Length`: receiving that many flushed bytes
+must not complete HTTP before the writer verifies the digest and commits. Its streaming framing
+ends only on `Committed`; `Failed` aborts it, including a zero-byte body. A stored GET and a HEAD
+retain their known lengths. This follows the completion rules in
+[RFC9112 sections6.3 and8](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
+
 Mutable objects are small. They are downloaded completely before they are served, carry their
 upstream validators and are revalidated after a bounded age; when revalidation fails, the stored copy
 is served and the stale response is reported.
