@@ -210,8 +210,14 @@ owned forward as the cache, and that jobs select with `HTTPS_PROXY=http://127.0.
 `NO_PROXY=127.0.0.1,localhost`.
 
 - **CONNECT only.** It answers `CONNECT host:port` and splices bytes, so TLS stays end to end
-  between the job and the origin; nothing is inspected, rewritten or stored. Other methods answer
-  `405`; plain-HTTP requests are not relayed.
+  between the job and the origin; nothing is inspected, rewritten or stored. The one local
+  `GET /v1/ready` answers an empty `200` and closes; other methods/paths answer `405`.
+  Plain-HTTP requests are not relayed.
+- **Readiness through the forward.** A pool can select this relay with `--http-probe /v1/ready`.
+  The probe reaches the actual relay without DNS or an external connection, shares its request
+  size/deadline/task-capacity bounds and answers `503` when admission is full. It proves this
+  transport reaches a serving relay; external DNS, origin reachability and TLS remain separate
+  checks. A local listening tunnel alone does not establish readiness.
 - **Public destinations only.** The destination must resolve to a public address on an allowed
   port, `443` unless `--allow-port` selects others. Loopback, private, link-local, shared,
   documentation, benchmark, multicast and reserved ranges answer `403`. IPv6 is native global
@@ -226,7 +232,7 @@ owned forward as the cache, and that jobs select with `HTTPS_PROXY=http://127.0.
   same capacity bound and retain their slot through actual completion, including after an
   async timeout. At most 64 resolved addresses are admitted. Shutdown waits for those jobs;
   it cannot promise a wall-clock bound on the OS resolver.
-- **Events.** The existing shared SDK owns the canonical lifecycle and tunnel events, with fixed
+- **Events.** The existing shared SDK owns the canonical lifecycle, readiness and tunnel events, with fixed
   outcomes/error classes and no host name, address, request head or payload.
 
 The relay is not a cache: what a job can fetch through a cache route belongs on that route, so it
