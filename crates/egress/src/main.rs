@@ -1,12 +1,13 @@
 //! `nds-cache-egress`: the loopback HTTPS egress relay of the cache host.
 
+use nddev_device_sync_cache::telemetry;
 use nddev_device_sync_cache_egress::{Limits, Policy, serve};
 use std::{net::SocketAddr, process::ExitCode};
 
 const USAGE: &str = "usage:
   nds-cache-egress --listen <loopback address:port> [--allow-port <port>]... [--max-connections <n>]";
 
-#[tokio::main]
+#[tokio::main(worker_threads = 4)]
 async fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let mut listen: Option<SocketAddr> = None;
@@ -22,7 +23,13 @@ async fn main() -> ExitCode {
                 _ => return usage(),
             },
             ("--max-connections", Some(value)) => match value.parse::<usize>() {
-                Ok(count) if count > 0 => limits.connections = count,
+                Ok(count)
+                    if count > 0
+                        && u32::try_from(count).is_ok()
+                        && count <= tokio::sync::Semaphore::MAX_PERMITS =>
+                {
+                    limits.connections = count
+                }
                 _ => return usage(),
             },
             _ => return usage(),
@@ -36,23 +43,42 @@ async fn main() -> ExitCode {
     if !ports.is_empty() {
         policy.ports = ports;
     }
-    let listener = match tokio::net::TcpListener::bind(listen).await {
-        Ok(listener) => listener,
+    let get = |name: &str| std::env::var(name).ok();
+    let Ok(identity) = telemetry::Identity::read(&get) else {
+        eprintln!("invalid_telemetry_configuration");
+        return ExitCode::FAILURE;
+    };
+    let _logger = match telemetry::install(&identity, &get) {
+        Ok(logger) => logger,
         Err(error) => {
-            eprintln!("event=egress.listen outcome=failed error={}", error.kind());
+            eprintln!("{error}");
             return ExitCode::FAILURE;
         }
     };
-    eprintln!("event=egress.listen outcome=ready");
-    tokio::select! {
-        result = serve(listener, policy, limits) => {
-            if let Err(error) = result {
-                eprintln!("event=egress.accept outcome=failed error={}", error.kind());
-                return ExitCode::FAILURE;
-            }
-            ExitCode::SUCCESS
+    let listener = match tokio::net::TcpListener::bind(listen).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            let class = match error.kind() {
+                std::io::ErrorKind::AddrInUse => "address_in_use",
+                std::io::ErrorKind::AddrNotAvailable => "address_unavailable",
+                std::io::ErrorKind::PermissionDenied => "permission_denied",
+                _ => "io",
+            };
+            tracing::error!(module = "cache", event.name = "egress.listen.failed", outcome = "error", error.type = class);
+            return ExitCode::FAILURE;
         }
-        _ = shutdown() => ExitCode::SUCCESS,
+    };
+    tracing::info!(
+        module = "cache",
+        event.name = "egress.listening",
+        outcome = "ok"
+    );
+    match serve(listener, policy, limits, shutdown()).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => {
+            tracing::error!(module = "cache", event.name = "egress.failed", outcome = "error", error.type = "io");
+            ExitCode::FAILURE
+        }
     }
 }
 

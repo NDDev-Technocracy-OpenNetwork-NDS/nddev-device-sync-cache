@@ -14,8 +14,16 @@ name = "nds-cache-egress"
 path = "src/main.rs"
 
 [dependencies]
+nddev-device-sync-cache = { path = "../.." }
+nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "586597486d67a48e190d1970653927d83beb687f" }
 thiserror = "2.0"
 tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+
+[dev-dependencies]
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
+serde_json = "1.0"
 
 [lints.rust]
 unsafe_code = "forbid"
