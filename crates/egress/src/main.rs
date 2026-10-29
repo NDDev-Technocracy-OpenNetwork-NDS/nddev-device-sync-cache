@@ -23,7 +23,13 @@ async fn main() -> ExitCode {
                 _ => return usage(),
             },
             ("--max-connections", Some(value)) => match value.parse::<usize>() {
-                Ok(count) if count > 0 => limits.connections = count,
+                Ok(count)
+                    if count > 0
+                        && u32::try_from(count).is_ok()
+                        && count <= tokio::sync::Semaphore::MAX_PERMITS =>
+                {
+                    limits.connections = count
+                }
                 _ => return usage(),
             },
             _ => return usage(),

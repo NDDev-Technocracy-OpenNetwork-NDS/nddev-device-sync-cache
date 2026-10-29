@@ -171,7 +171,10 @@ owned forward as the cache, and that jobs select with `HTTPS_PROXY=http://127.0.
   and connecting take at most 15 s (`502`); at most 512 tunnels are open (`--max-connections`,
   then `503`). One serial refusal response is allowed beyond the tunnel bound; protocol writes
   also use the head timeout. Shutdown closes admission and joins every tunnel task before
-  returning; established tunnels have no total-duration deadline.
+  returning; established tunnels have no total-duration deadline. Native DNS jobs have the
+  same capacity bound and retain their slot through actual completion, including after an
+  async timeout. At most 64 resolved addresses are admitted. Shutdown waits for those jobs;
+  it cannot promise a wall-clock bound on the OS resolver.
 - **Events.** The existing shared SDK owns the canonical lifecycle and tunnel events, with fixed
   outcomes/error classes and no host name, address, request head or payload.
 

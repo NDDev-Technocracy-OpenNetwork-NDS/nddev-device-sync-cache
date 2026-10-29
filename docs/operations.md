@@ -74,6 +74,11 @@ heads and tunnel bytes never enter these events.
 The relay owns at most its configured number of tunnel tasks plus one serial capacity
 response. Protocol response writes share the request-head timeout bound. An established
 tunnel ends on peer close or relay shutdown; it has no total-duration promise.
+Native DNS jobs share a separate bound equal to the tunnel limit and return at most 64
+addresses. The resolve/connect decision has its configured deadline; a timed-out native
+lookup retains capacity until its actual result is reclaimed. Shutdown also waits for these
+jobs rather than declaring completion from a cancelled async awaiter. There is no hard
+wall-clock promise for the OS resolver.
 
 Alerts belong to the observability deployment. The cache supports these rules: a degraded store, repeated
 storage pressure, a degraded upstream that does not recover, a rising rate of failed fills and an

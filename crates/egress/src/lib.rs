@@ -12,16 +12,19 @@
 use nddev_device_sync_telemetry::{finish_operation_span, operation_span};
 use std::{
     future::Future,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    task::JoinSet,
+    sync::{OwnedSemaphorePermit, Semaphore},
+    task::{JoinHandle, JoinSet},
 };
 use tracing::Instrument;
+
+const MAX_RESOLVED_ADDRESSES: usize = 64;
 
 /// Which destinations the relay opens.
 #[derive(Clone, Debug)]
@@ -195,6 +198,74 @@ pub async fn serve(
     limits: Limits,
     shutdown: impl Future<Output = ()>,
 ) -> std::io::Result<()> {
+    let resolver = Resolver::new(limits.connections)?;
+    serve_with_resolver(listener, policy, limits, shutdown, resolver).await
+}
+
+// A native lookup cannot be cancelled after it starts. Its permit travels in the actual
+// blocking job's result: abandoning the async awaiter never frees capacity while that job
+// or its undelivered result still exists. The runtime owns the job until it completes.
+#[derive(Clone)]
+struct Resolver {
+    permits: Arc<Semaphore>,
+    limit: u32,
+}
+
+struct Resolution {
+    addresses: Result<Vec<SocketAddr>, Refusal>,
+    _permit: OwnedSemaphorePermit,
+}
+
+impl Resolver {
+    fn new(limit: usize) -> std::io::Result<Self> {
+        let count = u32::try_from(limit)
+            .ok()
+            .filter(|_| limit <= Semaphore::MAX_PERMITS)
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "connections_invalid")
+            })?;
+        Ok(Self {
+            permits: Arc::new(Semaphore::new(limit)),
+            limit: count,
+        })
+    }
+
+    fn start(
+        &self,
+        lookup: impl FnOnce() -> Result<Vec<SocketAddr>, Refusal> + Send + 'static,
+    ) -> Result<JoinHandle<Resolution>, Refusal> {
+        let permit = self
+            .permits
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Refusal::Capacity)?;
+        let span = tracing::Span::current();
+        Ok(tokio::task::spawn_blocking(move || {
+            let addresses = span.in_scope(lookup);
+            Resolution {
+                addresses,
+                _permit: permit,
+            }
+        }))
+    }
+
+    async fn drain(&self) -> std::io::Result<()> {
+        self.permits
+            .clone()
+            .acquire_many_owned(self.limit)
+            .await
+            .map(|_| ())
+            .map_err(|_| std::io::Error::other("resolver_closed"))
+    }
+}
+
+async fn serve_with_resolver(
+    listener: TcpListener,
+    policy: Policy,
+    limits: Limits,
+    shutdown: impl Future<Output = ()>,
+    resolver: Resolver,
+) -> std::io::Result<()> {
     let policy = Arc::new(policy);
     let mut tasks = JoinSet::new();
     tokio::pin!(shutdown);
@@ -227,10 +298,11 @@ pub async fn serve(
                     }
                 } else {
                     let policy = policy.clone();
+                    let resolver = resolver.clone();
                     // Construct before spawn: even an unpolled/cancelled task has a terminal event.
                     let terminal = Terminal::new(span.clone());
                     tasks.spawn(async move {
-                        handle(stream, &policy, limits, terminal).await;
+                        handle(stream, &policy, limits, terminal, resolver).await;
                     }.instrument(span));
                 }
             }
@@ -242,6 +314,12 @@ pub async fn serve(
         if joined.is_err_and(|error| !error.is_cancelled()) && result.is_ok() {
             result = Err(std::io::Error::other("tunnel_task_failed"));
         }
+    }
+    // Timed-out lookups may outlive the request future. There is deliberately no forged
+    // finite shutdown receipt while the OS resolver still holds a permit.
+    let drained = resolver.drain().await;
+    if result.is_ok() {
+        result = drained;
     }
     result
 }
@@ -283,7 +361,13 @@ impl Drop for Terminal {
     }
 }
 
-async fn handle(mut client: TcpStream, policy: &Policy, limits: Limits, mut terminal: Terminal) {
+async fn handle(
+    mut client: TcpStream,
+    policy: &Policy,
+    limits: Limits,
+    mut terminal: Terminal,
+    resolver: Resolver,
+) {
     let destination = match tokio::time::timeout(
         limits.head_timeout,
         read_head(&mut client, limits.head_bytes),
@@ -294,7 +378,7 @@ async fn handle(mut client: TcpStream, policy: &Policy, limits: Limits, mut term
         Ok(head) => head.and_then(|head| parse_connect(&head)),
     };
     let upstream = match destination {
-        Ok((host, port)) => open(&host, port, policy, limits).await,
+        Ok((host, port)) => open(&host, port, policy, limits, resolver).await,
         Err(refusal) => Err(refusal),
     };
     let mut upstream = match upstream {
@@ -353,15 +437,30 @@ async fn open(
     port: u16,
     policy: &Policy,
     limits: Limits,
+    resolver: Resolver,
 ) -> Result<TcpStream, Refusal> {
     if !policy.ports.contains(&port) {
         return Err(Refusal::Port);
     }
     let attempt = async {
-        let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
-            .await
-            .map_err(|_| Refusal::Unreachable)?
-            .collect();
+        let addresses = if let Ok(address) = host.parse::<IpAddr>() {
+            vec![SocketAddr::new(address, port)]
+        } else {
+            let host = host.to_owned();
+            let query = resolver.start(move || {
+                let addresses: Vec<_> = (host.as_str(), port)
+                    .to_socket_addrs()
+                    .map_err(|_| Refusal::Unreachable)?
+                    .take(MAX_RESOLVED_ADDRESSES + 1)
+                    .collect();
+                if addresses.len() > MAX_RESOLVED_ADDRESSES {
+                    Err(Refusal::Capacity)
+                } else {
+                    Ok(addresses)
+                }
+            })?;
+            query.await.map_err(|_| Refusal::Unreachable)?.addresses?
+        };
         let allowed: Vec<SocketAddr> = addresses
             .into_iter()
             .filter(|address| {
@@ -400,6 +499,71 @@ async fn refuse(mut client: TcpStream, refusal: Refusal, timeout: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn abandoned_native_lookup_keeps_capacity_and_shutdown_waits_for_its_actual_end() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        let resolver = Resolver::new(1).unwrap();
+        let (started, waiting) = tokio::sync::oneshot::channel();
+        let (release, released) = mpsc::sync_channel(1);
+        let finished = Arc::new(AtomicBool::new(false));
+        let observed = finished.clone();
+        let job = resolver
+            .start(move || {
+                let _ = started.send(());
+                released
+                    .recv_timeout(Duration::from_secs(5))
+                    .map_err(|_| Refusal::Timeout)?;
+                observed.store(true, Ordering::Release);
+                Ok(Vec::new())
+            })
+            .unwrap();
+        waiting.await.unwrap();
+        drop(job);
+        let second_started = Arc::new(AtomicBool::new(false));
+        let second_observed = second_started.clone();
+        let refused = matches!(
+            resolver.start(move || {
+                second_observed.store(true, Ordering::Release);
+                Ok(Vec::new())
+            }),
+            Err(Refusal::Capacity)
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let (closing, closed) = tokio::sync::oneshot::channel();
+        let mut stopped = tokio::spawn(serve_with_resolver(
+            listener,
+            Policy::default(),
+            Limits {
+                connections: 1,
+                ..Limits::default()
+            },
+            async move {
+                let _ = closing.send(());
+            },
+            resolver,
+        ));
+        closed.await.unwrap();
+        let held = !stopped.is_finished();
+        // Settle the real blocking worker before assertions, including mutation failures.
+        let _ = release.send(());
+        let result = tokio::time::timeout(Duration::from_secs(5), &mut stopped).await;
+        if result.is_err() {
+            stopped.abort();
+            let _ = stopped.await;
+        }
+        assert!(refused && !second_started.load(Ordering::Acquire));
+        assert!(
+            held,
+            "shutdown returned while an abandoned native lookup still ran"
+        );
+        assert!(finished.load(Ordering::Acquire));
+        assert!(result.unwrap().unwrap().is_ok());
+    }
 
     #[test]
     fn only_a_well_formed_connect_names_a_destination() {
