@@ -150,6 +150,29 @@ caches cannot serve fails visibly. Nothing falls back to the public source on it
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
 
+## Forward pool
+
+A device reaches the cache, and a controller reaches a device, through forwards whose local
+listener keeps accepting connections after the tunnel behind it stops carrying data.
+`nds-forward-pool` is one loopback listener in front of several such forwards to the same
+service:
+
+```sh
+nds-forward-pool --listen 127.0.0.1:8740 \
+  --primary 127.0.0.1:18741 --primary 127.0.0.1:18742 --fallback 127.0.0.1:18740 \
+  --http-probe /v1/ready
+```
+
+- **End-to-end probes.** Every 2 s (`--interval SECONDS`) each upstream is probed through the whole path:
+  `--http-probe PATH` expects `HTTP/1.x 200`, `--banner-probe PREFIX` expects the server's first
+  bytes, such as `SSH-`. A frozen tunnel fails the probe within 3 s although its listener accepts.
+- **Spread, then fall back.** New connections go round robin over the healthy primaries, so flows
+  that a link throttles one by one add up, and to the healthy fallbacks in order only while no
+  primary is healthy. With nothing healthy every upstream is still tried in order.
+- **No moves.** A connection stays on its upstream once it carries bytes; a client that loses it
+  retries like after any connection failure.
+- **Loopback only**, for the listener and every upstream; events carry outcomes, never addresses.
+
 ## Egress relay
 
 Some device uplinks throttle direct downloads that the cache does not carry: a tool archive from
