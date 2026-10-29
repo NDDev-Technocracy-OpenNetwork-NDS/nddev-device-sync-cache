@@ -71,8 +71,10 @@ upstream is unreachable. `GET /source` links the corresponding source.
 | `NDS_CACHE_REVALIDATE_SECONDS` | Age after which channel and index documents are revalidated. |
 
 The service emits the canonical NDS event envelope on standard output through the shared telemetry
-SDK. `compose.yaml` runs the hardened container with the store as its only writable mount, and the
-`compose.collector.yaml` overlay delivers the events to the observability Fluent collector:
+SDK. `compose.yaml` runs the hardened container with the store as its only writable mount
+and bounded local container logs. Starting the service does not enable a remote exporter.
+The optional `compose.collector.yaml` overlay delivers events to a Fluent collector only
+after the deployment owner explicitly selects that sink and its data scope:
 
 ```sh
 docker compose -f compose.yaml -f compose.collector.yaml up --detach
@@ -156,6 +158,15 @@ Bound means central-only. While the forward or the cache is down, a download tha
 caches cannot serve fails visibly. Nothing falls back to the public source on its own. That
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
+
+A project can explicitly select the central npm route for an already frozen public Bun graph
+with `bun install --frozen-lockfile --registry "${NDS_CACHE_BASE:?}/npm/"`. This is a
+project-owned command, not a default Bun binding. It requires review of the project's private
+registry files and authentication selectors; the command must not override those policies.
+Lockfile authoring still uses the canonical source. Retries keep the same selected central
+route. Qualify the actual committed install action and graph with a fresh job-owned Bun cache,
+unchanged frozen inputs, observed network destinations, warm transport-outage success and cold
+refusal without public fallback. Never clear a shared package cache to manufacture that probe.
 
 ### Public GitHub release assets
 
