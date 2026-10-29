@@ -261,8 +261,9 @@ fn content_type(value: Option<&str>) -> HeaderValue {
 }
 
 /// Streams a download that is still in progress. `HEAD` answers from the upstream headers
-/// without waiting for the body. The body carries `Content-Length` when upstream declared
-/// it; a failed download ends the response early, so clients never accept a partial object.
+/// without waiting for the body. A pending GET must not declare a length: even after every
+/// upstream byte is flushed, verification/commit can still fail. Its framing completes only
+/// when follow reaches Committed; a producer failure therefore aborts even an empty body.
 async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Response> {
     let body = if head {
         Body::empty()
@@ -271,7 +272,7 @@ async fn respond_filling(filling: Filling, head: bool) -> std::io::Result<Respon
     };
     let mut response = Response::new(body);
     let headers = response.headers_mut();
-    if let Some(length) = filling.length {
+    if head && let Some(length) = filling.length {
         headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
     }
     headers.insert(
@@ -366,4 +367,125 @@ fn rewritten(
             None => Some((Ok(links.finish().into()), None)),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::{Progress, Store, Validators};
+    use std::sync::Mutex;
+    use tokio::sync::{oneshot, watch};
+
+    #[tokio::test]
+    async fn pending_http_bodies_cannot_complete_before_native_commit() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Real Pending files and real HTTP sockets. Control only the production progress
+        // channel: all declared bytes are already flushed, but no commit is acknowledged.
+        // A Content-Length regression makes each failed case complete successfully here.
+        for (payload, commit) in [
+            (&b""[..], false),
+            (&b"already flushed"[..], false),
+            (&b"verified"[..], true),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let (store, _) = Store::open(&directory.path().join("store"), 1 << 30, 1 << 20)
+                .await
+                .unwrap();
+            let mut pending = store.begin().await.unwrap();
+            pending.write(payload).await.unwrap();
+            pending.flush().await.unwrap();
+            let path = pending.path().to_owned();
+            let length = payload.len() as u64;
+            let (progress, receiver) = watch::channel(Progress::Writing(length));
+            let filling = move || Filling {
+                served: Served::Miss,
+                temp: path.clone(),
+                length: Some(length),
+                content_type: None,
+                progress: receiver.clone(),
+            };
+            let head = respond_filling(filling(), true).await.unwrap();
+            assert_eq!(head.headers()[header::CONTENT_LENGTH], length.to_string());
+            let (accepted, accepting) = oneshot::channel();
+            let accepted = Arc::new(Mutex::new(Some(accepted)));
+            let router = Router::new().route(
+                "/",
+                get(move || {
+                    let filling = filling();
+                    let accepted = accepted.clone();
+                    async move {
+                        let response = respond_filling(filling, false).await.unwrap();
+                        if let Some(signal) = accepted.lock().unwrap().take() {
+                            let _ = signal.send(());
+                        }
+                        response
+                    }
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let (stop, stopping) = oneshot::channel();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(async {
+                        let _ = stopping.await;
+                    })
+                    .await
+                    .unwrap();
+            });
+            let mut client = tokio::spawn(async move {
+                reqwest::Client::new()
+                    .get(format!("http://{address}/"))
+                    .send()
+                    .await?
+                    .bytes()
+                    .await
+            });
+            tokio::time::timeout(std::time::Duration::from_secs(3), accepting)
+                .await
+                .unwrap()
+                .unwrap();
+            let premature =
+                tokio::time::timeout(std::time::Duration::from_millis(100), &mut client).await;
+            let incomplete = premature.is_err();
+            // Settle every owned task/file before assertions, including mutation failures.
+            if commit {
+                let (meta, path, _) = store
+                    .commit("qualification", pending, Validators::default())
+                    .await
+                    .unwrap();
+                progress.send_replace(Progress::Committed {
+                    size: meta.size,
+                    path,
+                });
+            } else {
+                drop(pending);
+                progress.send_replace(Progress::Failed);
+            }
+            let result = match premature {
+                Ok(result) => result.unwrap(),
+                Err(_) => tokio::time::timeout(std::time::Duration::from_secs(3), client)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            };
+            let _ = stop.send(());
+            tokio::time::timeout(std::time::Duration::from_secs(3), server)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                incomplete,
+                "HTTP completed while the complete file was still unverified"
+            );
+            if commit {
+                assert_eq!(result.unwrap().as_ref(), payload);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "failed native progress produced a complete HTTP response"
+                );
+            }
+        }
+    }
 }
