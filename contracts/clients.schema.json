@@ -14,7 +14,7 @@
       "additionalProperties": false,
       "required": ["transport", "base", "admission"],
       "properties": {
-        "transport": {"const": "rds forward"},
+        "transport": {"enum": ["rds forward", "estate-admitted forwards"]},
         "base": {"const": "http://127.0.0.1:{port}"},
         "admission": {"type": "string", "minLength": 1}
       }

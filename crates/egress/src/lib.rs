@@ -1,8 +1,9 @@
 //! Loopback HTTPS egress relay for hosts whose own uplink cannot carry downloads.
 //!
 //! The relay runs on the cache host and listens on loopback only; devices reach it through their
-//! existing forward, the same way they reach the cache. It answers only `CONNECT host:port` and
-//! splices bytes, so TLS stays end to end between the client and the origin: nothing is
+//! existing forward, the same way they reach the cache. It relays only `CONNECT host:port` and
+//! answers a local `GET /v1/ready` without opening a destination. Tunnel bytes stay opaque,
+//! so TLS stays end to end between the client and the origin: nothing is
 //! inspected, rewritten or stored. A destination must be a public address on an allowed port;
 //! loopback, private, link-local, translation and other special-purpose ranges are refused.
 //! This address policy does not authenticate the origin or replace host routing/firewall policy.
@@ -340,9 +341,13 @@ impl Terminal {
     }
 
     fn finish(&mut self, outcome: &'static str, error: &'static str) {
+        self.finish_event("egress.tunnel.finished", outcome, error);
+    }
+
+    fn finish_event(&mut self, event: &'static str, outcome: &'static str, error: &'static str) {
         finish_operation_span(&self.span, outcome == "error");
         self.span.in_scope(|| {
-            tracing::info!(module = "cache", event.name = "egress.tunnel.finished", outcome,
+            tracing::info!(module = "cache", event.name = event, outcome,
                 error.type = error, duration_ms = self.started.elapsed().as_secs_f64() * 1000.0);
         });
         self.finished = true;
@@ -368,15 +373,30 @@ async fn handle(
     mut terminal: Terminal,
     resolver: Resolver,
 ) {
-    let destination = match tokio::time::timeout(
+    let head = match tokio::time::timeout(
         limits.head_timeout,
         read_head(&mut client, limits.head_bytes),
     )
     .await
     {
         Err(_) => Err(Refusal::Timeout),
-        Ok(head) => head.and_then(|head| parse_connect(&head)),
+        Ok(head) => head,
     };
+    if head.as_ref().is_ok_and(|head| readiness(head)) {
+        let result = tokio::time::timeout(
+            limits.head_timeout,
+            client.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+        )
+        .await;
+        let (outcome, error) = match result {
+            Ok(Ok(())) => ("ok", "none"),
+            Ok(Err(_)) => ("error", "io"),
+            Err(_) => ("error", "timeout"),
+        };
+        terminal.finish_event("egress.ready", outcome, error);
+        return;
+    }
+    let destination = head.and_then(|head| parse_connect(&head));
     let upstream = match destination {
         Ok((host, port)) => open(&host, port, policy, limits, resolver).await,
         Err(refusal) => Err(refusal),
@@ -414,6 +434,38 @@ async fn handle(
         Ok(_) => terminal.finish("ok", "none"),
         Err(_) => terminal.finish("error", "io"),
     }
+}
+
+/// One local readiness request, with no body or absolute proxy URL. Its head has already
+/// passed the same size/deadline/task-capacity admission as every tunnel request.
+fn readiness(head: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(head) else {
+        return false;
+    };
+    let Some(text) = text.strip_suffix("\r\n\r\n") else {
+        return false;
+    };
+    let mut lines = text.split("\r\n");
+    if !matches!(
+        lines.next(),
+        Some("GET /v1/ready HTTP/1.0" | "GET /v1/ready HTTP/1.1")
+    ) {
+        return false;
+    }
+    lines.all(|line| {
+        let Some((name, value)) = line.split_once(':') else {
+            return false;
+        };
+        !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            && !name.eq_ignore_ascii_case("transfer-encoding")
+            && (!name.eq_ignore_ascii_case("content-length") || value.trim() == "0")
+            && !value
+                .bytes()
+                .any(|byte| byte.is_ascii_control() && byte != b'\t')
+    })
 }
 
 /// Reads up to the blank line that ends the head; a tunnel's own bytes follow only after `200`.

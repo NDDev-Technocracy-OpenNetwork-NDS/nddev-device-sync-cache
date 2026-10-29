@@ -144,6 +144,14 @@ async fn real_tunnel_outcomes_use_the_shared_sdk_and_never_include_destinations_
         .unwrap()
         .unwrap();
     assert!(answer.starts_with("HTTP/1.1 400"));
+    let mut ready = TcpStream::connect(relay.address).await.unwrap();
+    ready.write_all(b"GET /v1/ready HTTP/1.1\r\nHost: readiness-private.invalid\r\nAuthorization: Bearer READINESS_TEST_SECRET\r\n\r\n").await.unwrap();
+    let mut response = String::new();
+    tokio::time::timeout(Duration::from_secs(3), ready.read_to_string(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
     assert_eq!(relay.stop(), 0);
     drop(relay);
     drop(target);
@@ -163,6 +171,7 @@ async fn real_tunnel_outcomes_use_the_shared_sdk_and_never_include_destinations_
         "egress.tunnel.opened",
         "egress.tunnel.refused",
         "egress.tunnel.finished",
+        "egress.ready",
     ] {
         assert!(
             events.iter().any(|event| event["event.name"] == name),
@@ -191,6 +200,8 @@ async fn real_tunnel_outcomes_use_the_shared_sdk_and_never_include_destinations_
         "secret-user",
         "cache-fixture.invalid",
         "EGRESS_PRIVATE_TEST_PAYLOAD",
+        "readiness-private.invalid",
+        "READINESS_TEST_SECRET",
     ] {
         assert!(
             !output.contains(secret),

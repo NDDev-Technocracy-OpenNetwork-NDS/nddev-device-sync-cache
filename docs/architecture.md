@@ -8,8 +8,9 @@ is rejected before any upstream connection.
 ## Access
 
 The service listens on a loopback address of its host. Devices and runners reach it with
-`rds forward`, so the remote-device-sync transport authenticates every peer with its device key and
-the estate allowlist decides which devices may connect. Write operations that later protocol
+an estate-admitted remote-access forward, such as restricted SSH or `rds forward`. That transport
+authenticates its peer and restricts the remote target; the private estate owns the selection.
+Redundant forwards reach the same central listener and store. Write operations that later protocol
 increments add, such as shared build caches, additionally require a per-client key that only CI
 identities hold. Host, port and allowlist values live in the private estate.
 
@@ -76,6 +77,12 @@ token service when it is challenged, and follows blob redirects only to allowlis
 Manifests by tag are revalidated; manifests by digest and blobs are content-addressed, and the
 cache stores them only when their bytes have the digest of their path. Responses carry
 `Docker-Content-Digest`.
+
+Public GitHub release assets use `/github-releases/sha256/{digest}/owner/repository/releases/download/tag/asset`.
+The digest prefix is retained in the store key and stripped only from the upstream URL. These
+objects use the same streamed download and digest verification as content-addressed OCI objects,
+without OCI authentication or response headers. A replaced release asset cannot poison the old
+digest's cache entry. The downloader still verifies the completed file before using it.
 
 The store has a configured capacity. Commits that would exceed it evict the least recently used
 objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache

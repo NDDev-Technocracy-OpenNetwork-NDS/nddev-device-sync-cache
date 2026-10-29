@@ -80,6 +80,12 @@ and permission denial. `egress.tunnel.opened`, `egress.tunnel.refused` and
 only a fixed `error.type`. Shutdown reports cancelled admitted tunnels after closing admission
 and joins their tasks before the SDK reports process stop. Destinations, addresses, request
 heads and tunnel bytes never enter these events.
+`egress.ready` reports the terminal outcome and duration of a local readiness response, with
+fixed error classes `none`, `io` or `timeout`. It neither opens nor reports a tunnel and carries
+no request fields. `GET /v1/ready` returns an empty `200` only after ordinary task/head admission;
+the existing capacity refusal remains `503`. It performs no DNS or external probe, so upstream
+reachability must be observed independently. A forward pool may use this path to distinguish
+an actual serving relay from a tunnel that merely retains its local listening socket.
 
 The relay owns at most its configured number of tunnel tasks plus one serial capacity
 response. Protocol response writes share the request-head timeout bound. An established
