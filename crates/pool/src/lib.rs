@@ -22,6 +22,8 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
+pub mod telemetry;
+
 /// How an upstream proves that it carries data to the service.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Probe {
@@ -114,13 +116,16 @@ impl Pool {
                     .await
                     .unwrap_or(false);
                 if upstream.healthy.swap(ok, Ordering::AcqRel) != ok {
-                    eprintln!(
-                        "event=pool.upstream outcome={} kind={}",
-                        if ok { "healthy" } else { "unhealthy" },
-                        if upstream.fallback {
-                            "fallback"
+                    tracing::info!(
+                        module = "pool",
+                        scope = "io",
+                        event.name = "pool.upstream",
+                        outcome = "checked",
+                        available = ok,
+                        route = if upstream.fallback {
+                            "/forward/fallback"
                         } else {
-                            "primary"
+                            "/forward/primary"
                         }
                     );
                 }
@@ -163,8 +168,20 @@ pub async fn watch(pool: Arc<Pool>) {
 
 /// Accepts connections and splices each to the first upstream of `order` that connects.
 pub async fn serve(listener: TcpListener, pool: Arc<Pool>) -> std::io::Result<()> {
+    tracing::info!(
+        module = "pool",
+        scope = "io",
+        event.name = "pool.listen",
+        outcome = "ready"
+    );
     loop {
-        let (mut client, _) = listener.accept().await?;
+        let (mut client, _) = match listener.accept().await {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::error!(module = "pool", scope = "io", event.name = "pool.listen", outcome = "error", error.type = "accept_failed");
+                return Err(error);
+            }
+        };
         let pool = pool.clone();
         tokio::spawn(async move {
             for upstream in pool.order() {
@@ -176,7 +193,7 @@ pub async fn serve(listener: TcpListener, pool: Arc<Pool>) -> std::io::Result<()
                     return;
                 }
             }
-            eprintln!("event=pool.connection outcome=refused reason=no_upstream");
+            tracing::warn!(module = "pool", scope = "io", event.name = "pool.connection", route = "/forward/{class}", outcome = "unavailable", error.type = "no_upstream");
         });
     }
 }

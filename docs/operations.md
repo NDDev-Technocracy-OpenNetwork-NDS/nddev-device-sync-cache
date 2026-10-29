@@ -62,9 +62,13 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
-The forward pool (`nds-forward-pool`) writes `event=pool.listen outcome=ready|failed`,
-`event=pool.upstream outcome=healthy|unhealthy kind=primary|fallback` on every change, and
-`event=pool.connection outcome=refused reason=no_upstream` when no upstream connects.
+The forward pool (`nds-forward-pool`) emits the canonical envelope through the same local SDK,
+with service identity `nds-forward-pool` and its build commit. It installs no network exporter.
+`pool.listen` reports `ready|error` (`bind_failed` or `accept_failed`); `pool.upstream` reports `checked` and boolean `available` only when health changes, using the
+fixed `/forward/primary` or `/forward/fallback` route; `pool.connection` reports `unavailable` (`no_upstream`) when no path connects.
+Connection refusal uses the fixed `/forward/{class}` route template.
+The SDK owns `process.started` and `process.stopped`. Events contain no endpoint, probe contents,
+client identity or underlying I/O error text.
 
 The egress relay (`nds-cache-egress`) writes plain stderr lines instead of telemetry events:
 `event=egress.listen outcome=ready|failed` and `event=egress.tunnel outcome=opened|refused`, with

@@ -1,6 +1,6 @@
 //! `nds-forward-pool`: one loopback listener in front of redundant forwards to one service.
 
-use nddev_device_sync_cache_pool::{Pool, Probe, Upstream, serve, watch};
+use nddev_device_sync_cache_pool::{Pool, Probe, Upstream, serve, telemetry, watch};
 use std::{net::SocketAddr, process::ExitCode, sync::Arc};
 
 const USAGE: &str = "usage:
@@ -49,10 +49,18 @@ async fn main() -> ExitCode {
     if !upstreams.iter().any(|upstream| !upstream.fallback) {
         return usage();
     }
+    // The SDK writes its canonical envelope locally. It installs no network exporter.
+    let _logger = match nddev_device_sync_telemetry::install(telemetry::config()) {
+        Ok(logger) => logger,
+        Err(_) => {
+            eprintln!("invalid_telemetry_configuration");
+            return ExitCode::FAILURE;
+        }
+    };
     let listener = match tokio::net::TcpListener::bind(listen).await {
         Ok(listener) => listener,
-        Err(error) => {
-            eprintln!("event=pool.listen outcome=failed error={}", error.kind());
+        Err(_) => {
+            tracing::error!(module = "pool", scope = "io", event.name = "pool.listen", outcome = "error", error.type = "bind_failed");
             return ExitCode::FAILURE;
         }
     };
@@ -62,15 +70,11 @@ async fn main() -> ExitCode {
     // Connections wait for the first round of probes, so the first ones never go to a
     // forward that is still down after a restart.
     pool.check().await;
-    eprintln!("event=pool.listen outcome=ready");
     tokio::spawn(watch(pool.clone()));
     tokio::select! {
         result = serve(listener, pool) => match result {
             Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("event=pool.accept outcome=failed error={}", error.kind());
-                ExitCode::FAILURE
-            }
+            Err(_) => ExitCode::FAILURE,
         },
         _ = shutdown() => ExitCode::SUCCESS,
     }
