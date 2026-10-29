@@ -36,6 +36,7 @@ pub struct Upstream {
     /// Tokens the test registry issued, and the `Accept` values of its manifest requests.
     pub tokens: AtomicUsize,
     pub manifest_accepts: Mutex<Vec<String>>,
+    pub release_credentials: AtomicBool,
 }
 
 /// The test registry's layer and the SHA-256 hex digest of it, and a digest its bytes lack.
@@ -103,6 +104,31 @@ async fn registry_blob(axum::extract::Path(digest): axum::extract::Path<String>)
 async fn registry_storage(State(state): State<Arc<Upstream>>) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
     LAYER.into_response()
+}
+
+async fn release_asset(
+    State(state): State<Arc<Upstream>>,
+    axum::extract::Path((_tag, asset)): axum::extract::Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    state.release_credentials.store(
+        headers.contains_key(header::AUTHORIZATION) || headers.contains_key(header::COOKIE),
+        Ordering::SeqCst,
+    );
+    if state.broken.load(Ordering::SeqCst) {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    let host = headers[header::HOST].to_str().unwrap();
+    let target = if asset == "denied.bin" {
+        format!(
+            "http://localhost:{}/storage/release",
+            host.rsplit(':').next().unwrap()
+        )
+    } else {
+        format!("http://{host}/storage/release")
+    };
+    (StatusCode::FOUND, [(header::LOCATION, target)]).into_response()
 }
 
 /// The representations of the test index document, preferred first.
@@ -300,6 +326,10 @@ impl Harness {
                 .route("/v2/library/app/manifests/latest", get(registry_manifest))
                 .route("/v2/library/app/blobs/{digest}", get(registry_blob))
                 .route("/storage/{digest}", get(registry_storage))
+                .route(
+                    "/example/tool/releases/download/{tag}/{asset}",
+                    get(release_asset),
+                )
                 .with_state(upstream.clone()),
         )
         .await;
@@ -340,6 +370,7 @@ impl Harness {
             accept,
             index: None,
             oci: false,
+            sha256_prefix: false,
             answers: &[],
         };
         let routes = Routes::new(
@@ -364,6 +395,15 @@ impl Harness {
                     accept: oci_accept,
                     oci: true,
                     ..route("/oci", "/oci/{path}", format!("http://{origin}/v2"))
+                },
+                Route {
+                    accept: nddev_device_sync_cache::domain::github_release,
+                    sha256_prefix: true,
+                    ..route(
+                        "/github-releases",
+                        "/github-releases/{path}",
+                        format!("http://{origin}"),
+                    )
                 },
                 Route {
                     accept: registry_accept,

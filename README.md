@@ -10,9 +10,9 @@ upstream allowlist. Public repositories keep free GitHub-hosted runners and do n
 
 ## Current state
 
-The repository contains the technology registry and the cache service with its first increment,
-toolchain downloads. The system catalog lists the module with the `future` status until the service
-is deployed and accepted with real clients. The
+The repository contains the technology registry, cache service, device binding client, forward
+pool and egress relay. Route and client acceptance are recorded separately in the client contract;
+the private estate owns deployments and their native evidence. The
 [system task](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync/issues/75)
 tracks the remaining work.
 
@@ -29,6 +29,7 @@ every other path before any upstream connection:
 | `/rustup/` | rustup distribution server |
 | `/flutter/` | Flutter release storage and the Flutter Maven repository |
 | `/python-build-standalone/` | python-build-standalone release assets, the CPython source for uv |
+| `/github-releases/sha256/<digest>/` | Public GitHub release assets with a caller-pinned SHA-256 |
 | `/playwright/` | Playwright browser builds |
 | `/gradle/` | Gradle distributions and their checksums |
 | `/go/` | Go toolchain archives and their checksums |
@@ -75,8 +76,11 @@ SDK. `compose.yaml` runs the hardened container with the store as its only writa
 docker compose -f compose.yaml -f compose.collector.yaml up --detach
 ```
 
-Devices and runners reach the loopback listener through `rds forward` of
+Devices and runners reach the loopback listener through estate-admitted forwards, such as
+restricted SSH or `rds forward` of
 [remote-device-sync](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds).
+Several forwards can reach the same central listener through `nds-forward-pool`; their health
+checks select a transport, and never select a different store or a public download fallback.
 [`contracts/clients.json`](contracts/clients.json) is the client contract: every live route, the
 setting that sends each tool through it relative to the forwarded base address, its known limits and
 whether a real client or only the route has been accepted. A test keeps it equal to the service
@@ -89,7 +93,7 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`crates/client`](crates/client) is the device side of the module, the
 `nddev-device-sync-cache-client` adapter that NDS composes with its `NetworkCache` port and the
 `nds-cache` command. `nds-cache bind --port PORT` binds the current user's tools to the cache base
-`http://127.0.0.1:PORT`, the cache listener on the cache host or the local port of the RDS forward
+`http://127.0.0.1:PORT`, the cache listener on the cache host or an admitted local forward
 elsewhere; `--lane DIR` binds a CI lane instead. It writes managed blocks into the user
 configuration of Cargo, pip and the go command; one environment file for rustup, Flutter,
 Playwright, uv's Python downloads and npm; npm's global configuration file that this environment
@@ -119,7 +123,7 @@ bound only while binding again would change nothing and refuse nothing: the file
 the projection of the given port, and the same tool's files that rank next to it leave it in
 force, so an edited block, a binding of another port or a default registry in the user's `.npmrc`
 reads as unbound. The client holds no
-credential: RDS owns the forward and the device identity. Its runtime manifest is
+credential: the admitted transport owns its authentication and remote target. Its runtime manifest is
 [`contracts/module.json`](contracts/module.json).
 
 ### CI lanes
@@ -137,9 +141,10 @@ steps see, so that the runner's own selections stay as they are:
   `XDG_CONFIG_HOME` and `GOENV` unset or at their defaults there.
 - **Untouched:** `CARGO_HOME`, `RUSTUP_HOME`, `GOMODCACHE`, `GOCACHE`, `GRADLE_USER_HOME` and the
   package caches.
-- **Not bound in a lane:** the environment-file tools, npm among them, and Gradle, unless a
-  workflow opts in. The
-  same goes for Cargo run outside the prefix, and for container jobs.
+- **Environment-file tools and Gradle:** a runner adapter or workflow must carry the generated
+  variables and npm global configuration into its actual job environment, and pass the Gradle
+  init script. Writing those files alone does not make a job use them. Cargo run outside the
+  prefix and container jobs require their own qualified integration.
 
 All of a lane's files live in its prefix, so binding and unbinding one lane changes no other lane
 and no personal profile. Bind and unbind only while the lane runs no job. A binding persists
@@ -149,6 +154,29 @@ Bound means central-only. While the forward or the cache is down, a download tha
 caches cannot serve fails visibly. Nothing falls back to the public source on its own. That
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
+
+### Public GitHub release assets
+
+A downloader with an independently pinned digest can replace only the origin of an exact
+GitHub release asset URL:
+
+```text
+https://github.com/OWNER/REPOSITORY/releases/download/TAG/ASSET
+http://127.0.0.1:PORT/github-releases/sha256/SHA256/OWNER/REPOSITORY/releases/download/TAG/ASSET
+```
+
+The lowercase SHA-256 remains in the store key, while the cache requests the original GitHub
+download path. Redirects use the HTTPS host allowlist. The cache commits only a complete object
+with that digest; a mismatch fails the streaming response and leaves no reusable object. The
+downloader must verify its own completed temporary file before publishing or executing it.
+An escaped slash within a tag is supported. API requests, latest-release discovery, private
+assets and source archives are outside this route; caller headers and credentials are not
+forwarded. A consumer must explicitly select this URL and keep it on retries: a failed cache
+request never authorizes a public fallback. The device binding does not rewrite arbitrary URLs.
+
+GitHub documents [release asset links](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)
+and [asset digests](https://docs.github.com/en/rest/releases/assets); a tag or download URL alone
+does not establish the caller's expected bytes.
 
 ## Forward pool
 

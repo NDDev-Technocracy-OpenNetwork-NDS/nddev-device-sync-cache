@@ -515,3 +515,70 @@ async fn a_blob_without_its_digest_is_never_stored() {
     }
     assert_eq!(harness.hits(), 2);
 }
+
+#[tokio::test]
+async fn pinned_release_assets_follow_redirects_and_remain_available_without_upstream() {
+    let harness = Harness::start().await;
+    let path = format!(
+        "/github-releases/sha256/{LAYER_DIGEST}/example/tool/releases/download/tools%2Fv1/tool.bin"
+    );
+    let response = harness
+        .client
+        .get(format!("{}{path}", harness.base))
+        .header(header::AUTHORIZATION, "Bearer caller-test-secret")
+        .header(header::COOKIE, "caller=test-secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.bytes().await.unwrap().as_ref(), LAYER);
+    harness.committed(1).await;
+    assert_eq!(harness.hits(), 2);
+    assert!(!harness.upstream.release_credentials.load(Ordering::SeqCst));
+    harness.upstream.broken.store(true, Ordering::SeqCst);
+    assert_eq!(
+        harness.get(&path).await,
+        (
+            200,
+            "hit".into(),
+            String::from_utf8_lossy(LAYER).into_owned()
+        )
+    );
+    assert_eq!(harness.hits(), 2);
+}
+
+#[tokio::test]
+async fn a_release_asset_with_the_wrong_digest_is_not_committed_or_replayed() {
+    let harness = Harness::start().await;
+    let wrong = format!(
+        "{}/github-releases/sha256/{WRONG_DIGEST}/example/tool/releases/download/v1/tool.bin",
+        harness.base
+    );
+    for _ in 0..2 {
+        let received = match harness.client.get(&wrong).send().await {
+            Ok(response) => response.bytes().await.map(drop),
+            Err(error) => Err(error),
+        };
+        assert!(received.is_err());
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(harness.objects().await, 0);
+    }
+    assert_eq!(harness.hits(), 4);
+    let correct = format!(
+        "/github-releases/sha256/{LAYER_DIGEST}/example/tool/releases/download/v1/tool.bin"
+    );
+    assert_eq!(harness.get(&correct).await.0, 200);
+    harness.committed(1).await;
+    assert_eq!(harness.hits(), 6);
+}
+
+#[tokio::test]
+async fn a_release_asset_cannot_redirect_to_an_unlisted_host() {
+    let harness = Harness::start().await;
+    let path = format!(
+        "/github-releases/sha256/{LAYER_DIGEST}/example/tool/releases/download/v1/denied.bin"
+    );
+    assert_eq!(harness.get(&path).await.0, 502);
+    assert_eq!(harness.hits(), 1);
+    assert_eq!(harness.objects().await, 0);
+}
