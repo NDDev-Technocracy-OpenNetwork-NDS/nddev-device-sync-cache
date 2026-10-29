@@ -186,13 +186,20 @@ owned forward as the cache, and that jobs select with `HTTPS_PROXY=http://127.0.
   `405`; plain-HTTP requests are not relayed.
 - **Public destinations only.** The destination must resolve to a public address on an allowed
   port, `443` unless `--allow-port` selects others. Loopback, private, link-local, shared,
-  documentation, benchmark, multicast and reserved ranges answer `403`, also through IPv4-mapped
-  IPv6, so a device never reaches a service of the cache host or a private network through it.
+  documentation, benchmark, multicast and reserved ranges answer `403`. IPv6 is native global
+  unicast only: mapped/compatible, standard NAT64, protocol-assignment and 6to4 destinations are
+  refused. This address policy does not authenticate the origin or replace the host's routing
+  and firewall policy.
 - **Bounds.** A request head is at most 8 KiB (`431`) and must arrive within 10 s (`408`); resolving
   and connecting take at most 15 s (`502`); at most 512 tunnels are open (`--max-connections`,
-  then `503`).
-- **Events.** One stderr line per listener state and tunnel, with its outcome and refusal reason,
-  never a host name or an address.
+  then `503`). One serial refusal response is allowed beyond the tunnel bound; protocol writes
+  also use the head timeout. Shutdown closes admission and joins every tunnel task before
+  returning; established tunnels have no total-duration deadline. Native DNS jobs have the
+  same capacity bound and retain their slot through actual completion, including after an
+  async timeout. At most 64 resolved addresses are admitted. Shutdown waits for those jobs;
+  it cannot promise a wall-clock bound on the OS resolver.
+- **Events.** The existing shared SDK owns the canonical lifecycle and tunnel events, with fixed
+  outcomes/error classes and no host name, address, request head or payload.
 
 The relay is not a cache: what a job can fetch through a cache route belongs on that route, so it
 accumulates on the cache host's disk and keeps the central-only guarantee of the binding.

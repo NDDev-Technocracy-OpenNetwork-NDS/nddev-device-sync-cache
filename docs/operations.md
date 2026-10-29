@@ -42,7 +42,7 @@ one twentieth of it. Other users of the same volume count against that free spac
 
 ## Events
 
-Every event carries the canonical NDS envelope with `module = cache`, the matched route template,
+Every cache-route event carries the canonical NDS envelope with `module = cache`, the matched route template,
 fixed error classes and no URL, client address, key or project identity.
 
 | Event | Meaning |
@@ -64,15 +64,31 @@ fixed error classes and no URL, client address, key or project identity.
 
 The forward pool (`nds-forward-pool`) emits the canonical envelope through the same local SDK,
 with service identity `nds-forward-pool` and its build commit. It installs no network exporter.
-`pool.listen` reports `ready|error` (`bind_failed` or `accept_failed`); `pool.upstream` reports `checked` and boolean `available` only when health changes, using the
-fixed `/forward/primary` or `/forward/fallback` route; `pool.connection` reports `unavailable` (`no_upstream`) when no path connects.
+`pool.listen` reports `ready|error` (`bind_failed` or `accept_failed`); `pool.upstream` reports
+`checked` and boolean `available` only when health changes, using the fixed `/forward/primary`
+or `/forward/fallback` route; `pool.connection` reports `unavailable` (`no_upstream`) when no
+path connects.
 Connection refusal uses the fixed `/forward/{class}` route template.
 The SDK owns `process.started` and `process.stopped`. Events contain no endpoint, probe contents,
 client identity or underlying I/O error text.
 
-The egress relay (`nds-cache-egress`) writes plain stderr lines instead of telemetry events:
-`event=egress.listen outcome=ready|failed` and `event=egress.tunnel outcome=opened|refused`, with
-`reason=malformed|method|too_large|timeout|port|forbidden|unreachable|capacity` on a refusal.
+The egress relay (`nds-cache-egress`) uses the same SDK and canonical envelope with
+`module = cache`. `egress.listening`, `egress.listen.failed` and `egress.failed`
+describe listener/service state; bind errors distinguish address-in-use, unavailable address
+and permission denial. `egress.tunnel.opened`, `egress.tunnel.refused` and
+`egress.tunnel.finished` describe tunnel admission and its terminal outcome; refusals carry
+only a fixed `error.type`. Shutdown reports cancelled admitted tunnels after closing admission
+and joins their tasks before the SDK reports process stop. Destinations, addresses, request
+heads and tunnel bytes never enter these events.
+
+The relay owns at most its configured number of tunnel tasks plus one serial capacity
+response. Protocol response writes share the request-head timeout bound. An established
+tunnel ends on peer close or relay shutdown; it has no total-duration promise.
+Native DNS jobs share a separate bound equal to the tunnel limit and return at most 64
+addresses. The resolve/connect decision has its configured deadline; a timed-out native
+lookup retains capacity until its actual result is reclaimed. Shutdown also waits for these
+jobs rather than declaring completion from a cancelled async awaiter. There is no hard
+wall-clock promise for the OS resolver.
 
 Alerts belong to the observability deployment. The cache supports these rules: a degraded store, repeated
 storage pressure, a degraded upstream that does not recover, a rising rate of failed fills and an

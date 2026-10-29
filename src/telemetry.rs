@@ -50,7 +50,11 @@ pub fn config(identity: &Identity, debug: Option<DebugWindow>) -> Config {
         channel: identity.channel.clone(),
         standards: identity.standards_release.clone(),
         environment: identity.environment.clone(),
-        target_prefixes: vec!["nddev_device_sync_cache".into()],
+        target_prefixes: vec![
+            "nddev_device_sync_cache".into(),
+            "nddev_device_sync_cache_egress".into(),
+            "nds_cache_egress".into(),
+        ],
         default_module: "cache".into(),
         debug,
     }
