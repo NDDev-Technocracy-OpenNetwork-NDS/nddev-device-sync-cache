@@ -26,6 +26,9 @@ pub struct Route {
     /// Set for an OCI distribution route: manifests are requested in every image manifest
     /// type, and content-addressed objects are checked against the digest in their path.
     pub oci: bool,
+    /// A public release asset whose path starts with `/sha256/{digest}`. This prefix is
+    /// retained in the store key and removed from the GitHub download URL.
+    pub sha256_prefix: bool,
     /// Subpaths the cache answers itself, with an empty success and no upstream request.
     pub answers: &'static [&'static str],
 }
@@ -65,7 +68,14 @@ pub struct Target<'a> {
 
 impl Target<'_> {
     pub fn upstream_url(&self) -> String {
-        format!("{}{}", self.route.upstream, self.subpath)
+        let path = if self.route.sha256_prefix {
+            release_parts(&self.subpath)
+                .expect("resolved release asset")
+                .1
+        } else {
+            &self.subpath
+        };
+        format!("{}{path}", self.route.upstream)
     }
 
     /// Stable store identity of the object. A representation follows `#`, which a validated
@@ -88,9 +98,11 @@ impl Target<'_> {
             .or(self.route.oci.then_some(OCI_MANIFEST_TYPES))
     }
 
-    /// The SHA-256 hex digest an OCI blob or manifest-by-digest path names; the stored bytes
-    /// must have it.
+    /// The SHA-256 an OCI object or a pinned release asset names; stored bytes must have it.
     pub fn digest(&self) -> Option<&str> {
+        if self.route.sha256_prefix {
+            return release_parts(&self.subpath).map(|(digest, _)| digest);
+        }
         if !self.route.oci {
             return None;
         }
@@ -152,6 +164,7 @@ impl Routes {
             accept,
             index: None,
             oci: false,
+            sha256_prefix: false,
             answers: &[],
         };
         let oci = |id, prefix, template, upstream: &str| Route {
@@ -181,6 +194,16 @@ impl Routes {
                     "https://github.com/astral-sh/python-build-standalone/releases/download",
                     python_build_standalone,
                 ),
+                Route {
+                    sha256_prefix: true,
+                    ..route(
+                        "github-releases",
+                        "/github-releases",
+                        "/github-releases/{path}",
+                        "https://github.com",
+                        github_release,
+                    )
+                },
                 route(
                     "playwright",
                     "/playwright",
@@ -388,7 +411,7 @@ impl Routes {
             Some(_) => subpath.strip_suffix('/').unwrap_or(&subpath),
             None => &subpath,
         };
-        if !valid_subpath(checked) {
+        if !valid_subpath(checked, route.sha256_prefix.then_some(6)) {
             return Err(Rejection::InvalidPath);
         }
         if route.answers.contains(&subpath.as_ref()) {
@@ -436,19 +459,23 @@ impl Routes {
 /// segment may
 /// not be empty, `.` or `..` after decoding, and an escape may not decode to a separator,
 /// control character or escape introducer.
-fn valid_subpath(path: &str) -> bool {
+fn valid_subpath(path: &str, slash_segment: Option<usize>) -> bool {
     if path.len() > MAX_PATH_BYTES || !path.starts_with('/') {
         return false;
     }
-    path[1..].split('/').all(|segment| {
-        let Some(decoded) = decode_segment(segment) else {
+    path[1..].split('/').enumerate().all(|(index, segment)| {
+        let Some(decoded) = decode_segment(segment, slash_segment == Some(index)) else {
             return false;
         };
-        !decoded.is_empty() && decoded != b"." && decoded != b".."
+        // GitHub permits a slash within an escaped release tag. No other segment admits
+        // separators, and even a tag cannot contain empty or traversal components.
+        decoded
+            .split(|byte| *byte == b'/')
+            .all(|part| !part.is_empty() && part != b"." && part != b"..")
     })
 }
 
-fn decode_segment(segment: &str) -> Option<Vec<u8>> {
+fn decode_segment(segment: &str, slash: bool) -> Option<Vec<u8>> {
     let bytes = segment.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -457,7 +484,11 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
         if byte == b'%' {
             let hex = bytes.get(index + 1..index + 3)?;
             let value = u8::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()?;
-            if value < 0x20 || value == 0x7f || matches!(value, b'/' | b'\\' | b'%') {
+            if value < 0x20
+                || value == 0x7f
+                || matches!(value, b'\\' | b'%')
+                || (value == b'/' && !slash)
+            {
                 return None;
             }
             decoded.push(value);
@@ -508,6 +539,40 @@ fn python_build_standalone(path: &str) -> Option<Freshness> {
     };
     (tag.len() == 8 && tag.bytes().all(|byte| byte.is_ascii_digit()))
         .then_some(Freshness::Immutable)
+}
+
+/// A checksum-pinned public GitHub asset, never an API or latest-release lookup. GitHub
+/// release tags and uploaded assets can be replaced; only the caller's independently pinned
+/// digest makes this route immutable. The remaining download path stays byte-for-byte intact.
+pub fn github_release(path: &str) -> Option<Freshness> {
+    release_parts(path).map(|_| Freshness::Immutable)
+}
+
+fn release_parts(path: &str) -> Option<(&str, &str)> {
+    let (digest, download) = path.strip_prefix("/sha256/")?.split_once('/')?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return None;
+    }
+    let parts: Vec<_> = download.split('/').collect();
+    let [owner, repo, "releases", "download", tag, asset] = parts.as_slice() else {
+        return None;
+    };
+    let name = |s: &str| {
+        !s.is_empty()
+            && s != "."
+            && s != ".."
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    };
+    if !name(owner) || !name(repo) || tag.is_empty() || asset.is_empty() {
+        return None;
+    }
+    // Return a leading slash without allocating or decoding the upstream path.
+    Some((digest, &path[8 + digest.len()..]))
 }
 
 fn playwright(path: &str) -> Option<Freshness> {
@@ -1669,5 +1734,44 @@ mod tests {
         assert!(routes.redirect_allowed("https", "release-assets.githubusercontent.com"));
         assert!(!routes.redirect_allowed("http", "release-assets.githubusercontent.com"));
         assert!(!routes.redirect_allowed("https", "example.com"));
+    }
+
+    #[test]
+    fn public_release_assets_require_a_digest_and_an_exact_download_path() {
+        let routes = Routes::production();
+        let digest = "3997bfa39738f279d788e49d0cc743d02a512c8855f798b3ee1c0daf589a6b9a";
+        for tag in ["v1.0", "tool%2Fv1.0", "tool%2fv1.0"] {
+            let download = format!("/example/tool/releases/download/{tag}/tool.tar.gz");
+            let target = routes
+                .resolve(&format!("/github-releases/sha256/{digest}{download}"), None)
+                .unwrap();
+            assert_eq!(target.freshness, Freshness::Immutable);
+            assert_eq!(target.digest(), Some(digest));
+            assert_eq!(
+                target.upstream_url(),
+                format!("https://github.com{download}")
+            );
+            assert!(target.key().contains(digest));
+            assert!(!target.route.oci);
+        }
+        for path in [
+            "/sha256/abc/example/tool/releases/download/v1/tool.bin".to_owned(),
+            format!("/sha256/{digest}/example/tool/releases/latest/download/tool.bin"),
+            format!("/sha256/{digest}/example/tool/releases/download/v1/tool.bin/extra"),
+            format!("/sha256/{digest}/example/tool/releases/download/%2e%2e%2Fv1/tool.bin"),
+            format!("/sha256/{digest}/example/tool/releases/download/v1/tool%2Fbin"),
+            format!("/sha256/{digest}/example%2Fother/tool/releases/download/v1/tool.bin"),
+            format!("/sha256/{digest}/example/tool/releases/download/v1%252Fbad/tool.bin"),
+            format!("/sha256/{digest}/example/tool/releases/download/v1%2F/tool.bin"),
+        ] {
+            assert!(
+                routes
+                    .resolve(&format!("/github-releases{path}"), None)
+                    .is_err(),
+                "{path}"
+            );
+        }
+        // The release tag exception does not change another route's separator rules.
+        assert!(routes.resolve("/npm/scope%2Fpackage", None).is_err());
     }
 }

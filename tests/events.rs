@@ -122,6 +122,27 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     {
         let _ = response.bytes().await;
     }
+    let release = |digest: &str| {
+        format!(
+            "{}/github-releases/sha256/{digest}/example/tool/releases/download/v1/tool.bin",
+            harness.base
+        )
+    };
+    if let Ok(response) = harness
+        .client
+        .get(release(support::WRONG_DIGEST))
+        .send()
+        .await
+    {
+        let _ = response.bytes().await;
+    }
+    let response = harness
+        .client
+        .get(release(support::LAYER_DIGEST))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.bytes().await.unwrap().as_ref(), support::LAYER);
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1100)).await;
@@ -171,13 +192,26 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
             .all(|event| event["trace_id"] != rejected_digest["trace_id"]),
         "a rejected checksum was committed"
     );
+    assert!(
+        named("cache.fill.failed")
+            .iter()
+            .any(|event| event["route"] == "/github-releases/{path}"
+                && event["error.type"] == "digest_mismatch")
+    );
+    assert!(
+        named("cache.fill.committed")
+            .iter()
+            .any(|event| event["route"] == "/github-releases/{path}")
+    );
     let requests: Vec<&serde_json::Value> = named("cache.miss");
     for fill in named("cache.fill.committed")
         .into_iter()
         .chain(named("cache.fill.failed"))
     {
         assert!(
-            fill["route"] == "/origin/{path}" || fill["route"] == "/oci/{path}",
+            fill["route"] == "/origin/{path}"
+                || fill["route"] == "/oci/{path}"
+                || fill["route"] == "/github-releases/{path}",
             "{fill}"
         );
         assert!(fill["duration_ms"].as_f64().is_some(), "{fill}");
@@ -191,7 +225,10 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     for event in &events {
         let text = event.to_string();
         assert!(
-            !text.contains("127.0.0.1") && !text.contains("/files/"),
+            !text.contains("127.0.0.1")
+                && !text.contains("/files/")
+                && !text.contains("example/tool")
+                && !text.contains(support::LAYER_DIGEST),
             "an event carries an address or request path: {text}"
         );
     }
