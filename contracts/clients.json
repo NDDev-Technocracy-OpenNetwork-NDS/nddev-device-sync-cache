@@ -6,7 +6,7 @@
     "base": "http://127.0.0.1:{port}",
     "admission": "A device or private runner reaches the same central cache listener through an estate-admitted remote-access forward, such as restricted SSH or rds forward. Redundant routes share that central store; no route falls back to a public source. Host, ticket, port and admitted identities live in the private estate."
   },
-  "integrity": "The cache commits an object only after a complete download; OCI digest paths and checksum-pinned GitHub assets additionally require the named SHA-256. It generates crates.io index config.json and rewrites download links in PyPI and pub documents to the client's loopback base. npm links and artifact bytes stay unchanged. Clients keep their own digest and signature checks.",
+  "integrity": "The cache commits an object only after a complete download; OCI digest paths and checksum-pinned GitHub assets additionally require the named SHA-256. It generates crates.io index config.json and rewrites download links in PyPI and pub documents to the client's loopback base. npm links stay public, except that Bun gets the public registry's tarball links empty and builds them from its configured registry; artifact bytes stay unchanged. Clients keep their own digest and signature checks.",
   "routes": [
     {
       "id": "rustup",
@@ -133,13 +133,19 @@
       "id": "npm",
       "prefix": "/npm",
       "upstream": "https://registry.npmjs.org",
-      "objects": "Package documents in the representation the client accepts, the install document or the full document, revalidated and served with the public tarball links upstream sent; tarballs of exact published versions, which clients check against the integrity in the document.",
+      "objects": "Package documents in the representation the client accepts, the install document or the full document, revalidated and served with the public tarball links upstream sent, or to Bun as the install document with the public registry's tarball links empty; tarballs of exact published versions, which clients check against the integrity in the document.",
       "clients": [
         {
           "tool": "npm install and npm ci",
           "setting": {"registry": "{base}/npm/"},
           "acceptance": "real client",
           "limits": "nds-cache bind writes the registry into a global configuration file of its own, which npm_config_globalconfig in the environment file names, because Bun reads npm's user file and variables but not that file; npm is bound where the environment file applies. The user's and the project's .npmrc rank above it, and while bound npm reads it in place of its default global file. npm's default replace-registry-host fetches the public tarball links of a package document through the cache, so package-lock.json keeps registry.npmjs.org; a project that sets replace-registry-host to never downloads tarballs directly. Audit, search, login and publish endpoints are not proxied; run npm without audit."
+        },
+        {
+          "tool": "bun install and bun install --frozen-lockfile",
+          "setting": {"registry": "{base}/npm/"},
+          "acceptance": "pending",
+          "limits": "A project or job selects the route with --registry or a default registry in its own .npmrc; the device client leaves Bun unbound, because Bun does not read the npm global configuration file. A User-Agent that opens with Bun/ gets the install document with the tarball links under https://registry.npmjs.org/ empty, which Bun builds from its configured registry, so online and frozen installs download through the cache, and a bun.lock that Bun creates or installs from unchanged records those packages with an empty registry, as a public install does. Bun loads an empty registry as its configured one, so bun add, bun update or an edited package.json through the route write the cache address into the entries the lockfile already held; author those changes against the canonical registry. Scoped registries and their credentials in the project's or job's .npmrc keep precedence and do not pass through the cache. A tarball link to another host stays as upstream sent it."
         }
       ]
     },

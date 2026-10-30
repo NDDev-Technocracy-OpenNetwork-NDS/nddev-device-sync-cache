@@ -71,7 +71,7 @@ pub struct Object {
     pub eviction: Eviction,
     pub upstream_error: Option<UpstreamError>,
     /// Set for an index document, whose download links are rewritten as it is served.
-    pub links: Option<Links>,
+    pub links: Option<Box<Links>>,
 }
 
 /// An immutable object that is still downloading; clients follow its progress.
@@ -277,11 +277,13 @@ impl Cache {
 
     /// Serves `path` in the representation `accept` selects. `base` is the loopback base address
     /// the client used, if any; an index document needs it to point its links back here.
+    /// `user_agent` names a client that derives some links of an index document itself.
     pub async fn serve(
         &self,
         path: &str,
         accept: Option<&str>,
         base: Option<&str>,
+        user_agent: Option<&str>,
     ) -> Result<Delivery, ServeError> {
         let target = self
             .routes
@@ -291,10 +293,11 @@ impl Cache {
             return Ok(Delivery::Answered);
         }
         let links = match target.index() {
-            Some(index) => Some(Links::new(
+            Some(index) => Some(Box::new(Links::new(
                 index,
                 base.ok_or(ServeError::Rejected(Rejection::HostNotLoopback))?,
-            )),
+                target.inferred(user_agent),
+            ))),
             None => None,
         };
         let key = target.key();
