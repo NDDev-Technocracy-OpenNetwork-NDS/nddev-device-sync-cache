@@ -144,7 +144,7 @@
         {
           "tool": "bun install and bun install --frozen-lockfile",
           "setting": {"registry": "{base}/npm/"},
-          "acceptance": "pending",
+          "acceptance": "real client",
           "limits": "A project or job selects the route with --registry or a default registry in its own .npmrc; the device client leaves Bun unbound, because Bun does not read the npm global configuration file. A User-Agent that opens with Bun/ gets the install document with the tarball links under https://registry.npmjs.org/ empty, which Bun builds from its configured registry, so online and frozen installs download through the cache, and a bun.lock that Bun creates or installs from unchanged records those packages with an empty registry, as a public install does. Bun loads an empty registry as its configured one, so bun add, bun update or an edited package.json through the route write the cache address into the entries the lockfile already held; author those changes against the canonical registry. Scoped registries and their credentials in the project's or job's .npmrc keep precedence and do not pass through the cache. A tarball link to another host stays as upstream sent it."
         }
       ]
