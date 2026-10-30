@@ -72,9 +72,17 @@ prefer.
 
 npm package documents keep the public tarball links upstream sent. npm replaces the public
 registry host in a link with its configured registry, so it downloads through the cache while
-`package-lock.json` keeps the public links. Bun follows the links as written and records a
-configured registry in `bun.lock` whenever it saves the file again, so it is not a client of this
-route and the device client leaves it unbound.
+`package-lock.json` keeps the public links. Bun follows a link as written, but records every
+tarball of the public registry in `bun.lock` with an empty link, and builds an empty link from its
+configured registry, the package name and the version. A client whose `User-Agent` opens with
+`Bun/` therefore gets the install document with exactly those links empty: the `tarball` of each
+version's `dist` that starts with `https://registry.npmjs.org/`. Bun then downloads through the
+cache on an online install as on a frozen one, and writes the `bun.lock` a public install writes.
+The links are emptied while the document streams, as links are rewritten, so one stored object
+serves both forms; the response varies by `Accept` and `User-Agent`, and the entity tag names the
+emptied form. A link to another host, an escaped link and every other value stay as upstream sent
+them. The device client leaves Bun unbound, because Bun does not read the npm global
+configuration file that binds npm; a project or job selects the route for Bun.
 
 OCI pulls name the registry after the cache's address, for example
 `127.0.0.1:8740/docker.io/library/alpine:3`. The cache answers the `/v2/` check itself, asks the

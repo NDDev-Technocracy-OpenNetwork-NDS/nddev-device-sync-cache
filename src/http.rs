@@ -174,7 +174,10 @@ async fn serve(
             .get(header::HOST)
             .and_then(|host| host.to_str().ok())
             .and_then(domain::loopback_base);
-        match app.cache.serve(uri.path(), accept, base.as_deref()).await {
+        let user_agent = headers
+            .get(header::USER_AGENT)
+            .and_then(|value| value.to_str().ok());
+        match app.cache.serve(uri.path(), accept, base.as_deref(), user_agent).await {
             Ok(delivery) => {
                 let served = match &delivery {
                     Delivery::Stored(object) => {
@@ -300,7 +303,7 @@ fn answered() -> Response {
 }
 
 async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io::Result<Response> {
-    let index = object.links.is_some();
+    let vary = object.links.as_ref().map(|links| links.vary());
     let etag = match &object.links {
         Some(links) => links.tag(&object.meta.sha256),
         None => format!("\"sha256-{}\"", object.meta.sha256),
@@ -315,8 +318,8 @@ async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io
         if let Ok(etag) = HeaderValue::from_str(&etag) {
             headers.insert(header::ETAG, etag);
         }
-        if index {
-            headers.insert(header::VARY, HeaderValue::from_static("accept"));
+        if let Some(vary) = vary {
+            headers.insert(header::VARY, HeaderValue::from_static(vary));
         }
         headers.insert(
             "x-nds-cache",
@@ -329,16 +332,19 @@ async fn respond(object: Object, head: bool, validator: Option<&str>) -> std::io
     } else {
         let file = tokio::fs::File::open(&object.path).await?;
         match object.links {
-            Some(links) => Body::from_stream(rewritten(file, links)),
+            Some(links) => Body::from_stream(rewritten(file, *links)),
             None => Body::from_stream(ReaderStream::new(file)),
         }
     };
     let mut response = Response::new(body);
     let headers = response.headers_mut();
-    if index {
-        headers.insert(header::VARY, HeaderValue::from_static("accept"));
-    } else {
-        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(object.meta.size));
+    match vary {
+        Some(vary) => {
+            headers.insert(header::VARY, HeaderValue::from_static(vary));
+        }
+        None => {
+            headers.insert(header::CONTENT_LENGTH, HeaderValue::from(object.meta.size));
+        }
     }
     headers.insert(
         header::CONTENT_TYPE,
