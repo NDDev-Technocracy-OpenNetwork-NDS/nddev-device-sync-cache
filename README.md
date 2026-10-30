@@ -36,7 +36,7 @@ every other path before any upstream connection:
 | `/chrome-for-testing/` | Chrome for Testing archives of exact versions |
 | `/crates-index/` | crates.io sparse index files; the cache generates `config.json` |
 | `/crates/` | crate archives of exact published versions |
-| `/npm/` | npm package documents and tarballs, for npm |
+| `/npm/` | npm package documents and tarballs, for npm and Bun |
 | `/pypi/` | PyPI simple index project pages in their JSON form |
 | `/pypi-files/` | PyPI release files and their core metadata |
 | `/pub/` | pub.dev package documents and archives, for Dart and Flutter |
@@ -55,7 +55,10 @@ GETs and HEADs advertise a known length. npm package documents, PyPI project
 pages and pub package documents are stored per representation the client accepts. PyPI and pub
 documents are served with their download links pointed at the loopback base address the client
 used, so the downloads come back through the cache. npm documents keep their public links, which
-npm fetches through its configured registry, so `package-lock.json` stays public.
+npm fetches through its configured registry, so `package-lock.json` stays public. Bun gets the
+install document with the public registry's tarball links empty; it builds them from its
+configured registry, so it downloads through the cache and `bun.lock` records what a public install
+records.
 `GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while
@@ -105,11 +108,12 @@ file names; and the Gradle init script. User files rank below a project's own co
 project pins, lockfiles and private registries stay in force; a user file that names a default
 registry of its own is refused, never overwritten. So is a Cargo directory that holds the
 extensionless `config`, which Cargo reads instead of `config.toml`, and a Cargo file that uses
-`include`: the client never follows an included path. uv, pub and Bun stay unbound: their lockfiles
+`include`: the client never follows an included path. uv and pub stay unbound: their lockfiles
 record the index they resolved against, so a bound default index would fail `uv sync --locked`
-and `dart pub get --enforce-lockfile` on committed lockfiles, and `bun add` would write the cache
-address into `bun.lock`. Bun reads npm's user file and variables but not npm's global
-configuration file, so npm is bound there; the user's `.npmrc` must not name a default registry.
+and `dart pub get --enforce-lockfile` on committed lockfiles. Bun stays unbound too: it reads npm's
+user file and variables but not npm's global configuration file, so npm is bound there, and a
+project or job selects the npm route for Bun itself; the user's `.npmrc` must not name a default
+registry.
 Binds and unbinds of one scope run one at a time, under an exclusive lock on the scope's home
 directory that leaves no file behind; one that waits more than 10 s answers `busy`. Each file is
 re-read right before its write and written only while it still holds what the preflight read, so
@@ -159,14 +163,21 @@ caches cannot serve fails visibly. Nothing falls back to the public source on it
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
 
-A project can explicitly select the central npm route for an already frozen public Bun graph
-with `bun install --frozen-lockfile --registry "${NDS_CACHE_BASE:?}/npm/"`. This is a
-project-owned command, not a default Bun binding. It requires review of the project's private
-registry files and authentication selectors; the command must not override those policies.
-Lockfile authoring still uses the canonical source. Retries keep the same selected central
-route. Qualify the actual committed install action and graph with a fresh job-owned Bun cache,
-unchanged frozen inputs, observed network destinations, warm transport-outage success and cold
-refusal without public fallback. Never clear a shared package cache to manufacture that probe.
+A project or job can select the central npm route for Bun with
+`--registry "${NDS_CACHE_BASE:?}/npm/"` or a default registry in its own `.npmrc`. The route
+serves Bun the install document with the public registry's tarball links empty, so an online
+install and `bun install --frozen-lockfile` download through the cache. A lockfile that Bun
+creates or installs from unchanged records those packages with an empty registry, as a public
+install does. Bun loads an empty registry as its configured one, so a change to an existing
+lockfile (`bun add`, `bun update`, an edited `package.json`) through the route writes the cache
+address into the entries it already held: author such changes against the canonical registry.
+This is a project-owned selection, not a default Bun binding. It requires review of the project's private
+registry files and authentication selectors; the selection must not override those policies:
+scoped registries and their credentials keep precedence and never pass through the cache.
+Retries keep the same selected central route. Qualify the actual committed install action and
+graph with a fresh job-owned Bun cache, unchanged frozen inputs, observed network destinations,
+warm transport-outage success and cold refusal without public fallback. Never clear a shared
+package cache to manufacture that probe.
 
 ### Public GitHub release assets
 

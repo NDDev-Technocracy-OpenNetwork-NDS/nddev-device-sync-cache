@@ -22,7 +22,7 @@ use axum::{
 };
 use nddev_device_sync_cache::{
     config::Settings,
-    domain::{Freshness, Index, Route, Routes, verbatim},
+    domain::{Freshness, Index, Inferred, Route, Routes, verbatim},
     telemetry::Identity,
 };
 
@@ -133,6 +133,8 @@ async fn release_asset(
 
 /// The representations of the test index document, preferred first.
 pub const INDEX_TYPES: &[&str] = &["application/vnd.test.v1+json", "application/json"];
+/// The product of a client that derives the index mirror link itself, in the first type.
+pub const INFERRING: &str = "Inferring/";
 
 async fn immutable(State(state): State<Arc<Upstream>>) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
@@ -237,7 +239,7 @@ async fn broken_stream(State(state): State<Arc<Upstream>>) -> Response {
 }
 
 /// An index document in the representation the request names, linking one download by the
-/// absolute URL of this upstream.
+/// absolute URL of this upstream, in its file list and as its mirror.
 async fn index(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
     let text = |name| {
@@ -251,6 +253,7 @@ async fn index(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Respon
     state.accepts.lock().unwrap().push(accept.clone());
     let document = serde_json::json!({
         "files": [{"url": format!("http://{host}/files/immutable.bin"), "sha256": "unchanged"}],
+        "mirror": {"url": format!("http://{host}/files/immutable.bin")},
         "representation": accept,
     });
     ([(header::CONTENT_TYPE, accept)], document.to_string()).into_response()
@@ -411,6 +414,12 @@ impl Harness {
                         media_types: INDEX_TYPES,
                         links: vec![format!("http://{origin}/")],
                         mount: "/registry/",
+                        inferred: Some(Inferred {
+                            client: INFERRING,
+                            media_type: INDEX_TYPES[0],
+                            path: &["mirror", "url"],
+                            link: format!("http://{origin}/"),
+                        }),
                     }),
                     ..route("/registry", "/registry/{path}", format!("http://{origin}"))
                 },

@@ -47,6 +47,27 @@ pub struct Index {
     pub links: Vec<String>,
     /// The cache path that serves those downloads.
     pub mount: &'static str,
+    /// Links that one client derives from its configured registry when a document leaves them
+    /// empty.
+    pub inferred: Option<Inferred>,
+}
+
+/// Download links a client builds from its configured registry when a document leaves them
+/// empty. Bun builds the URL of an npm tarball from its registry, the package name and the
+/// version, and records an empty link in `bun.lock` for every tarball of the public registry;
+/// given the public link, it downloads from the public host. The cache serves that client the
+/// document with those links empty, so it downloads through the cache and its lockfile holds what
+/// a public install writes.
+#[derive(Clone, Debug)]
+pub struct Inferred {
+    /// The product that opens the client's `User-Agent`, such as `Bun/`.
+    pub client: &'static str,
+    /// The representation the client installs from.
+    pub media_type: &'static str,
+    /// The object keys from the document root to a link; `*` stands for any key.
+    pub path: &'static [&'static str],
+    /// The upstream prefix of the links the client derives itself.
+    pub link: String,
 }
 
 /// Leaves a subpath as the client sent it.
@@ -90,6 +111,14 @@ impl Target<'_> {
     /// The index of an index document.
     pub fn index(&self) -> Option<&Index> {
         self.media_type.and(self.route.index.as_ref())
+    }
+
+    /// The links the client with `user_agent` derives itself in this representation, if any.
+    pub fn inferred(&self, user_agent: Option<&str>) -> Option<&Inferred> {
+        self.index()?.inferred.as_ref().filter(|inferred| {
+            self.media_type == Some(inferred.media_type)
+                && user_agent.is_some_and(|agent| agent.starts_with(inferred.client))
+        })
     }
 
     /// The representation to request upstream.
@@ -249,6 +278,14 @@ impl Routes {
                         // resolvable without the cache.
                         links: Vec::new(),
                         mount: "/npm/",
+                        // Bun follows a public link as written, but builds an empty one from its
+                        // registry, which is also what it records in bun.lock for a public link.
+                        inferred: Some(Inferred {
+                            client: "Bun/",
+                            media_type: "application/vnd.npm.install-v1+json",
+                            path: &["versions", "*", "dist", "tarball"],
+                            link: "https://registry.npmjs.org/".into(),
+                        }),
                     }),
                     ..route(
                         "npm",
@@ -263,6 +300,7 @@ impl Routes {
                         media_types: &["application/vnd.pypi.simple.v1+json"],
                         links: vec!["https://files.pythonhosted.org/".into()],
                         mount: "/pypi-files/",
+                        inferred: None,
                     }),
                     ..route("pypi", "/pypi", "/pypi/{path}", "https://pypi.org", pypi)
                 },
@@ -278,6 +316,7 @@ impl Routes {
                         media_types: &["application/vnd.pub.v2+json"],
                         links: vec!["https://pub.dev/".into()],
                         mount: "/pub/",
+                        inferred: None,
                     }),
                     ..route("pub", "/pub", "/pub/{path}", "https://pub.dev", pub_hosted)
                 },
@@ -715,16 +754,20 @@ fn quality(media_type: &str, accept: &str) -> f32 {
 
 /// Streams an index document with its download links pointing at `{base}{mount}`. A link is
 /// rewritten only where it opens a JSON string, so hashes and other values stay as upstream
-/// sent them, and a link split across chunks is held until it completes.
+/// sent them, and a link split across chunks is held until it completes. For a client that
+/// derives some links itself, those links are emptied first.
 pub struct Links {
     links: Vec<Vec<u8>>,
     replacement: Vec<u8>,
     base: String,
     pending: Vec<u8>,
+    emptied: Option<Emptied>,
+    /// Whether the route serves some clients other links than the rest.
+    by_client: bool,
 }
 
 impl Links {
-    pub fn new(index: &Index, base: &str) -> Self {
+    pub fn new(index: &Index, base: &str, inferred: Option<&Inferred>) -> Self {
         Self {
             links: index
                 .links
@@ -734,17 +777,44 @@ impl Links {
             replacement: format!("\"{base}{}", index.mount).into_bytes(),
             base: base.to_owned(),
             pending: Vec::new(),
+            emptied: inferred.map(Emptied::new),
+            by_client: index.inferred.is_some(),
         }
     }
 
-    /// The entity tag of the served document. It depends on the stored document and on the
-    /// client base, so a client that reaches the cache at another address revalidates.
+    /// The entity tag of the served document. It depends on the stored document, on the client
+    /// base and on whether links were emptied, so a client that reaches the cache at another
+    /// address or gets the other form revalidates.
     pub fn tag(&self, digest: &str) -> String {
         let host = self.base.strip_prefix("http://").unwrap_or(&self.base);
-        format!("\"sha256-{digest}@{host}\"")
+        let form = if self.emptied.is_some() {
+            "+inferred"
+        } else {
+            ""
+        };
+        format!("\"sha256-{digest}@{host}{form}\"")
+    }
+
+    /// The request headers the served document depends on.
+    pub fn vary(&self) -> &'static str {
+        if self.by_client {
+            "accept, user-agent"
+        } else {
+            "accept"
+        }
     }
 
     pub fn push(&mut self, chunk: &[u8]) -> Vec<u8> {
+        match self.emptied.as_mut() {
+            Some(emptied) => {
+                let chunk = emptied.push(chunk);
+                self.rewrite(&chunk)
+            }
+            None => self.rewrite(chunk),
+        }
+    }
+
+    fn rewrite(&mut self, chunk: &[u8]) -> Vec<u8> {
         self.pending.extend_from_slice(chunk);
         let mut out = Vec::with_capacity(self.pending.len());
         let mut at = 0;
@@ -769,8 +839,194 @@ impl Links {
         out
     }
 
-    pub fn finish(self) -> Vec<u8> {
-        self.pending
+    pub fn finish(mut self) -> Vec<u8> {
+        let mut out = match self.emptied.take() {
+            Some(emptied) => self.rewrite(&emptied.finish()),
+            None => Vec::new(),
+        };
+        out.append(&mut self.pending);
+        out
+    }
+}
+
+/// Empties the string values at an inferred path that open with its link, as the document
+/// streams. Everything else passes through unchanged, and so does a value that escapes a
+/// character of the link.
+struct Emptied {
+    path: &'static [&'static str],
+    link: Vec<u8>,
+    /// The open arrays and objects, outermost first.
+    levels: Vec<Level>,
+    text: Text,
+}
+
+#[derive(Clone, Copy)]
+enum Level {
+    Array,
+    /// `path`: the object lies on the path. `key`: a key comes next. `member`: on the path, the
+    /// last key read continues it.
+    Object {
+        path: bool,
+        key: bool,
+        member: bool,
+    },
+}
+
+enum Text {
+    Outside,
+    /// A string that passes through; `escaped` after a backslash.
+    Passed {
+        escaped: bool,
+    },
+    /// A key of an object on the path, collected to compare with the path.
+    Key {
+        bytes: Vec<u8>,
+        escaped: bool,
+    },
+    /// A value at the path whose bytes so far open the link.
+    Held(Vec<u8>),
+    /// The rest of a value at the path that opened with the link.
+    Dropped {
+        escaped: bool,
+    },
+}
+
+impl Emptied {
+    fn new(inferred: &Inferred) -> Self {
+        Self {
+            path: inferred.path,
+            link: inferred.link.clone().into_bytes(),
+            levels: Vec::new(),
+            text: Text::Outside,
+        }
+    }
+
+    fn push(&mut self, chunk: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(chunk.len());
+        for &byte in chunk {
+            match &mut self.text {
+                Text::Outside => self.structure(byte, &mut out),
+                Text::Passed { escaped } => {
+                    out.push(byte);
+                    if *escaped {
+                        *escaped = false;
+                    } else if byte == b'\\' {
+                        *escaped = true;
+                    } else if byte == b'"' {
+                        self.text = Text::Outside;
+                    }
+                }
+                Text::Key { bytes, escaped } => {
+                    out.push(byte);
+                    if *escaped {
+                        *escaped = false;
+                    } else if byte == b'\\' {
+                        *escaped = true;
+                    } else if byte == b'"' {
+                        let depth = self.levels.len() - 1;
+                        let continues =
+                            self.path[depth] == "*" || self.path[depth].as_bytes() == bytes;
+                        if let Some(Level::Object { member, .. }) = self.levels.last_mut() {
+                            *member = continues;
+                        }
+                        self.text = Text::Outside;
+                        continue;
+                    }
+                    bytes.push(byte);
+                }
+                Text::Held(held) => {
+                    if byte == b'"' {
+                        out.push(b'"');
+                        out.append(held);
+                        out.push(b'"');
+                        self.text = Text::Outside;
+                    } else if self.link[held.len()] == byte {
+                        held.push(byte);
+                        if held.len() == self.link.len() {
+                            self.text = Text::Dropped { escaped: false };
+                        }
+                    } else {
+                        out.push(b'"');
+                        out.append(held);
+                        out.push(byte);
+                        self.text = Text::Passed {
+                            escaped: byte == b'\\',
+                        };
+                    }
+                }
+                Text::Dropped { escaped } => {
+                    if *escaped {
+                        *escaped = false;
+                    } else if byte == b'\\' {
+                        *escaped = true;
+                    } else if byte == b'"' {
+                        out.extend_from_slice(b"\"\"");
+                        self.text = Text::Outside;
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// A byte outside any string: tracks the open containers and where strings start.
+    fn structure(&mut self, byte: u8, out: &mut Vec<u8>) {
+        let depth = self.levels.len();
+        match byte {
+            b'{' => {
+                let path = match self.levels.last() {
+                    None => true,
+                    Some(Level::Object { path, member, .. }) => *path && *member,
+                    Some(Level::Array) => false,
+                } && depth < self.path.len();
+                self.levels.push(Level::Object {
+                    path,
+                    key: true,
+                    member: false,
+                });
+            }
+            b'[' => self.levels.push(Level::Array),
+            b'}' | b']' => {
+                self.levels.pop();
+            }
+            b',' => {
+                if let Some(Level::Object { key, .. }) = self.levels.last_mut() {
+                    *key = true;
+                }
+            }
+            b'"' => match self.levels.last_mut() {
+                Some(Level::Object { path, key, .. }) if *key => {
+                    *key = false;
+                    self.text = if *path {
+                        Text::Key {
+                            bytes: Vec::new(),
+                            escaped: false,
+                        }
+                    } else {
+                        Text::Passed { escaped: false }
+                    };
+                }
+                Some(Level::Object {
+                    path: true,
+                    member: true,
+                    ..
+                }) if depth == self.path.len() => {
+                    self.text = Text::Held(Vec::new());
+                    return;
+                }
+                _ => self.text = Text::Passed { escaped: false },
+            },
+            _ => {}
+        }
+        out.push(byte);
+    }
+
+    /// What is still held back when the document ends inside a value.
+    fn finish(self) -> Vec<u8> {
+        match self.text {
+            Text::Held(held) => [&b"\""[..], &held].concat(),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -1694,11 +1950,12 @@ mod tests {
                 "http://registry.npmjs.org/".into(),
             ],
             mount: "/npm/",
+            inferred: None,
         };
         let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://registry.npmjs.org/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         let expected = br#"{"versions":{"1.0.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-1.0.0.tgz","integrity":"sha512-x"}},"0.1.0":{"dist":{"tarball":"http://127.0.0.1:18740/npm/a/-/a-0.1.0.tgz"}}},"readme":"see https://registry.npmjs.org/a and \"https://registry.npmjs.or"}"#;
         for size in 1..=document.len() {
-            let mut links = Links::new(&index, "http://127.0.0.1:18740");
+            let mut links = Links::new(&index, "http://127.0.0.1:18740", None);
             let mut out = Vec::new();
             for chunk in document.chunks(size) {
                 out.extend(links.push(chunk));
@@ -1712,17 +1969,86 @@ mod tests {
         }
     }
 
+    const BUN_ACCEPT: &str =
+        "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*";
+
+    fn npm_links(accept: &str, user_agent: &str) -> Links {
+        let routes = Routes::production();
+        let target = routes.resolve("/npm/a", Some(accept)).unwrap();
+        Links::new(
+            target.index().unwrap(),
+            "http://127.0.0.1:18740",
+            target.inferred(Some(user_agent)),
+        )
+    }
+
     #[test]
     fn npm_documents_keep_their_public_links() {
-        let routes = Routes::production();
-        let npm = routes
-            .routes()
-            .iter()
-            .find(|route| route.id == "npm")
-            .unwrap();
-        let index = npm.index.clone().unwrap();
         let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz"}}}}"#;
-        let mut links = Links::new(&index, "http://127.0.0.1:18740");
+        for (accept, user_agent) in [
+            (
+                BUN_ACCEPT,
+                "npm/11.6.2 node/v24.11.0 linux x64 workspaces/false",
+            ),
+            (BUN_ACCEPT, "pnpm/10.20.0 npm/? node/v24.11.0 linux x64"),
+            ("application/json", "Bun/1.4.4"),
+        ] {
+            let mut links = npm_links(accept, user_agent);
+            assert_eq!(links.vary(), "accept, user-agent");
+            assert_eq!(links.tag("d"), "\"sha256-d@127.0.0.1:18740\"");
+            let mut out = links.push(document);
+            out.extend(links.finish());
+            assert_eq!(out, document, "{user_agent} {accept}");
+        }
+    }
+
+    #[test]
+    fn bun_gets_empty_links_for_the_tarballs_it_builds_from_its_registry() {
+        // Only versions.*.dist.tarball under the public registry is emptied: not a dependency
+        // that names a tarball, an escaped link or key, another host, a prefix of the link, a
+        // non-string value or a dist outside the versions.
+        let document = br#"{"name":"a","versions":{"1.0.0":{"name":"a","dependencies":{"tarball":"https://registry.npmjs.org/tarball/-/tarball-1.0.0.tgz"},"dist":{"integrity":"sha512-x","tarball":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","signatures":[{"sig":"https://registry.npmjs.org/"}]}},"0.1.0":{"dist":{"t\u0061rball":"https://registry.npmjs.org/a/-/a-0.1.0.tgz","tarball":"https://mirror.example/a-0.1.0.tgz","shasum":"s"}},"0.0.1":{"dist":{"tarball":"https:\/\/registry.npmjs.org\/a\/-\/a-0.0.1.tgz"}},"0.0.2":{"dist":{"tarball":"https://registry.npmjs.or"}},"0.0.3":{"dist":{"tarball":null}},"0.0.5":"https://registry.npmjs.org/a/-/a-0.0.5.tgz","0.0.6":{"dist":"https://registry.npmjs.org/a/-/a-0.0.6.tgz"},"0.0.7":{"dist":{"tarball":{"url":"https://registry.npmjs.org/a/-/a-0.0.7.tgz"}}},"0.0.4":{"dist":{"tarball":"https://registry.npmjs.org/a/-/a-0.0.4.tgz\"\\"}}},"dist":{"tarball":"https://registry.npmjs.org/a/-/a-9.tgz"},"modified":"2026-10-30T00:00:00.000Z"}"#;
+        let expected = String::from_utf8_lossy(document)
+            .replacen(
+                r#""https://registry.npmjs.org/a/-/a-1.0.0.tgz""#,
+                r#""""#,
+                1,
+            )
+            .replacen(
+                r#""https://registry.npmjs.org/a/-/a-0.0.4.tgz\"\\""#,
+                r#""""#,
+                1,
+            );
+        let spaced = b"{ \"versions\" : {\n  \"1.0.0\" : { \"dist\" : { \"tarball\" : \"https://registry.npmjs.org/a/-/a-1.0.0.tgz\" } } } }";
+        let spaced_expected = String::from_utf8_lossy(spaced).replacen(
+            r#""https://registry.npmjs.org/a/-/a-1.0.0.tgz""#,
+            r#""""#,
+            1,
+        );
+        for (document, expected) in [(&document[..], expected), (&spaced[..], spaced_expected)] {
+            for size in 1..=document.len() {
+                let mut links = npm_links(BUN_ACCEPT, "Bun/1.4.4");
+                let mut out = Vec::new();
+                for chunk in document.chunks(size) {
+                    out.extend(links.push(chunk));
+                }
+                out.extend(links.finish());
+                assert_eq!(
+                    String::from_utf8(out).unwrap(),
+                    expected,
+                    "chunk size {size}"
+                );
+            }
+        }
+        let links = npm_links(BUN_ACCEPT, "Bun/1.4.4");
+        assert_eq!(links.tag("d"), "\"sha256-d@127.0.0.1:18740+inferred\"");
+        assert_eq!(links.vary(), "accept, user-agent");
+    }
+
+    #[test]
+    fn a_document_cut_inside_a_held_link_keeps_its_bytes() {
+        let document = br#"{"versions":{"1.0.0":{"dist":{"tarball":"https://registry.np"#;
+        let mut links = npm_links(BUN_ACCEPT, "Bun/1.4.4");
         let mut out = links.push(document);
         out.extend(links.finish());
         assert_eq!(out, document);

@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::http::{StatusCode, header};
-use support::{Harness, INDEX_TYPES, LAYER, LAYER_DIGEST, WRONG_DIGEST};
+use support::{Harness, INDEX_TYPES, INFERRING, LAYER, LAYER_DIGEST, WRONG_DIGEST};
 
 #[tokio::test]
 async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
@@ -362,7 +362,7 @@ async fn index_documents_are_negotiated_and_link_back_to_the_client_base() {
         .unwrap();
     assert_eq!(preferred.status(), StatusCode::OK);
     assert_eq!(preferred.headers()[header::CONTENT_TYPE], INDEX_TYPES[0]);
-    assert_eq!(preferred.headers()[header::VARY], "accept");
+    assert_eq!(preferred.headers()[header::VARY], "accept, user-agent");
     let etag = preferred.headers()[header::ETAG].clone();
     let document: serde_json::Value =
         serde_json::from_str(&preferred.text().await.unwrap()).unwrap();
@@ -430,6 +430,58 @@ async fn index_documents_are_negotiated_and_link_back_to_the_client_base() {
             .all(|accept| INDEX_TYPES.contains(&accept.as_str())),
         "{accepts:?}"
     );
+}
+
+#[tokio::test]
+async fn a_client_that_derives_links_gets_them_empty_from_the_same_stored_document() {
+    let harness = Harness::start().await;
+    let url = format!("{}/registry/files/index.json", harness.base);
+    let fetch = |accept: &str, user_agent: &str, validator: Option<String>| {
+        let request = harness
+            .client
+            .get(&url)
+            .header(header::ACCEPT, accept)
+            .header(header::USER_AGENT, user_agent);
+        match validator {
+            Some(validator) => request.header(header::IF_NONE_MATCH, validator),
+            None => request,
+        }
+        .send()
+    };
+    let link = format!("{}/registry/files/immutable.bin", harness.base);
+    let inferring = &format!("{INFERRING}1.0");
+
+    let emptied = fetch(INDEX_TYPES[0], inferring, None).await.unwrap();
+    assert_eq!(emptied.headers()[header::VARY], "accept, user-agent");
+    let etag = emptied.headers()[header::ETAG].to_str().unwrap().to_owned();
+    assert!(etag.ends_with("+inferred\""), "{etag}");
+    let document: serde_json::Value = serde_json::from_str(&emptied.text().await.unwrap()).unwrap();
+    assert_eq!(document["mirror"]["url"], "");
+    assert_eq!(document["files"][0]["url"], link);
+
+    let other = fetch(INDEX_TYPES[0], "other/1.0", None).await.unwrap();
+    assert_eq!(other.headers()["x-nds-cache"], "hit");
+    let document: serde_json::Value = serde_json::from_str(&other.text().await.unwrap()).unwrap();
+    assert_eq!(document["mirror"]["url"], link);
+    assert_eq!(
+        fetch(INDEX_TYPES[0], "other/1.0", Some(etag.clone()))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        fetch(INDEX_TYPES[0], inferring, Some(etag))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_MODIFIED
+    );
+
+    let full = fetch(INDEX_TYPES[1], inferring, None).await.unwrap();
+    let full: serde_json::Value = serde_json::from_str(&full.text().await.unwrap()).unwrap();
+    assert_eq!(full["mirror"]["url"], link);
+    assert_eq!(harness.hits(), 2);
 }
 
 #[tokio::test]
