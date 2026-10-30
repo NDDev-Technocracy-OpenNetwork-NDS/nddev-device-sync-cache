@@ -166,9 +166,12 @@ lane's local caches, and the way back to direct downloads is `unbind`.
 A project or job can select the central npm route for Bun with
 `--registry "${NDS_CACHE_BASE:?}/npm/"` or a default registry in its own `.npmrc`. The route
 serves Bun the install document with the public registry's tarball links empty, so an online
-install, `bun add` and `bun install --frozen-lockfile` all download through the cache, and
-`bun.lock` records those packages with an empty registry, as a public install does. This is a
-project-owned selection, not a default Bun binding. It requires review of the project's private
+install and `bun install --frozen-lockfile` download through the cache. A lockfile that Bun
+creates or installs from unchanged records those packages with an empty registry, as a public
+install does. Bun loads an empty registry as its configured one, so a change to an existing
+lockfile (`bun add`, `bun update`, an edited `package.json`) through the route writes the cache
+address into the entries it already held: author such changes against the canonical registry.
+This is a project-owned selection, not a default Bun binding. It requires review of the project's private
 registry files and authentication selectors; the selection must not override those policies:
 scoped registries and their credentials keep precedence and never pass through the cache.
 Retries keep the same selected central route. Qualify the actual committed install action and

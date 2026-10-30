@@ -77,7 +77,10 @@ tarball of the public registry in `bun.lock` with an empty link, and builds an e
 configured registry, the package name and the version. A client whose `User-Agent` opens with
 `Bun/` therefore gets the install document with exactly those links empty: the `tarball` of each
 version's `dist` that starts with `https://registry.npmjs.org/`. Bun then downloads through the
-cache on an online install as on a frozen one, and writes the `bun.lock` a public install writes.
+cache on an online install as on a frozen one, and creates the `bun.lock` a public install
+creates. Bun loads an empty link as its configured registry, though, so a change to an existing
+`bun.lock` through the route records the cache address for the entries it already held; such
+changes are authored against the canonical registry.
 The links are emptied while the document streams, as links are rewritten, so one stored object
 serves both forms; the response varies by `Accept` and `User-Agent`, and the entity tag names the
 emptied form. A link to another host, an escaped link and every other value stay as upstream sent
