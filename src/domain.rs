@@ -182,6 +182,11 @@ pub struct Routes {
 }
 
 impl Routes {
+    /// The template of every declared route, for telemetry and counters.
+    pub fn templates(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.routes.iter().map(|route| route.template)
+    }
+
     /// Production upstreams. Every upstream and redirect target uses HTTPS.
     pub fn production() -> Self {
         let route = |id, prefix, template, upstream: &str, accept| Route {
@@ -694,6 +699,9 @@ pub fn loopback_base(host: &str) -> Option<String> {
 }
 
 /// The sparse index configuration for a client that reached the cache at `host`.
+/// The route template of the generated crates index configuration.
+pub const CRATES_CONFIG_TEMPLATE: &str = "/crates-index/config.json";
+
 pub fn crates_index_config(host: &str) -> Option<String> {
     loopback_base(host)
         .map(|base| format!("{{\"dl\":\"{base}/crates/{{crate}}/{{crate}}-{{version}}.crate\"}}"))

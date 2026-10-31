@@ -483,6 +483,19 @@ impl Harness {
         (status, serde_json::from_str(&body).unwrap())
     }
 
+    /// The `/v1/health` request counters of one route template.
+    pub async fn counted(&self, route: &str) -> serde_json::Value {
+        let response = self
+            .client
+            .get(format!("{}/v1/health", self.base))
+            .send()
+            .await
+            .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        body["requests"]["routes"][route].clone()
+    }
+
     pub async fn objects(&self) -> u64 {
         let response = self
             .client
