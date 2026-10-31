@@ -142,7 +142,10 @@ device identity, so the client holds no credential.
 Every request, lifecycle transition and dependency state change emits the canonical NDS event
 envelope through the shared SDK with `module = cache`. Events use matched route templates, status,
 duration, outcome and fixed error classes; they never carry URLs, client keys or project
-identities. The cache-specific signals in `registry/cache-services.json` that the shared event
+identities. The same outcome of every request event is counted in memory per route template and
+reported by `/v1/health` under `requests`, together with the body bytes sent and the object bytes
+filled from upstream, so the hit ratio and the saved upstream traffic of a route can be read
+without an event pipeline. The counters reset on restart. The cache-specific signals in `registry/cache-services.json` that the shared event
 contract cannot yet express, such as served bytes and hit ratio per protocol, are added through a
 coordinated change of that contract in `nddev-device-sync-observability`.
 

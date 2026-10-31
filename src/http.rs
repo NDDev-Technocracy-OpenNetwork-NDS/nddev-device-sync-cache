@@ -17,6 +17,7 @@ use tracing::Instrument;
 use crate::{
     REPOSITORY, SOURCE_COMMIT,
     cache::{Cache, Delivery, Filling, Object, ServeError, Served},
+    counters::{Outcome, Snapshot},
     domain, store,
     telemetry::Identity,
 };
@@ -49,6 +50,7 @@ struct HealthResponse<'a> {
     store_objects: usize,
     store_bytes: u64,
     store_capacity: u64,
+    requests: Snapshot,
 }
 
 async fn health(State(app): State<Arc<App>>) -> Response {
@@ -63,6 +65,7 @@ async fn health(State(app): State<Arc<App>>) -> Response {
         store_objects: usage.objects,
         store_bytes: usage.bytes,
         store_capacity: usage.capacity,
+        requests: app.cache.counters().snapshot(),
     })
     .into_response()
 }
@@ -118,9 +121,14 @@ const DISTRIBUTION_API: &str = "docker-distribution-api-version";
 
 /// The crates.io sparse index configuration, generated for the loopback base address the client
 /// used, so that crate downloads come back through this cache.
-async fn crates_config(method: Method, headers: HeaderMap) -> Response {
+async fn crates_config(
+    State(app): State<Arc<App>>,
+    method: Method,
+    headers: HeaderMap,
+) -> Response {
     let started = Instant::now();
-    let route = "/crates-index/config.json";
+    let route = domain::CRATES_CONFIG_TEMPLATE;
+    let counters = app.cache.counters();
     let span = nddev_device_sync_telemetry::http_server_span(method.as_str(), route)
         .unwrap_or_else(|_| tracing::Span::none());
     let finished = span.clone();
@@ -133,10 +141,15 @@ async fn crates_config(method: Method, headers: HeaderMap) -> Response {
         match config {
             Some(config) => {
                 tracing::info!(module = "cache", event.name = "cache.index.config", method = method.as_str(), route, status = 200, duration_ms, outcome = "ok");
+                counters.outcome(route, Outcome::Answered);
+                if method != Method::HEAD {
+                    counters.sent(route, config.len() as u64);
+                }
                 ([(header::CONTENT_TYPE, "application/json")], config).into_response()
             }
             None => {
                 tracing::info!(module = "cache", event.name = "cache.rejected", method = method.as_str(), route, status = 400, duration_ms, error.type = "host_not_loopback", outcome = "rejected");
+                counters.outcome(route, Outcome::Rejected);
                 StatusCode::BAD_REQUEST.into_response()
             }
         }
@@ -161,8 +174,10 @@ async fn serve(
     let finished = span.clone();
     let response = async move {
         let duration_ms = || started.elapsed().as_secs_f64() * 1000.0;
+        let counters = app.cache.counters();
         if method != Method::GET && method != Method::HEAD {
             tracing::info!(module = "cache", event.name = "cache.rejected", method = method.as_str(), route, status = 405, duration_ms = duration_ms(), error.type = "method_not_allowed", outcome = "rejected");
+            counters.outcome(route, Outcome::Rejected);
             let mut response = StatusCode::METHOD_NOT_ALLOWED.into_response();
             response.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET, HEAD"));
             return response;
@@ -193,6 +208,8 @@ async fn serve(
                     Delivery::Answered => Served::Hit,
                 };
                 let head = method == Method::HEAD;
+                // Stored and filling bodies stream; count what reaches the connection.
+                let streams = !head && !matches!(delivery, Delivery::Answered);
                 let validator = headers
                     .get(header::IF_NONE_MATCH)
                     .and_then(|value| value.to_str().ok());
@@ -220,10 +237,23 @@ async fn serve(
                     Ok(response) => {
                         let status = response.status().as_u16();
                         tracing::info!(module = "cache", event.name = event_name(served), method = method.as_str(), route, status, duration_ms = duration_ms(), outcome = "ok");
-                        response
+                        counters.outcome(route, served.into());
+                        if streams && response.status() != StatusCode::NOT_MODIFIED {
+                            let counters = counters.clone();
+                            response.map(|body| {
+                                Body::from_stream(body.into_data_stream().inspect(move |chunk| {
+                                    if let Ok(chunk) = chunk {
+                                        counters.sent(route, chunk.len() as u64);
+                                    }
+                                }))
+                            })
+                        } else {
+                            response
+                        }
                     }
                     Err(_) => {
                         tracing::error!(module = "cache", scope = "io", event.name = "cache.store.read.failed", method = method.as_str(), route, status = 503, duration_ms = duration_ms(), error.type = "store_io", outcome = "error");
+                        counters.outcome(route, Outcome::Failed);
                         StatusCode::SERVICE_UNAVAILABLE.into_response()
                     }
                 }
@@ -231,6 +261,7 @@ async fn serve(
             Err(error) => {
                 let status = error.status();
                 let outcome = if matches!(error, ServeError::Rejected(_) | ServeError::NotFound) { "rejected" } else { "error" };
+                counters.outcome(route, if outcome == "rejected" { Outcome::Rejected } else { Outcome::Failed });
                 if outcome == "rejected" {
                     tracing::info!(module = "cache", event.name = "cache.rejected", method = method.as_str(), route, status, duration_ms = duration_ms(), error.type = error.class(), outcome);
                 } else {

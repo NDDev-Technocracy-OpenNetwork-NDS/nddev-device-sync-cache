@@ -16,7 +16,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 use tracing::Instrument;
 
 use crate::{
-    domain::{Freshness, Links, Rejection, Routes, Target},
+    counters::Counters,
+    domain::{CRATES_CONFIG_TEMPLATE, Freshness, Links, Rejection, Routes, Target},
     store::{Eviction, Meta, Pending, Progress, Store, StoreError, Validators, now},
     upstream::{Body, Fetched, Upstream, UpstreamError},
 };
@@ -177,6 +178,7 @@ pub struct Cache {
     fetch_wait: Duration,
     revalidate_after: u64,
     upstream_state: Arc<AtomicU8>,
+    counters: Arc<Counters>,
 }
 
 fn stored_validators(meta: &Meta) -> Validators {
@@ -226,7 +228,9 @@ fn stored(meta: Meta, path: PathBuf, served: Served) -> Object {
 
 impl Cache {
     pub fn new(routes: Arc<Routes>, store: Store, upstream: Upstream, limits: Limits) -> Self {
+        let counters = Counters::new(routes.templates().chain([CRATES_CONFIG_TEMPLATE]));
         Self {
+            counters: Arc::new(counters),
             routes,
             store: Arc::new(store),
             upstream,
@@ -241,6 +245,11 @@ impl Cache {
 
     pub fn store(&self) -> &Store {
         &self.store
+    }
+
+    /// Request counters per route template since the process started.
+    pub fn counters(&self) -> &Arc<Counters> {
+        &self.counters
     }
 
     pub fn upstream_state(&self) -> UpstreamState {
@@ -405,6 +414,7 @@ impl Cache {
             fills: self.fills.clone(),
             fill: fill.clone(),
             upstream_state: self.upstream_state.clone(),
+            counters: self.counters.clone(),
             key: key.to_owned(),
             route: target.route.template,
             digest: target.digest().map(str::to_owned),
@@ -457,10 +467,13 @@ impl Cache {
                 }
                 .await;
                 match written {
-                    Ok((meta, path, eviction)) => Ok(Object {
-                        eviction,
-                        ..stored(meta, path, Served::Miss)
-                    }),
+                    Ok((meta, path, eviction)) => {
+                        self.counters.filled(target.route.template, meta.size);
+                        Ok(Object {
+                            eviction,
+                            ..stored(meta, path, Served::Miss)
+                        })
+                    }
                     Err(error) => {
                         if matches!(error, ServeError::Upstream(_)) {
                             record(&self.upstream_state, UpstreamState::Failing);
@@ -495,6 +508,7 @@ struct Download {
     fills: Fills,
     fill: Arc<Fill>,
     upstream_state: Arc<AtomicU8>,
+    counters: Arc<Counters>,
     key: String,
     route: &'static str,
     /// The digest a content-addressed object must have.
@@ -542,6 +556,7 @@ async fn download(mut job: Download) {
     nddev_device_sync_telemetry::finish_operation_span(&job.span, committed.is_err());
     match committed {
         Ok((meta, path, eviction)) => {
+            job.counters.filled(route, meta.size);
             job.progress.send_replace(Progress::Committed {
                 size: meta.size,
                 path,
