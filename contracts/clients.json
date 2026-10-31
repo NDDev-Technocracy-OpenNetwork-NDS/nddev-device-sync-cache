@@ -47,7 +47,7 @@
       "upstream": "https://github.com",
       "objects": "Public uploaded release assets under exact owner/repository/releases/download/tag/asset paths, with a caller-pinned SHA-256 in the cache URL. Only bytes matching that digest are committed. An escaped slash is allowed only within the release tag.",
       "clients": [
-        {"tool": "checksum-pinned artifact downloader", "setting": {"download_url": "{base}/github-releases/sha256/{sha256}/{owner}/{repository}/releases/download/{tag}/{asset}"}, "acceptance": "pending", "limits": "Public assets only; no API, latest-release resolution, caller authentication, source archives or automatic URL rewriting. The consumer keeps its own size, digest and signature checks and must not retry a public URL after a cache failure."}
+        {"tool": "curl with pinned digest verification and native archive consumption", "setting": {"download_url": "{base}/github-releases/sha256/{sha256}/{owner}/{repository}/releases/download/{tag}/{asset}"}, "acceptance": "real client", "limits": "Qualified on Linux x86_64 with native curl, an independent size/SHA-256 pin, verified archive extraction and execution of the downloaded tool. A fresh local installation from the retained verified archive succeeds with central unavailable; a cold curl download refuses without public fallback. This does not give curl an offline package cache or qualify another platform, installer, project binding or tool selection. Public uploaded assets only; no API, latest-release resolution, caller authentication, source archives or automatic URL rewriting. The consumer keeps its own size, digest and signature checks and must not retry a public URL after a cache failure."}
       ]
     },
     {

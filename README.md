@@ -198,6 +198,14 @@ assets and source archives are outside this route; caller headers and credential
 forwarded. A consumer must explicitly select this URL and keep it on retries: a failed cache
 request never authorizes a public fallback. The device binding does not rewrite arbitrary URLs.
 
+The qualified native consumer combines curl, an independently pinned size and digest, and native
+archive extraction before executing the verified tool. Its client contract is limited to the
+exercised platform and operation. Offline reuse means a fresh installation from a retained,
+verified local archive; curl itself has no offline package cache. A cold selected-central failure
+remains a visible download failure. This result neither selects a persistent tool installation
+nor qualifies another installer, platform or project binding. Exact host inputs and native
+receipts remain in the private estate.
+
 GitHub documents [release asset links](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)
 and [asset digests](https://docs.github.com/en/rest/releases/assets); a tag or download URL alone
 does not establish the caller's expected bytes.
