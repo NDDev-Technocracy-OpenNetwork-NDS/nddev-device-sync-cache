@@ -18,7 +18,7 @@ env:
 
 jobs:
   quality:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,10 +36,15 @@ jobs:
           shared-key: native-contract
           add-job-id-key: "false"
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # `just setup` compiles the pinned jsonschema-cli into .tools (no prebuilt release
+          # exists); with it restored, cargo install finds the version installed and returns.
+          cache-directories: .tools
       - name: Install the pinned quality tools
-        run: |
-          cargo install --locked --version 0.22.2 cargo-audit
-          cargo install --locked --version 0.20.2 cargo-deny
+        uses: NDDev-Technocracy-Standarts/std-0004-ci-cd-workflows/.github/actions/tools@365415f32190ae22ff22462e791a4829ad6e91fc # nddev-cicd-v0.6.16
+        with:
+          # cargo-audit 0.22.2, cargo-deny 0.20.2 and cargo-nextest 0.9.149 from checksummed
+          # releases instead of compiling them with cargo install in every job.
+          capability: rust
       - name: Install the pinned registry validator
         run: just setup
       - name: Validate schemas and registry
