@@ -1,5 +1,5 @@
-# std-0001 repository manifest; schema: `nddev schema manifest`.
-apiVersion: nddev.ai/v1alpha3
+# std-0001 repository manifest — schema: `nddev schema manifest`.
+apiVersion: nddev.ai/v1alpha4
 kind: Repository
 metadata:
   id: nddev-device-sync-cache
@@ -8,7 +8,6 @@ metadata:
 spec:
   standard:
     id: std-0001
-    version: 3.0.0
   role: component
   profiles:
   - docs
@@ -34,22 +33,11 @@ spec:
   - name: cache-client-contract
     source: contracts/clients.schema.json
     direction: schema-first
-  variations:
-  - paths: [module.yaml]
-    purpose: manifest
-    reason: NDS module descriptor owned by the product standards corpus.
-    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
-  - paths: [standarts.lock]
-    purpose: lock
-    reason: NDS contract lock pinning the standards source.
-    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
-  - paths: [contracts]
-    purpose: manifest
-    reason: NDS contract corpus of the technology registry schemas.
-    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
-  - paths: [Dockerfile, compose.yaml, compose.collector.yaml]
-    purpose: infrastructure
-    reason: Hardened service image and self-hostable compose surfaces owned by the repository.
-    decision: {state: approved, by: rldyourmnd, date: "2026-10-22", origin: document, reference: standarts/decisions/0013-estate-hygiene-and-standards-adoption.md}
+  adaptations:
+  - docs/decisions/0001-nds-contract-locations.md
+  extensions:
+    nddev.standards-system:
+      standards:
+      - std-0001
   adapters:
   - claude
