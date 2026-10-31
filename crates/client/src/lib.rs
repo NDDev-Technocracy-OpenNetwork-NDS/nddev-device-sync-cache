@@ -11,7 +11,7 @@
 //!
 //! A bound scope fails closed: its tools reach only the cache, which reports itself not ready
 //! when it does not answer, and `unbind` is the explicit way back to direct downloads. The base is
-//! the cache listener on the cache host, or elsewhere the local port of the forward that the RDS
+//! the cache listener on the cache host, or elsewhere the local port of the forward that the remote
 //! module owns with the device's resident identity; this crate holds no credential.
 
 pub mod binding;

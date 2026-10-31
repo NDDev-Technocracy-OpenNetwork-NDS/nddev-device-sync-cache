@@ -17,7 +17,7 @@
   ],
   "dependencies": [
     {
-      "id": "rds",
+      "id": "remote",
       "minimum_api": 1
     }
   ]
