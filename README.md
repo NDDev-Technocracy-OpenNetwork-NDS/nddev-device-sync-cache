@@ -59,7 +59,11 @@ npm fetches through its configured registry, so `package-lock.json` stays public
 install document with the public registry's tarball links empty; it builds them from its
 configured registry, so it downloads through the cache and `bun.lock` records what a public install
 records.
-`GET /v1/health` reports the build identity and store usage. `GET /v1/ready` answers `503` when
+`GET /v1/health` reports the build identity, store usage and `requests`: counters per matched
+route template of each outcome (`hit`, `miss`, `joined`, `revalidated`, `stale`, `answered`,
+`rejected`, `failed`), `bytes_sent` to clients and `bytes_filled` from upstream. They count from
+`started_at_ms` and reset on restart; they carry no URL, client or package identity.
+`GET /v1/ready` answers `503` when
 the store is not writable or lacks room for one maximum object, and reports the outcome of the
 latest upstream exchange without failing on it, because stored objects stay servable while
 upstream is unreachable. `GET /source` links the corresponding source.

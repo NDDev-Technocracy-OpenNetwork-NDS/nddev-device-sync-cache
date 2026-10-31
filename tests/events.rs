@@ -222,6 +222,50 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
             "a fill is outside the trace of the request that started it"
         );
     }
+    // The health counters equal the request events per route template and outcome.
+    let health: serde_json::Value = serde_json::from_str(
+        &harness
+            .client
+            .get(format!("{}/v1/health", harness.base))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let mut evented = std::collections::BTreeMap::<(String, &str), u64>::new();
+    for event in &events {
+        let outcome = match event["event.name"].as_str().unwrap_or_default() {
+            "cache.hit" => "hit",
+            "cache.miss" => "miss",
+            "cache.joined" => "joined",
+            "cache.revalidated" => "revalidated",
+            "cache.stale" => "stale",
+            "cache.index.config" => "answered",
+            "cache.rejected" => "rejected",
+            "cache.failed" | "cache.store.read.failed" => "failed",
+            _ => continue,
+        };
+        let route = event["route"].as_str().unwrap().to_owned();
+        *evented.entry((route, outcome)).or_default() += 1;
+    }
+    let mut counted = std::collections::BTreeMap::<(String, &str), u64>::new();
+    for (route, counts) in health["requests"]["routes"].as_object().unwrap() {
+        for (outcome, count) in counts["outcomes"].as_object().unwrap() {
+            if count.as_u64().unwrap() > 0 {
+                counted.insert((route.clone(), outcome.as_str()), count.as_u64().unwrap());
+            }
+        }
+        if named("cache.fill.committed")
+            .iter()
+            .any(|event| event["route"] == route.as_str())
+        {
+            assert!(counts["bytes_filled"].as_u64().unwrap() > 0, "{route}");
+        }
+    }
+    assert_eq!(counted, evented);
     for event in &events {
         let text = event.to_string();
         assert!(

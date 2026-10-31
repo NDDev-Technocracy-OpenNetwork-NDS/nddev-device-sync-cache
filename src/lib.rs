@@ -4,6 +4,7 @@
 
 pub mod cache;
 pub mod config;
+pub mod counters;
 pub mod domain;
 pub mod http;
 pub mod store;

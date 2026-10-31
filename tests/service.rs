@@ -83,6 +83,78 @@ async fn the_checksum_database_answers_supported_and_passes_its_signed_notes_thr
 }
 
 #[tokio::test]
+async fn health_counts_outcomes_and_bytes_per_route_template() {
+    let harness = Harness::start().await;
+    let fresh = harness.counted("/origin/{path}").await;
+    assert_eq!(fresh["outcomes"]["hit"], 0);
+    assert_eq!(
+        (fresh["bytes_sent"].as_u64(), fresh["bytes_filled"].as_u64()),
+        (Some(0), Some(0))
+    );
+    assert_eq!(harness.get("/origin/files/immutable.bin").await.1, "miss");
+    harness.committed(1).await;
+    assert_eq!(harness.get("/origin/files/immutable.bin").await.1, "hit");
+    let head = harness
+        .client
+        .head(format!("{}/origin/files/immutable.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(head.headers()["x-nds-cache"], "hit");
+    let post = harness
+        .client
+        .post(format!("{}/origin/files/immutable.bin", harness.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(post.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(harness.get("/origin/files/missing.bin").await.0, 404);
+    assert_eq!(harness.get("/origin/files/big.bin").await.0, 502);
+    assert_eq!(harness.get("/elsewhere/files/a").await.0, 404);
+    let (status, _, config) = harness.get("/crates-index/config.json").await;
+    assert_eq!(status, 200);
+
+    let origin = harness.counted("/origin/{path}").await;
+    for (outcome, count) in [
+        ("miss", 1),
+        ("hit", 2),
+        ("rejected", 2),
+        ("failed", 1),
+        ("joined", 0),
+        ("answered", 0),
+    ] {
+        assert_eq!(origin["outcomes"][outcome], count, "{outcome}");
+    }
+    // A HEAD sends no body: the miss and the GET hit each sent the 17-byte object once.
+    assert_eq!(origin["bytes_sent"], 34);
+    assert_eq!(origin["bytes_filled"], 17);
+    assert_eq!(
+        harness.counted("unmatched").await["outcomes"]["rejected"],
+        1
+    );
+    let index = harness.counted("/crates-index/config.json").await;
+    assert_eq!(index["outcomes"]["answered"], 1);
+    assert_eq!(index["bytes_sent"], config.len());
+    let health = harness
+        .client
+        .get(format!("{}/v1/health", harness.base))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let health: serde_json::Value = serde_json::from_str(&health).unwrap();
+    assert_eq!(health["requests"]["resets_on_restart"], true);
+    assert!(health["requests"]["started_at_ms"].as_u64().unwrap() > 0);
+    let text = health.to_string();
+    assert!(
+        !text.contains("/files/") && !text.contains("127.0.0.1"),
+        "{text}"
+    );
+}
+
+#[tokio::test]
 async fn concurrent_misses_share_one_upstream_fetch() {
     let harness = Arc::new(Harness::start().await);
     let requests = (0..8)
@@ -96,6 +168,16 @@ async fn concurrent_misses_share_one_upstream_fetch() {
         assert_eq!((status, body.as_str()), (200, "slow payload"));
     }
     assert_eq!(harness.hits(), 1);
+    let counted = harness.counted("/origin/{path}").await;
+    let outcomes = &counted["outcomes"];
+    let served = ["miss", "joined", "hit"].map(|outcome| outcomes[outcome].as_u64().unwrap());
+    assert_eq!(
+        (served[0], served.iter().sum::<u64>()),
+        (1, 8),
+        "{outcomes}"
+    );
+    assert_eq!(counted["bytes_sent"], 8 * "slow payload".len());
+    assert_eq!(counted["bytes_filled"], "slow payload".len());
 }
 
 #[tokio::test]
@@ -126,6 +208,14 @@ async fn mutable_objects_revalidate_refresh_and_fall_back_to_stale() {
     );
     let (status, ready) = harness.ready().await;
     assert_eq!((status, ready["upstream"].as_str()), (200, Some("failing")));
+    let counted = harness.counted("/origin/{path}").await;
+    for (outcome, count) in [("miss", 2), ("hit", 1), ("revalidated", 1), ("stale", 1)] {
+        assert_eq!(counted["outcomes"][outcome], count, "{outcome}");
+    }
+    assert_eq!(
+        counted["bytes_filled"],
+        "channel v1".len() + "channel v2".len()
+    );
 }
 
 #[tokio::test]
