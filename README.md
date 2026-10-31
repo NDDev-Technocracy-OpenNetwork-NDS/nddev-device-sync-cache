@@ -84,8 +84,8 @@ docker compose -f compose.yaml -f compose.collector.yaml up --detach
 ```
 
 Devices and runners reach the loopback listener through estate-admitted forwards, such as
-restricted SSH or `rds forward` of
-[remote-device-sync](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds).
+restricted SSH or the legacy `rds forward` of the
+[remote module](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-remote).
 Several forwards can reach the same central listener through `nds-forward-pool`; their health
 checks select a transport, and never select a different store or a public download fallback.
 [`contracts/clients.json`](contracts/clients.json) is the client contract: every live route, the

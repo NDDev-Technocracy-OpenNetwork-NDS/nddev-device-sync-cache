@@ -20,7 +20,7 @@ pub const END: &str = "# <<< nds-cache";
 const CREATED: &str = "# nds-cache created this file";
 
 /// A loopback base address of the cache, `http://127.0.0.1:PORT`. The cache host itself uses its
-/// listener port; a device uses the local port of its RDS forward.
+/// listener port; a device uses the local port of its remote-module forward.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Base {
     port: u16,
