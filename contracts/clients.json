@@ -266,13 +266,31 @@
       "id": "docker-hub",
       "prefix": "/v2/docker.io",
       "upstream": "https://registry-1.docker.io/v2",
-      "objects": "Image manifests of the docker.io registry, revalidated by tag and content-addressed by digest, and blobs, stored only with the digest their path names.",
+      "objects": "Image manifests of the docker.io registry, revalidated by tag and content-addressed by digest, and blobs, stored only with the digest their path names. Docker Engine mirror requests at /v2/NAME/... use the same object key as the prefixed route.",
       "clients": [
         {
           "tool": "docker pull and FROM in builds",
-          "setting": {"image": "{base}/v2/docker.io/library/alpine:3"},
+          "setting": {
+            "image": "{base}/v2/docker.io/library/alpine:3"
+          },
           "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/docker.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
+        },
+        {
+          "tool": "BuildKit with the docker-container driver",
+          "setting": {
+            "mirror_endpoint": "{base}/v2/docker.io"
+          },
+          "acceptance": "real client",
+          "limits": "Generate native TOML with nds-cache buildkit-config --port PORT and pass it to an explicitly owned builder. Canonical FROM names and digests stay unchanged. Anonymous public pulls only; do not replace an existing private/authenticated registry policy. The builder must reach the forwarded loopback port in its own network namespace. Native mirrors retain origin fallback; central-only acceptance additionally requires a qualified executor egress policy. This is not a Docker Engine per-registry pull setting or an automatic device binding."
+        },
+        {
+          "tool": "Docker Engine registry mirror",
+          "setting": {
+            "registry-mirrors": "{base}/"
+          },
+          "acceptance": "pending",
+          "limits": "The cache serves Docker Hub at the registry root without an intermediate bridge. Select the daemon configuration only in an idle maintenance window. Docker Engine mirrors only Docker Hub and retains direct upstream fallback; this alone is not a central-only binding. Private authenticated pulls stay under their existing owner."
         }
       ]
     },
@@ -284,9 +302,19 @@
       "clients": [
         {
           "tool": "docker pull and FROM in builds",
-          "setting": {"image": "{base}/v2/ghcr.io/linuxcontainers/alpine:latest"},
+          "setting": {
+            "image": "{base}/v2/ghcr.io/linuxcontainers/alpine:latest"
+          },
           "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/ghcr.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
+        },
+        {
+          "tool": "BuildKit with the docker-container driver",
+          "setting": {
+            "mirror_endpoint": "{base}/v2/ghcr.io"
+          },
+          "acceptance": "real client",
+          "limits": "Generate native TOML with nds-cache buildkit-config --port PORT and pass it to an explicitly owned builder. Canonical FROM names and digests stay unchanged. Anonymous public pulls only; do not replace an existing private/authenticated registry policy. The builder must reach the forwarded loopback port in its own network namespace. Native mirrors retain origin fallback; central-only acceptance additionally requires a qualified executor egress policy. This is not a Docker Engine per-registry pull setting or an automatic device binding."
         }
       ]
     },
@@ -298,9 +326,19 @@
       "clients": [
         {
           "tool": "docker pull and FROM in builds",
-          "setting": {"image": "{base}/v2/gcr.io/distroless/static:latest"},
+          "setting": {
+            "image": "{base}/v2/gcr.io/distroless/static:latest"
+          },
           "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/gcr.io/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
+        },
+        {
+          "tool": "BuildKit with the docker-container driver",
+          "setting": {
+            "mirror_endpoint": "{base}/v2/gcr.io"
+          },
+          "acceptance": "real client",
+          "limits": "Generate native TOML with nds-cache buildkit-config --port PORT and pass it to an explicitly owned builder. Canonical FROM names and digests stay unchanged. Anonymous public pulls only; do not replace an existing private/authenticated registry policy. The builder must reach the forwarded loopback port in its own network namespace. Native mirrors retain origin fallback; central-only acceptance additionally requires a qualified executor egress policy. This is not a Docker Engine per-registry pull setting or an automatic device binding."
         }
       ]
     },
@@ -312,9 +350,19 @@
       "clients": [
         {
           "tool": "docker pull and FROM in builds",
-          "setting": {"image": "{base}/v2/cgr.dev/chainguard/static:latest"},
+          "setting": {
+            "image": "{base}/v2/cgr.dev/chainguard/static:latest"
+          },
           "acceptance": "real client",
           "limits": "Clients name the cache's loopback address before the registry, as in 127.0.0.1:PORT/cgr.dev/NAME:TAG; Docker allows plain HTTP to loopback registries. Docker registry-mirrors cover only Docker Hub and need a daemon restart, and containerd mirrors need hosts.toml, so neither is configured here. Pulls are anonymous; private images keep their own registry."
+        },
+        {
+          "tool": "BuildKit with the docker-container driver",
+          "setting": {
+            "mirror_endpoint": "{base}/v2/cgr.dev"
+          },
+          "acceptance": "real client",
+          "limits": "Generate native TOML with nds-cache buildkit-config --port PORT and pass it to an explicitly owned builder. Canonical FROM names and digests stay unchanged. Anonymous public pulls only; do not replace an existing private/authenticated registry policy. The builder must reach the forwarded loopback port in its own network namespace. Native mirrors retain origin fallback; central-only acceptance additionally requires a qualified executor egress policy. This is not a Docker Engine per-registry pull setting or an automatic device binding."
         }
       ]
     }

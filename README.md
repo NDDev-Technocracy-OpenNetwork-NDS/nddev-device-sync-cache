@@ -221,6 +221,38 @@ GitHub documents [release asset links](https://docs.github.com/en/repositories/r
 and [asset digests](https://docs.github.com/en/rest/releases/assets); a tag or download URL alone
 does not establish the caller's expected bytes.
 
+## Native OCI mirrors
+
+Docker Engine can use the cache base directly in its registry-mirrors setting. Requests at
+the registry root, such as /v2/library/alpine/manifests/TAG, resolve to the same stored object
+as the existing /v2/docker.io/library/alpine/manifests/TAG route. This needs no second HTTP
+bridge or store. Explicit ghcr.io, gcr.io and cgr.dev prefixes retain their original owners;
+an unknown registry-looking prefix is refused. OCI requests carrying Authorization,
+Proxy-Authorization or Cookie are rejected before cache lookup or upstream I/O. A mirror
+namespace query is accepted only when it agrees with the route's original registry.
+
+BuildKit supports all four registries with canonical FROM references:
+
+    nds-cache buildkit-config --port 8740 > buildkitd.toml
+    docker buildx create --name MY_OWNED_BUILDER --driver docker-container --buildkitd-config buildkitd.toml
+
+This command prints native TOML and changes no file, binding or running daemon. The caller
+owns the output and builder. The loopback forward must be reachable from that builder's
+network namespace. Existing private registry policies and credential helpers must be reviewed
+before selecting these anonymous public mirrors; this configuration does not replace them.
+
+Docker Engine's native mirror setting covers Docker Hub only. BuildKit's registry mappings
+apply to builds, not arbitrary Docker Engine pulls. Both clients retain native origin fallback.
+A central-only executor therefore also needs qualified egress controls; merely writing a mirror
+configuration does not establish that guarantee. A failed cache must not silently be reported
+as a cache hit or justify disabling digest verification. The client contract records these
+acceptance boundaries separately from device deployment.
+
+Primary references: [Docker registry mirrors](https://docs.docker.com/docker-hub/image-library/mirror/),
+[BuildKit configuration](https://docs.docker.com/build/buildkit/configure/), and
+[containerd registry hosts](https://github.com/containerd/containerd/blob/main/docs/hosts.md).
+Containerd hosts.toml is a separate client integration, not a Docker classic-store setting.
+
 ## Forward pool
 
 A device reaches the cache, and a controller reaches a device, through forwards whose local

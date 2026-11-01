@@ -462,13 +462,40 @@ impl Routes {
         })
     }
 
+    /// Docker Engine's mirror protocol omits the original registry prefix. Reuse the
+    /// existing Docker Hub route and object key; an apparent foreign registry is not a
+    /// Docker Hub namespace. Explicit registry-prefixed routes retain precedence.
+    fn docker_hub_at_root(&self, path: &str) -> Option<Target<'_>> {
+        let path = path.strip_prefix("/v2")?;
+        let first = path.strip_prefix('/')?.split('/').next()?;
+        if first.contains(['.', ':']) {
+            return None;
+        }
+        let route = self
+            .routes
+            .iter()
+            .find(|route| route.oci && route.prefix == "/v2/docker.io")?;
+        let subpath = (route.canonical)(path);
+        if !valid_subpath(&subpath, None) {
+            return None;
+        }
+        Some(Target {
+            route,
+            freshness: (route.accept)(&subpath)?,
+            subpath: subpath.into_owned(),
+            media_type: None,
+            answered: false,
+        })
+    }
+
     pub fn resolve(&self, path: &str, accept: Option<&str>) -> Result<Target<'_>, Rejection> {
         let Some(route) = self.routes.iter().find(|route| {
             path.strip_prefix(route.prefix)
                 .is_some_and(|rest| rest.starts_with('/'))
         }) else {
             return self
-                .npm_tarball_at_root(path)
+                .docker_hub_at_root(path)
+                .or_else(|| self.npm_tarball_at_root(path))
                 .ok_or(Rejection::UnknownRoute);
         };
         let subpath = (route.canonical)(&path[route.prefix.len()..]);
@@ -1870,6 +1897,39 @@ mod tests {
             class("/go/go1.27.3.linux-amd64.tar.gz"),
             Ok(("go", Immutable))
         );
+    }
+
+    #[test]
+    fn docker_hub_mirror_and_prefixed_pulls_have_one_store_identity() {
+        let routes = Routes::production();
+        for suffix in [
+            "/library/alpine/manifests/3.22",
+            "/alpine/manifests/3.22",
+            "/org/app/manifests/sha256:28a33e0390da2b341d05e53803c6766977039baedfc8a82a4910d5acc4755b66",
+            "/library/alpine/blobs/sha256:28a33e0390da2b341d05e53803c6766977039baedfc8a82a4910d5acc4755b66",
+        ] {
+            let root = routes.resolve(&format!("/v2{suffix}"), None).unwrap();
+            let prefixed = routes
+                .resolve(&format!("/v2/docker.io{suffix}"), None)
+                .unwrap();
+            assert_eq!(root.key(), prefixed.key());
+            assert_eq!(root.upstream_url(), prefixed.upstream_url());
+            assert_eq!(root.digest(), prefixed.digest());
+        }
+        for path in [
+            "/v2/quay.io/org/app/manifests/latest",
+            "/v2/registry:5000/org/app/manifests/latest",
+            "/v2/library/app/tags/list",
+            "/v2/library/app/blobs/uploads/",
+            "/v2/../app/manifests/latest",
+            "/v2/%2e%2e/app/manifests/latest",
+        ] {
+            assert!(routes.resolve(path, None).is_err(), "{path}");
+        }
+        let ghcr = routes
+            .resolve("/v2/ghcr.io/org/app/manifests/latest", None)
+            .unwrap();
+        assert_eq!(ghcr.route.id, "ghcr");
     }
 
     #[test]

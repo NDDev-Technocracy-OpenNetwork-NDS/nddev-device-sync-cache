@@ -15,6 +15,7 @@
 //! module owns with the device's resident identity; this crate holds no credential.
 
 pub mod binding;
+pub mod oci;
 pub mod view;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

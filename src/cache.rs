@@ -274,6 +274,16 @@ impl Cache {
         target.route.oci.then(|| target.digest().map(str::to_owned))
     }
 
+    /// The original registry for a namespaced mirror query, independent of client input.
+    pub fn oci_registry(&self, path: &str) -> Option<&str> {
+        let target = self.routes.resolve(path, None).ok()?;
+        target
+            .route
+            .oci
+            .then_some(target.route.prefix)?
+            .strip_prefix("/v2/")
+    }
+
     fn fresh(&self, target: &Target<'_>, meta: &Meta) -> bool {
         target.freshness == Freshness::Immutable
             || now().saturating_sub(meta.fetched_at) < self.revalidate_after
