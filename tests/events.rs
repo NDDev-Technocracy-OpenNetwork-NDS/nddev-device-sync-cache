@@ -71,6 +71,24 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     );
     assert_eq!(harness.get("/origin/files/missing.bin").await.0, 404);
     assert_eq!(harness.get("/elsewhere/files/a").await.0, 404);
+    let credential_refusal = harness
+        .client
+        .get(format!(
+            "{}/v2/docker.io/library/app/manifests/latest",
+            harness.base
+        ))
+        .header(axum::http::header::AUTHORIZATION, "secret-oci-do-not-log")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(credential_refusal.status().as_u16(), 403);
+    assert_eq!(
+        harness
+            .get("/v2/docker.io/library/app/manifests/latest?ns=secret-namespace-do-not-log")
+            .await
+            .0,
+        400
+    );
     assert_eq!(harness.get("/crates-index/config.json").await.0, 200);
     let foreign = harness
         .client
@@ -152,6 +170,8 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
 
     assert_eq!(control.rejected_fields_or_events(), 0);
     let output = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+    assert!(!output.contains("secret-oci-do-not-log"));
+    assert!(!output.contains("secret-namespace-do-not-log"));
     let events: Vec<serde_json::Value> = output
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())

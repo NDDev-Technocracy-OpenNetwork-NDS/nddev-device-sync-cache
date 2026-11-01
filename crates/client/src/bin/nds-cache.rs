@@ -4,7 +4,7 @@
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  nds-cache (status | bind | unbind) --port <loopback port> [--lane <lane root>]";
+  nds-cache (status | bind | unbind) --port <loopback port> [--lane <lane root>]\n  nds-cache buildkit-config --port <loopback port>";
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn main() -> ExitCode {
@@ -28,6 +28,16 @@ async fn main() -> ExitCode {
     let Some(base) = port.parse().ok().and_then(Base::new) else {
         return usage();
     };
+    if command == "buildkit-config" {
+        if root.is_some() {
+            return usage();
+        }
+        print!(
+            "{}",
+            nddev_device_sync_cache_client::oci::buildkit_config(&base)
+        );
+        return ExitCode::SUCCESS;
+    }
     let scope = match root {
         Some(root) => Scope::lane(std::path::Path::new(root)),
         None => Scope::user(),

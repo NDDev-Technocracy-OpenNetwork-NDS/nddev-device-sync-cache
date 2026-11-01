@@ -109,7 +109,10 @@ async fn source() -> Response {
 
 /// The OCI distribution API check that registry clients make before pulling; the cache asks for
 /// no credentials.
-async fn registry_ping() -> Response {
+async fn registry_ping(headers: HeaderMap) -> Response {
+    if has_credentials(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     (
         [(DISTRIBUTION_API, HeaderValue::from_static("registry/2.0"))],
         Json(serde_json::json!({})),
@@ -118,6 +121,16 @@ async fn registry_ping() -> Response {
 }
 
 const DISTRIBUTION_API: &str = "docker-distribution-api-version";
+
+fn has_credentials(headers: &HeaderMap) -> bool {
+    [
+        header::AUTHORIZATION,
+        header::PROXY_AUTHORIZATION,
+        header::COOKIE,
+    ]
+    .iter()
+    .any(|name| headers.contains_key(name))
+}
 
 /// The crates.io sparse index configuration, generated for the loopback base address the client
 /// used, so that crate downloads come back through this cache.
@@ -181,6 +194,23 @@ async fn serve(
             let mut response = StatusCode::METHOD_NOT_ALLOWED.into_response();
             response.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET, HEAD"));
             return response;
+        }
+        if app.cache.oci(uri.path()).is_some() {
+            let refusal = if has_credentials(&headers) {
+                Some((StatusCode::FORBIDDEN, "credentials_not_allowed"))
+            } else if let Some(query) = uri.query() {
+                match app.cache.oci_registry(uri.path()) {
+                    Some(registry) if query == format!("ns={registry}") => None,
+                    _ => Some((StatusCode::BAD_REQUEST, "registry_namespace_mismatch")),
+                }
+            } else {
+                None
+            };
+            if let Some((status, error)) = refusal {
+                tracing::info!(module = "cache", event.name = "cache.rejected", method = method.as_str(), route, status = status.as_u16(), duration_ms = duration_ms(), error.type = error, outcome = "rejected");
+                counters.outcome(route, Outcome::Rejected);
+                return status.into_response();
+            }
         }
         let accept = headers
             .get(header::ACCEPT)
