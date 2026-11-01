@@ -167,6 +167,13 @@ caches cannot serve fails visibly. Nothing falls back to the public source on it
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
 
+npm 11.3 rewrites a lockfile's `resolved` tarball URL to the configured registry's host
+but drops the registry path (npm/cli#8319), and later npm still drops it for a package named
+like that path (npm/cli#10159). The cache therefore also serves exactly the immutable
+tarball form `/{package}/-/{package}-{version}.tgz` (and its scoped form) without the `/npm`
+prefix, from the same stored object; package documents and every other path still need
+the prefix, and `npm ci` keeps the lockfile's integrity unchanged.
+
 A project or job can select the central npm route for Bun with
 `--registry "${NDS_CACHE_BASE:?}/npm/"` or a default registry in its own `.npmrc`. The route
 serves Bun the install document with the public registry's tarball links empty, so an online

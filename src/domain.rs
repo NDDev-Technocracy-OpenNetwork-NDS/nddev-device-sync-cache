@@ -440,15 +440,37 @@ impl Routes {
 
     /// Resolves a request path. `accept` is the client's `Accept` header, which selects the
     /// representation of an index document.
+    /// npm 11.3 replaces the host of a lockfile's `resolved` tarball URL with the configured
+    /// registry's host but drops its path (npm/cli#8319), and later releases still drop it for a
+    /// package whose name equals the path (npm/cli#10159). Such a request arrives as
+    /// `/{package}/-/{package}-{version}.tgz` without the `/npm` prefix. Exactly that immutable
+    /// tarball form is served by the npm route, under the same store key as the prefixed request;
+    /// package documents and every other path still need the prefix.
+    fn npm_tarball_at_root(&self, path: &str) -> Option<Target<'_>> {
+        let route = self.routes.iter().find(|route| route.id == "npm")?;
+        let subpath = (route.canonical)(path);
+        if !valid_subpath(&subpath, None) || (route.accept)(&subpath) != Some(Freshness::Immutable)
+        {
+            return None;
+        }
+        Some(Target {
+            route,
+            subpath: subpath.into_owned(),
+            freshness: Freshness::Immutable,
+            media_type: None,
+            answered: false,
+        })
+    }
+
     pub fn resolve(&self, path: &str, accept: Option<&str>) -> Result<Target<'_>, Rejection> {
-        let route = self
-            .routes
-            .iter()
-            .find(|route| {
-                path.strip_prefix(route.prefix)
-                    .is_some_and(|rest| rest.starts_with('/'))
-            })
-            .ok_or(Rejection::UnknownRoute)?;
+        let Some(route) = self.routes.iter().find(|route| {
+            path.strip_prefix(route.prefix)
+                .is_some_and(|rest| rest.starts_with('/'))
+        }) else {
+            return self
+                .npm_tarball_at_root(path)
+                .ok_or(Rejection::UnknownRoute);
+        };
         let subpath = (route.canonical)(&path[route.prefix.len()..]);
         // An index document may be a directory URL, as PyPI project pages are.
         let checked = match route.index {
@@ -467,7 +489,9 @@ impl Routes {
                 answered: true,
             });
         }
-        let freshness = (route.accept)(&subpath).ok_or(Rejection::NotAllowed)?;
+        let Some(freshness) = (route.accept)(&subpath) else {
+            return self.npm_tarball_at_root(path).ok_or(Rejection::NotAllowed);
+        };
         let media_type = match (&route.index, freshness) {
             (Some(index), Freshness::Revalidate) => {
                 Some(negotiate(index.media_types, accept).ok_or(Rejection::NotAcceptable)?)
@@ -1575,6 +1599,50 @@ mod tests {
         }
         for path in ["/npm/@scope/a%2fb", "/npm/a%2fb"] {
             assert_eq!(class(path), Err(Rejection::InvalidPath), "{path}");
+        }
+    }
+
+    #[test]
+    fn npm_tarballs_that_lost_the_registry_prefix_reach_the_same_object() {
+        let routes = Routes::production();
+        let key = |path: &str| {
+            let target = routes.resolve(path, None).unwrap();
+            let upstream = target.upstream_url();
+            (target.route.id, target.subpath, target.freshness, upstream)
+        };
+        // npm 11.3 drops the registry path when it rewrites a lockfile's resolved URL.
+        for (dropped, prefixed) in [
+            (
+                "/is-number/-/is-number-7.0.0.tgz",
+                "/npm/is-number/-/is-number-7.0.0.tgz",
+            ),
+            (
+                "/@types/node/-/node-22.9.0.tgz",
+                "/npm/@types/node/-/node-22.9.0.tgz",
+            ),
+            (
+                "/@types%2fnode/-/node-22.9.0.tgz",
+                "/npm/@types%2fnode/-/node-22.9.0.tgz",
+            ),
+            // A package named like the registry path (npm/cli#10159) or like another route.
+            ("/npm/-/npm-11.19.1.tgz", "/npm/npm/-/npm-11.19.1.tgz"),
+            ("/pypi/-/pypi-1.0.0.tgz", "/npm/pypi/-/pypi-1.0.0.tgz"),
+        ] {
+            assert_eq!(key(dropped), key(prefixed), "{dropped}");
+        }
+        assert_eq!(
+            key("/npm/-/npm-11.19.1.tgz").3,
+            "https://registry.npmjs.org/npm/-/npm-11.19.1.tgz"
+        );
+        // Only the immutable tarball form is served without the prefix.
+        for path in [
+            "/is-number",
+            "/is-number/-/other-7.0.0.tgz",
+            "/is-number/-/is-number-latest.tgz",
+            "/-/v1/search",
+            "/elsewhere/files/a",
+        ] {
+            assert!(routes.resolve(path, None).is_err(), "{path}");
         }
     }
 
