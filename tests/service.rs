@@ -724,3 +724,71 @@ async fn a_release_asset_cannot_redirect_to_an_unlisted_host() {
     assert_eq!(harness.hits(), 1);
     assert_eq!(harness.objects().await, 0);
 }
+
+#[tokio::test]
+async fn docker_mirror_alias_reuses_prefixed_objects_and_rejects_credentials() {
+    let harness = Harness::start().await;
+    let root = format!("/v2/library/app/blobs/sha256:{LAYER_DIGEST}");
+    let prefixed = format!("/v2/docker.io/library/app/blobs/sha256:{LAYER_DIGEST}");
+    let first = harness.get(&root).await;
+    assert_eq!(
+        (first.0, first.1.as_str(), first.2.as_bytes()),
+        (200, "miss", LAYER)
+    );
+    harness.committed(1).await;
+    let hits = harness.hits();
+    let second = harness.get(&prefixed).await;
+    assert_eq!(
+        (second.0, second.1.as_str(), second.2.as_bytes()),
+        (200, "hit", LAYER)
+    );
+    assert_eq!(harness.hits(), hits);
+    for path in ["/v2/", root.as_str(), prefixed.as_str()] {
+        for name in [
+            header::AUTHORIZATION,
+            header::PROXY_AUTHORIZATION,
+            header::COOKIE,
+        ] {
+            for method in [reqwest::Method::GET, reqwest::Method::HEAD] {
+                let response = harness
+                    .client
+                    .request(method, format!("{}{path}", harness.base))
+                    .header(name.clone(), "private-canary-never-forward")
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            }
+        }
+    }
+    assert_eq!(harness.hits(), hits);
+}
+
+#[tokio::test]
+async fn mirror_namespace_cannot_change_the_selected_registry() {
+    let harness = Harness::start().await;
+    for path in [
+        "/v2/library/app/manifests/latest?ns=ghcr.io",
+        "/v2/docker.io/library/app/manifests/latest?ns=ghcr.io",
+        "/v2/ghcr.io/library/app/manifests/latest?ns=docker.io",
+        "/v2/docker.io/library/app/manifests/latest?ns=docker.io&ns=ghcr.io",
+        "/v2/docker.io/library/app/manifests/latest?token=private-canary-never-forward",
+    ] {
+        assert_eq!(harness.get(path).await.0, 400, "{path}");
+    }
+    assert_eq!(harness.hits(), 0);
+    assert_eq!(
+        harness
+            .get("/v2/ghcr.io/library/app/manifests/latest?ns=ghcr.io")
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        harness
+            .get("/v2/library/app/manifests/latest?ns=docker.io")
+            .await
+            .0,
+        200
+    );
+}

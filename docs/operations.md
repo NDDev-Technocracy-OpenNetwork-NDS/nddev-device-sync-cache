@@ -59,7 +59,7 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
 | `cache.index.config` | The cache answered the crates.io sparse index `config.json` for a loopback client base. |
-| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
+| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, an index configuration or index document request from a host that is not loopback, credentials on an OCI pull, or an OCI mirror query inconsistent with its selected registry. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
 The forward pool (`nds-forward-pool`) emits the canonical envelope through the same local SDK,

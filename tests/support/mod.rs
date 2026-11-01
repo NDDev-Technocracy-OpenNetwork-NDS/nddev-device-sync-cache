@@ -417,6 +417,24 @@ impl Harness {
                     ..route("/oci", "/oci/{path}", format!("http://{origin}/v2"))
                 },
                 Route {
+                    accept: oci_accept,
+                    oci: true,
+                    ..route(
+                        "/v2/docker.io",
+                        "/v2/docker.io/{path}",
+                        format!("http://{origin}/v2"),
+                    )
+                },
+                Route {
+                    accept: oci_accept,
+                    oci: true,
+                    ..route(
+                        "/v2/ghcr.io",
+                        "/v2/ghcr.io/{path}",
+                        format!("http://{origin}/v2"),
+                    )
+                },
+                Route {
                     accept: nddev_device_sync_cache::domain::github_release,
                     sha256_prefix: true,
                     ..route(
