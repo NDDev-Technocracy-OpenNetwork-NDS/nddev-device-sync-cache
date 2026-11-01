@@ -182,26 +182,26 @@ async fn concurrent_misses_share_one_upstream_fetch() {
 
 #[tokio::test]
 async fn mutable_objects_revalidate_refresh_and_fall_back_to_stale() {
-    let harness = Harness::start().await;
+    let harness = Harness::expiring().await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "miss".into(), "channel v1".into())
     );
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "hit");
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "revalidated".into(), "channel v1".into())
     );
     harness.upstream.channel_v2.store(true, Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "miss".into(), "channel v2".into())
     );
     assert_eq!(harness.ready().await.1["upstream"], "ok");
     harness.upstream.broken.store(true, Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "stale".into(), "channel v2".into())
@@ -576,7 +576,7 @@ async fn a_client_that_derives_links_gets_them_empty_from_the_same_stored_docume
 
 #[tokio::test]
 async fn oci_pulls_answer_the_token_challenge_once_and_carry_digests() {
-    let harness = Harness::start().await;
+    let harness = Harness::expiring().await;
     let ping = harness
         .client
         .get(format!("{}/v2/", harness.base))
@@ -630,7 +630,7 @@ async fn oci_pulls_answer_the_token_challenge_once_and_carry_digests() {
     );
 
     // Revalidating the tag reuses the token the registry issued.
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get(&manifest_url[harness.base.len()..]).await.0,
         200
