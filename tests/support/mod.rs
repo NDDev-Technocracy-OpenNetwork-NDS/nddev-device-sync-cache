@@ -306,8 +306,25 @@ pub struct Harness {
     pub client: reqwest::Client,
 }
 
+/// Stored objects stay fresh for the whole test unless it opts into expiry: freshness is
+/// compared in whole seconds, so a one-second window could close one millisecond after a fill.
+const STEADY_REVALIDATE_SECONDS: &str = "300";
+/// Tests that exercise revalidation use two seconds and sleep [`EXPIRY`]: a hit right after a
+/// fill stays fresh across one second boundary, and the sleep always crosses two.
+const EXPIRING_REVALIDATE_SECONDS: &str = "2";
+pub const EXPIRY: Duration = Duration::from_millis(2100);
+
 impl Harness {
     pub async fn start() -> Self {
+        Self::start_with(STEADY_REVALIDATE_SECONDS).await
+    }
+
+    /// A harness whose mutable objects expire after [`EXPIRY`].
+    pub async fn expiring() -> Self {
+        Self::start_with(EXPIRING_REVALIDATE_SECONDS).await
+    }
+
+    async fn start_with(revalidate: &'static str) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let upstream = Arc::new(Upstream::default());
         let origin = spawn(
@@ -433,7 +450,7 @@ impl Harness {
             "NDS_CACHE_ROOT" => Some(root.to_string_lossy().into_owned()),
             "NDS_CACHE_CAPACITY_BYTES" => Some((1u64 << 30).to_string()),
             "NDS_CACHE_MAX_OBJECT_BYTES" => Some((1u64 << 20).to_string()),
-            "NDS_CACHE_REVALIDATE_SECONDS" => Some("1".into()),
+            "NDS_CACHE_REVALIDATE_SECONDS" => Some(revalidate.into()),
             _ => None,
         })
         .unwrap();

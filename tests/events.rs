@@ -40,7 +40,7 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     // The current-thread test runtime keeps every task on this thread's subscriber.
     let _subscriber = tracing::subscriber::set_default(subscriber);
 
-    let harness = Arc::new(Harness::start().await);
+    let harness = Arc::new(Harness::expiring().await);
     let first = {
         let harness = harness.clone();
         tokio::spawn(async move { harness.get("/origin/files/stream.bin").await })
@@ -145,7 +145,7 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     assert_eq!(response.bytes().await.unwrap().as_ref(), support::LAYER);
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "miss");
     harness.upstream.broken.store(true, Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "stale");
     // The failed fill reports after its body error reaches the client.
     tokio::time::sleep(Duration::from_millis(200)).await;
