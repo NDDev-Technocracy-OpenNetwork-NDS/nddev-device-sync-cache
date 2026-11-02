@@ -792,3 +792,29 @@ async fn mirror_namespace_cannot_change_the_selected_registry() {
         200
     );
 }
+
+#[tokio::test]
+async fn exact_node_distributions_are_reused_and_mutable_aliases_never_reach_upstream() {
+    let harness = Harness::start().await;
+    let path = "/nodejs/v9.1.2/node-v9.1.2-linux-x64.tar.xz";
+    assert_eq!(
+        harness.get(path).await,
+        (200, "miss".into(), "immutable payload".into())
+    );
+    harness.committed(1).await;
+    harness.upstream.broken.store(true, Ordering::SeqCst);
+    assert_eq!(
+        harness.get(path).await,
+        (200, "hit".into(), "immutable payload".into())
+    );
+    for invalid in [
+        "/nodejs/latest/node-v9.1.2-linux-x64.tar.xz",
+        "/nodejs/index.json",
+        "/nodejs/v9.1.2/node-v9.1.3-linux-x64.tar.xz",
+        "/nodejs/v9.1.2/../../secret",
+        "/nodejs/v9.1.2/a/b",
+    ] {
+        assert_ne!(harness.get(invalid).await.0, 200, "{invalid}");
+    }
+    assert_eq!(harness.hits(), 1);
+}

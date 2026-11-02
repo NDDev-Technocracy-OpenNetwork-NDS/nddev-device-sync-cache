@@ -27,6 +27,7 @@ pub struct Settings {
     pub read_timeout: Duration,
     pub shutdown_grace: Duration,
     pub builds: Option<crate::builds::Settings>,
+    pub idle_retention: Option<Duration>,
 }
 
 fn bounded(
@@ -82,6 +83,17 @@ impl Settings {
             1,
             86_400,
         )?);
+        let idle_retention = match get("NDS_CACHE_IDLE_SECONDS") {
+            None => None,
+            Some(value) if value.is_empty() => None,
+            Some(_) => Some(Duration::from_secs(bounded(
+                &get,
+                "NDS_CACHE_IDLE_SECONDS",
+                86400,
+                60,
+                2592000,
+            )?)),
+        };
         let build_root = get("NDS_CACHE_BUILD_ROOT");
         let credentials = get("NDS_CACHE_BUILD_CREDENTIALS_FILE");
         let builds = match (build_root, credentials) {
@@ -130,6 +142,7 @@ impl Settings {
         Ok(Self {
             listen,
             builds,
+            idle_retention,
             root,
             capacity,
             max_object,

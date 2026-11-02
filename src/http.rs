@@ -26,6 +26,7 @@ pub struct App {
     pub cache: Cache,
     pub identity: Identity,
     pub builds: Option<Arc<crate::builds::BuildStore>>,
+    pub downloads_gc: Option<crate::DownloadGc>,
 }
 
 pub fn router(app: Arc<App>) -> Router {
@@ -55,6 +56,8 @@ struct HealthResponse<'a> {
     requests: Snapshot,
     #[serde(skip_serializing_if = "Option::is_none")]
     build_store: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    download_collection: Option<serde_json::Value>,
 }
 
 async fn health(State(app): State<Arc<App>>) -> Response {
@@ -71,6 +74,7 @@ async fn health(State(app): State<Arc<App>>) -> Response {
         store_capacity: usage.capacity,
         requests: app.cache.counters().snapshot(),
         build_store: app.builds.as_ref().map(|builds| builds.health()),
+        download_collection: app.downloads_gc.as_ref().map(|gc| gc.health()),
     })
     .into_response()
 }
@@ -248,12 +252,38 @@ async fn crates_config(
     response
 }
 
+struct DownloadLease {
+    app: Arc<App>,
+    path: String,
+    accept: Option<String>,
+    _guard: tokio::sync::OwnedRwLockReadGuard<()>,
+}
+impl Drop for DownloadLease {
+    fn drop(&mut self) {
+        self.app
+            .cache
+            .observe_use(&self.path, self.accept.as_deref());
+    }
+}
+
 async fn serve(
     State(app): State<Arc<App>>,
     method: Method,
     uri: Uri,
     headers: HeaderMap,
 ) -> Response {
+    let lease = match &app.downloads_gc {
+        Some(gc) => Some(DownloadLease {
+            app: app.clone(),
+            path: uri.path().to_owned(),
+            accept: headers
+                .get(header::ACCEPT)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned),
+            _guard: gc.gate.clone().read_owned().await,
+        }),
+        None => None,
+    };
     let started = Instant::now();
     let route = app.cache.template(uri.path());
     let span = nddev_device_sync_telemetry::http_server_span(method.as_str(), route)
@@ -379,7 +409,17 @@ async fn serve(
     .await;
     let _ =
         nddev_device_sync_telemetry::finish_http_server_span(&finished, response.status().as_u16());
-    response
+    match lease {
+        Some(lease) => response.map(|body| {
+            Body::from_stream(futures_util::stream::unfold(
+                (body.into_data_stream(), lease),
+                |(mut stream, lease)| async move {
+                    stream.next().await.map(|chunk| (chunk, (stream, lease)))
+                },
+            ))
+        }),
+        None => response,
+    }
 }
 
 fn event_name(served: Served) -> &'static str {
@@ -516,6 +556,64 @@ mod tests {
     use crate::store::{Progress, Store, Validators};
     use std::sync::Mutex;
     use tokio::sync::{oneshot, watch};
+
+    #[tokio::test]
+    async fn download_idle_collection_waits_for_observation_and_the_actual_body() {
+        use crate::store::Validators;
+        use crate::{config::Settings, domain::Routes, telemetry::Identity};
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("downloads");
+        let settings = Settings::read(|name| match name {
+            "NDS_CACHE_ROOT" => Some(root.to_string_lossy().into_owned()),
+            "NDS_CACHE_IDLE_SECONDS" => Some("86400".into()),
+            _ => None,
+        })
+        .unwrap();
+        let routes = Routes::production();
+        let path = "/rustup/dist/channel-rust-stable.toml";
+        let key = routes.resolve(path, None).unwrap().key();
+        let app = crate::app(&settings, Identity::read(&|_| None).unwrap(), routes)
+            .await
+            .unwrap();
+        let mut pending = app.cache.store().begin().await.unwrap();
+        pending.write(b"verified fixture").await.unwrap();
+        let (_, file, _) = app
+            .cache
+            .store()
+            .commit(&key, pending, Validators::default())
+            .await
+            .unwrap();
+        let gc = app.downloads_gc.as_ref().unwrap();
+        assert_eq!(
+            gc.collect(&app.cache, store::now()).await.unwrap()["protection_grace"],
+            true
+        );
+        assert!(file.exists());
+        let response = serve(
+            State(app.clone()),
+            Method::GET,
+            path.parse().unwrap(),
+            HeaderMap::new(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let later = store::now() + 86401;
+        assert_eq!(gc.collect(&app.cache, later).await.unwrap()["busy"], true);
+        assert_eq!(
+            axum::body::to_bytes(response.into_body(), 100)
+                .await
+                .unwrap(),
+            "verified fixture"
+        );
+        let removed = gc.collect(&app.cache, later).await.unwrap();
+        assert_eq!(removed["removed_objects"], 1);
+        assert_eq!(removed["removed_bytes"], 16);
+        assert!(!file.exists());
+        assert_eq!(
+            gc.collect(&app.cache, later).await.unwrap()["removed_objects"],
+            0
+        );
+    }
 
     #[tokio::test]
     async fn pending_http_bodies_cannot_complete_before_native_commit() {

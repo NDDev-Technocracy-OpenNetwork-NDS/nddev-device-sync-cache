@@ -330,6 +330,8 @@ impl Harness {
         let origin = spawn(
             Router::new()
                 .route("/files/immutable.bin", get(immutable))
+                .route("/v9.1.2/node-v9.1.2-linux-x64.tar.xz", get(immutable))
+                .route("/v9.1.2/SHASUMS256.txt", get(immutable))
                 .route("/files/slow.bin", get(slow))
                 .route("/files/channel.toml", get(channel))
                 .route("/files/big.bin", get(big))
@@ -393,8 +395,16 @@ impl Harness {
             sha256_prefix: false,
             answers: &[],
         };
+        let mut node = Routes::production()
+            .routes()
+            .iter()
+            .find(|route| route.id == "nodejs")
+            .unwrap()
+            .clone();
+        node.upstream = format!("http://{origin}");
         let routes = Routes::new(
             vec![
+                node,
                 route("/origin", "/origin/{path}", format!("http://{origin}")),
                 route(
                     "/redirector",

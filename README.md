@@ -104,6 +104,13 @@ The build then obtains Rust distributions and public crates through that admitte
 cache and fails on its outage; it keeps Git source transport independent. Public hosted builds
 omit the argument. The same optional port is accepted by `just container-check`.
 
+The optional `NDS_CACHE_IDLE_SECONDS` enables idle collection of public download objects in the
+existing minute watcher. Active response bodies and background fills are protected. A restart
+allows one retention window of observation before collecting this store, because historical
+in-memory hit timestamps cannot prove which objects were recently used. Capacity eviction remains
+enabled during that grace. Unknown files and future timestamps are preserved; this is not a
+general filesystem cleaner. Health reports the last completed download collection.
+
 ## Shared compiler results
 
 The optional build-result endpoint is a separate store in this process. Enable it only with an

@@ -176,12 +176,13 @@ impl BuildStore {
             removed_objects,
             removed_bytes,
             failed_objects,
+            busy_objects,
         } = self
             .store
             .collect_idle(now, self.retention.as_secs())
             .await?;
         let report = CollectionReport {
-            busy: false,
+            busy: busy_objects > 0,
             removed_objects,
             removed_bytes,
             failed_objects,
@@ -235,7 +236,7 @@ impl BuildStore {
     }
     async fn read(self: &Arc<Self>, key: &str, head: bool) -> Response {
         let guard = self.gate.clone().read_owned().await;
-        let Some((meta, path)) = self.store.get(key) else {
+        let Some((meta, path, lease)) = self.store.lease(key) else {
             return StatusCode::NOT_FOUND.into_response();
         };
         if self.touch(key).await.is_err() {
@@ -244,15 +245,32 @@ impl BuildStore {
         let Ok(file) = fs::File::open(path).await else {
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         };
+        drop(guard);
         let body = if head {
             Body::empty()
         } else {
-            let state = (ReaderStream::new(file), guard, self.clone(), key.to_owned());
+            let state = (
+                ReaderStream::new(file),
+                lease,
+                self.clone(),
+                key.to_owned(),
+                0u64,
+                meta.size,
+            );
             Body::from_stream(futures_util::stream::unfold(
                 state,
-                |(mut stream, guard, store, key)| async move {
+                |(mut stream, lease, store, key, read, length)| async move {
                     match stream.next().await {
-                        Some(chunk) => Some((chunk, (stream, guard, store, key))),
+                        Some(chunk) => {
+                            let read = read + chunk.as_ref().map(|b| b.len() as u64).unwrap_or(0);
+                            if read >= length && store.touch(&key).await.is_err() {
+                                return Some((
+                                    Err(std::io::Error::other("store_io")),
+                                    (stream, lease, store, key, read, length),
+                                ));
+                            }
+                            Some((chunk, (stream, lease, store, key, read, length)))
+                        }
                         None => {
                             let _ = store.touch(&key).await;
                             None
@@ -283,7 +301,9 @@ impl BuildStore {
         if length > self.store.max_object() {
             return StatusCode::PAYLOAD_TOO_LARGE.into_response();
         }
-        let Ok(_permit) = self.uploads.try_acquire() else {
+        let Ok(Ok(_permit)) =
+            tokio::time::timeout(Duration::from_secs(30), self.uploads.acquire()).await
+        else {
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         };
         if !self.store.ready().await {
@@ -325,6 +345,9 @@ impl BuildStore {
                 StatusCode::SERVICE_UNAVAILABLE
             }
             .into_response();
+        }
+        if self.store.make_room(pending.size()).await.is_err() {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
         match self.store.commit(key, pending, Validators::default()).await {
             Ok(_) => StatusCode::CREATED.into_response(),

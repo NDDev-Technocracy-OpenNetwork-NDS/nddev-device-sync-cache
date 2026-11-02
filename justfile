@@ -139,6 +139,7 @@ container-check commit=`git rev-parse HEAD`:
         --env NDS_CACHE_BUILD_CREDENTIALS_FILE=/run/build-credentials.json \
         --env NDS_CACHE_BUILD_CAPACITY_BYTES=1073741824 --env NDS_CACHE_BUILD_MAX_OBJECT_BYTES=1048576 \
         --env NDS_CACHE_CAPACITY_BYTES=1073741824 --env NDS_CACHE_MAX_OBJECT_BYTES=1048576 \
+        --env NDS_CACHE_IDLE_SECONDS=86400 \
         --publish 127.0.0.1::8740 "$name" > /dev/null
     for _ in {1..50}; do
         docker exec "$name" nddev-device-sync-cache healthcheck && break

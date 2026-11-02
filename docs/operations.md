@@ -128,3 +128,16 @@ authenticated object storage as `cache.build.stored`, reads as `cache.hit`, miss
 object identity. Its health collection report distinguishes busy, removed and failed units. Acceptance through
 OpenObserve, including one alert exercised through resolution, requires the deployed observability
 pipeline.
+
+
+## Idle object collection
+
+The existing minute watcher collects rebuildable public downloads when `NDS_CACHE_IDLE_SECONDS`
+is selected, and the optional build store using `NDS_CACHE_BUILD_IDLE_SECONDS`. Reads update
+last use; live response bodies and fills keep their object leases. The public store grants one
+retention window after startup to observe historical objects whose former hit times were not
+durable. A held build read protects only its object, so an unrelated upload can proceed.
+Health exposes collection outcomes, removed bytes and busy objects. A failed partial deletion
+does not discard the remaining index entry, and the next collection can finish it. Unknown
+layouts, future timestamps and foreign files are preserved. These collectors do not remove
+source trees, installed SDKs, environments or release evidence.

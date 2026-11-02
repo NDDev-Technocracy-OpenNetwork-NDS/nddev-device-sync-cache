@@ -353,3 +353,61 @@ async fn store_aliases_unowned_roots_and_exposed_credentials_are_refused() {
         assert!(BuildStore::open(&f.settings, &f.downloads).await.is_err());
     }
 }
+
+#[tokio::test]
+async fn a_held_read_does_not_block_unrelated_upload_or_idle_collection() {
+    let f = Fixture::new().await;
+    let first = object();
+    let other = format!("sccache/{}", "b".repeat(64));
+    assert_eq!(f.put(&first, WRITER, "compiled").await, 201);
+    let uri: Uri = f.url(&first).parse().unwrap();
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", READER.parse().unwrap());
+    let response = f
+        .builds
+        .respond(&Method::GET, &uri, &headers, Body::empty())
+        .await;
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), f.put(&other, WRITER, "other"))
+            .await
+            .unwrap(),
+        201
+    );
+    let report = f.builds.collect(store::now() + 86401).await.unwrap();
+    assert!(report.busy);
+    assert_eq!(report.removed_objects, 1);
+    assert_eq!(
+        axum::body::to_bytes(response.into_body(), 100)
+            .await
+            .unwrap(),
+        "compiled"
+    );
+    assert_eq!(
+        f.builds
+            .collect(store::now() + 86401)
+            .await
+            .unwrap()
+            .removed_objects,
+        1
+    );
+}
+
+#[tokio::test]
+async fn concurrent_real_readiness_probes_do_not_share_a_temporary_filename() {
+    let f = Fixture::new().await;
+    let mut jobs = tokio::task::JoinSet::new();
+    for _ in 0..32 {
+        let url = format!("{}/v1/ready", f.base);
+        jobs.spawn(async move {
+            reqwest::Client::new()
+                .get(url)
+                .send()
+                .await
+                .unwrap()
+                .status()
+        });
+    }
+    while let Some(result) = jobs.join_next().await {
+        assert_eq!(result.unwrap(), 200);
+    }
+}
