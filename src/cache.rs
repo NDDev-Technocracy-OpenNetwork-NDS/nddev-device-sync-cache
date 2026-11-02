@@ -124,6 +124,7 @@ impl ServeError {
             Self::Store(StoreError::TooLarge) => "object_too_large",
             Self::Store(StoreError::Unowned) => "store_unowned",
             Self::Store(StoreError::Io) => "store_io",
+            Self::Store(StoreError::Full) => "store_capacity",
         }
     }
 
@@ -228,7 +229,11 @@ fn stored(meta: Meta, path: PathBuf, served: Served) -> Object {
 
 impl Cache {
     pub fn new(routes: Arc<Routes>, store: Store, upstream: Upstream, limits: Limits) -> Self {
-        let counters = Counters::new(routes.templates().chain([CRATES_CONFIG_TEMPLATE]));
+        let counters = Counters::new(
+            routes
+                .templates()
+                .chain([CRATES_CONFIG_TEMPLATE, crate::builds::ROUTE]),
+        );
         Self {
             counters: Arc::new(counters),
             routes,
@@ -241,6 +246,19 @@ impl Cache {
             revalidate_after: limits.revalidate_after.as_secs(),
             upstream_state: Arc::new(AtomicU8::new(UpstreamState::Unknown as u8)),
         }
+    }
+
+    pub fn observe_use(&self, path: &str, accept: Option<&str>) {
+        if let Ok(target) = self.routes.resolve(path, accept) {
+            let _ = self.store.get(&target.key());
+        }
+    }
+
+    pub fn has_active_fills(&self) -> bool {
+        self.fills
+            .lock()
+            .map(|fills| !fills.is_empty())
+            .unwrap_or(true)
     }
 
     pub fn store(&self) -> &Store {
