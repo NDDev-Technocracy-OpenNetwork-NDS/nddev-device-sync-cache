@@ -127,7 +127,7 @@ container-check commit=`git rev-parse HEAD`:
     fixture_gid=$(id -g)
     fixture_reader=$(printf '%s' 'Bearer synthetic-reader' | sha256sum | cut -d' ' -f1)
     fixture_writer=$(printf '%s' 'Bearer synthetic-ci-writer' | sha256sum | cut -d' ' -f1)
-    jq -n --arg r "$fixture_reader" --arg w "$fixture_writer" '{schema:1,readers:[$r],ci_writers:[$w]}' > "$work/credentials.json"
+    jq -n --arg r "$fixture_reader" --arg w "$fixture_writer" '{schema:1,readers:[$r],writers:[$w]}' > "$work/credentials.json"
     chmod 600 "$work/credentials.json"
     docker run --detach --name "$name" --read-only --cap-drop ALL \
         --user "$fixture_uid:$fixture_gid" \

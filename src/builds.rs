@@ -35,7 +35,7 @@ pub struct Settings {
 struct Credentials {
     schema: u32,
     readers: Vec<String>,
-    ci_writers: Vec<String>,
+    writers: Vec<String>,
 }
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 pub struct CollectionReport {
@@ -112,13 +112,13 @@ impl BuildStore {
                 .map_err(|_| StoreError::Unowned)?;
         let valid = |values: &[String]| values.iter().all(|value| value.len() == 64 && hex(value));
         if credentials.schema != 1
-            || credentials.ci_writers.is_empty()
+            || credentials.writers.is_empty()
             || !valid(&credentials.readers)
-            || !valid(&credentials.ci_writers)
+            || !valid(&credentials.writers)
             || credentials
                 .readers
                 .iter()
-                .any(|r| credentials.ci_writers.contains(r))
+                .any(|r| credentials.writers.contains(r))
         {
             return Err(StoreError::Unowned);
         }
@@ -218,7 +218,7 @@ impl BuildStore {
             return StatusCode::FORBIDDEN.into_response();
         };
         let digest = credential_hash(auth);
-        let writer = self.credentials.ci_writers.contains(&digest);
+        let writer = self.credentials.writers.contains(&digest);
         let reader = writer || self.credentials.readers.contains(&digest);
         if !reader || (method == Method::PUT && !writer) {
             return StatusCode::FORBIDDEN.into_response();

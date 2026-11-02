@@ -122,11 +122,12 @@ For Compose deployments, add `-f compose.build-cache.yaml` after `-f compose.yam
 provide `NDS_CACHE_BUILD_STORE` and `NDS_CACHE_BUILD_CREDENTIALS` outside source. Both bind
 sources must already exist. The credentials file is read-only inside the non-root container.
 
-The credentials file has `{"schema":1,"readers":["<sha256>"],"ci_writers":["<sha256>"]}`.
+The credentials file has `{"schema":1,"readers":["<sha256>"],"writers":["<sha256>"]}`.
 Each value hashes the complete HTTP Authorization header, for example a separately provisioned
-Bearer header. Provision unique device readers and trusted CI writers through the estate's
-credential owner. No writer credential belongs in a developer profile, public/fork job, source
-checkout, log or cache object. The admitted encrypted forward remains required.
+Bearer header. Provision unique readers and explicitly admitted trusted writers through the
+estate's credential owner. CI is the default writer class; owner-approved development-device
+writers require a recorded estate admission. A writer credential never belongs in a public/fork
+job, source checkout, log or cache object. The admitted encrypted forward remains required.
 
 `GET` and `HEAD /v1/build-cache/sccache/{hash-path}` read compiler objects; only a writer
 can `PUT` a complete object with Content-Length. A repeated identical upload succeeds; different
@@ -136,8 +137,8 @@ sentinel uses the same authenticated immutable object protocol. Missing objects 
 disabled build storage returns 404. This endpoint never downloads an upstream object.
 
 Sccache selects the admitted loopback base plus `/v1/build-cache`, key prefix `sccache`,
-Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for development devices.
-Trusted CI may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
+Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for readers.
+An explicitly admitted writer may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
 format identities: this is compatible compiler reuse, not a portable Cargo target directory.
 Enable a device only after its native client's real read/write-policy and reuse acceptance;
 the endpoint's source tests do not establish fleet adoption.

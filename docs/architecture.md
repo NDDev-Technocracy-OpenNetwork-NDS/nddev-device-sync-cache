@@ -11,8 +11,9 @@ The service listens on a loopback address of its host. Devices and runners reach
 an estate-admitted remote-access forward, such as restricted SSH or `rds forward`. That transport
 authenticates its peer and restricts the remote target; the private estate owns the selection.
 Redundant forwards reach the same central listener and stores. The optional build-result store
-additionally requires an estate-provisioned reader key or a distinct CI writer key. Only CI
-identities hold write access; the download store accepts no uploads. Host, port and allowlist values live in the private estate.
+additionally requires an estate-provisioned reader key or a distinct admitted writer key. CI is the default writer class;
+owner-approved development identities require explicit estate admission. The download store
+accepts no uploads. Host, port and allowlist values live in the private estate.
 
 ## Responsibilities
 

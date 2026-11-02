@@ -38,7 +38,7 @@ impl Fixture {
             &credentials,
             json!({"schema":1,
             "readers":[builds::credential_hash(READER)],
-            "ci_writers":[builds::credential_hash(WRITER)]})
+            "writers":[builds::credential_hash(WRITER)]})
             .to_string(),
         )
         .unwrap();

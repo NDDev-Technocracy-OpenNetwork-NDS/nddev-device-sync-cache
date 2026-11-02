@@ -475,7 +475,7 @@ impl Harness {
         let credentials = directory.path().join("build-credentials.json");
         std::fs::write(&credentials,serde_json::json!({"schema":1,
             "readers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-reader")],
-            "ci_writers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-ci-writer")]}).to_string()).unwrap();
+            "writers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-ci-writer")]}).to_string()).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
