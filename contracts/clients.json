@@ -31,6 +31,22 @@
       ]
     },
     {
+      "id": "nodejs",
+      "prefix": "/nodejs",
+      "upstream": "https://nodejs.org/dist",
+      "objects": "Exact stable-version official Node distribution archives and their signed checksum documents. Mutable latest aliases and the release index are not proxied.",
+      "clients": [
+        {
+          "tool": "Node archive installers",
+          "setting": {
+            "download_url": "{base}/nodejs/v{version}/node-v{version}-{platform}.tar.xz"
+          },
+          "acceptance": "route only",
+          "limits": "The installer must keep an independently selected exact version, archive digest and native signature policy, and refuse a public retry after a cache failure. This route does not replace Node version selection or qualify an installer on another platform."
+        }
+      ]
+    },
+    {
       "id": "flutter",
       "prefix": "/flutter",
       "upstream": "https://storage.googleapis.com",

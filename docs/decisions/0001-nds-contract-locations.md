@@ -8,6 +8,7 @@ adaptation:
   - R-0018
   paths:
   - compose.collector.yaml
+  - compose.build-cache.yaml
   - module.yaml
   - standarts.lock
   reason: NDS system ADR 0013 (accepted owner direction) keeps NDS-owned material at fixed top-level locations

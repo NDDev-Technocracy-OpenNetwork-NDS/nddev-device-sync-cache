@@ -99,6 +99,64 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
 
+A native Linux image build may select `--network host --build-arg NDS_CACHE_PORT=PORT`.
+The build then obtains Rust distributions and public crates through that admitted loopback
+cache and fails on its outage; it keeps Git source transport independent. Public hosted builds
+omit the argument. The same optional port is accepted by `just container-check`.
+
+The optional `NDS_CACHE_IDLE_SECONDS` enables idle collection of public download objects in the
+existing minute watcher. Active response bodies and background fills are protected. A restart
+allows one retention window of observation before collecting this store, because historical
+in-memory hit timestamps cannot prove which objects were recently used. Capacity eviction remains
+enabled during that grace. Unknown files and future timestamps are preserved; this is not a
+general filesystem cleaner. Health reports the last completed download collection.
+
+## Shared compiler results
+
+The optional build-result endpoint is a separate store in this process. Enable it only with an
+empty or already owned dedicated directory, its own capacity bound, and a private credentials
+file outside both stores:
+
+| Variable | Meaning |
+| --- | --- |
+| `NDS_CACHE_BUILD_ROOT` | Absolute build store, separate from the public download root. |
+| `NDS_CACHE_BUILD_CREDENTIALS_FILE` | Private regular JSON file; never a synchronized credential. |
+| `NDS_CACHE_BUILD_CAPACITY_BYTES` | Committed build-object capacity. |
+| `NDS_CACHE_BUILD_MAX_OBJECT_BYTES` | Maximum complete upload. |
+| `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention; collection runs in the existing minute watcher. |
+
+For Compose deployments, add `-f compose.build-cache.yaml` after `-f compose.yaml` and
+provide `NDS_CACHE_BUILD_STORE` and `NDS_CACHE_BUILD_CREDENTIALS` outside source. Both bind
+sources must already exist. The credentials file is read-only inside the non-root container.
+
+The credentials file has `{"schema":1,"readers":["<sha256>"],"writers":["<sha256>"]}`.
+Each value hashes the complete HTTP Authorization header, for example a separately provisioned
+Bearer header. Provision unique readers and explicitly admitted trusted writers through the
+estate's credential owner. CI is the default writer class; owner-approved development-device
+writers require a recorded estate admission. A writer credential never belongs in a public/fork
+job, source checkout, log or cache object. The admitted encrypted forward remains required.
+
+`GET` and `HEAD /v1/build-cache/sccache/{hash-path}` read compiler objects; only a writer
+can `PUT` a complete object with Content-Length. A repeated identical upload succeeds; different
+bytes under the same key are refused. The `gradle/{hash}` namespace accepts the same object
+protocol. Authentication is required for reads as well as writes. Sccache's exact `.sccache_check`
+sentinel uses the same authenticated immutable object protocol. Missing objects return 404;
+disabled build storage returns 404. This endpoint never downloads an upstream object.
+
+Sccache selects the admitted loopback base plus `/v1/build-cache`, key prefix `sccache`,
+Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for readers.
+An explicitly admitted writer may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
+format identities: this is compatible compiler reuse, not a portable Cargo target directory.
+Enable a device only after its native client's real read/write-policy and reuse acceptance;
+the endpoint's source tests do not establish fleet adoption.
+
+Successful reads persist observed use, including at stream completion. Active response bodies
+exclude collection and replacement; a busy pass is reported and retried by the next existing
+watcher tick. Capacity eviction uses the same exclusion. Unknown build metadata and future use
+timestamps are preserved. Health includes build usage, selected retention and the last collection
+report; failed removals remain failures. The public download store keeps its independent
+capacity policy and never accepts client uploads.
+
 ## Device client
 
 [`crates/client`](crates/client) is the device side of the module, the

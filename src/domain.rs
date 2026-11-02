@@ -215,6 +215,13 @@ impl Routes {
                     rustup,
                 ),
                 route(
+                    "nodejs",
+                    "/nodejs",
+                    "/nodejs/{path}",
+                    "https://nodejs.org/dist",
+                    nodejs,
+                ),
+                route(
                     "flutter",
                     "/flutter",
                     "/flutter/{path}",
@@ -611,6 +618,43 @@ fn rustup(path: &str) -> Option<Freshness> {
     } else {
         Some(Freshness::Immutable)
     }
+}
+
+/// Exact stable Node distribution versions and checksum documents, never a mutable alias.
+fn nodejs(path: &str) -> Option<Freshness> {
+    let (version, file) = path.strip_prefix('/')?.split_once('/')?;
+    let numbers: Vec<_> = version.strip_prefix('v')?.split('.').collect();
+    if numbers.len() != 3
+        || numbers
+            .iter()
+            .any(|n| n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()))
+        || file.contains('/')
+    {
+        return None;
+    }
+    if matches!(
+        file,
+        "SHASUMS256.txt" | "SHASUMS256.txt.asc" | "SHASUMS256.txt.sig"
+    ) {
+        return Some(Freshness::Immutable);
+    }
+    let target = file.strip_prefix(&format!("node-{version}-"))?;
+    let target = [".tar.gz", ".tar.xz", ".zip", ".7z", ".msi"]
+        .iter()
+        .find_map(|extension| target.strip_suffix(extension))?;
+    matches!(
+        target,
+        "linux-x64"
+            | "linux-arm64"
+            | "linux-armv7l"
+            | "linux-ppc64le"
+            | "linux-s390x"
+            | "darwin-x64"
+            | "darwin-arm64"
+            | "win-x64"
+            | "win-arm64"
+    )
+    .then_some(Freshness::Immutable)
 }
 
 fn flutter(path: &str) -> Option<Freshness> {
