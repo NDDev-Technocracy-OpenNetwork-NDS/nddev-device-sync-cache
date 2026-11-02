@@ -228,7 +228,11 @@ fn stored(meta: Meta, path: PathBuf, served: Served) -> Object {
 
 impl Cache {
     pub fn new(routes: Arc<Routes>, store: Store, upstream: Upstream, limits: Limits) -> Self {
-        let counters = Counters::new(routes.templates().chain([CRATES_CONFIG_TEMPLATE]));
+        let counters = Counters::new(
+            routes
+                .templates()
+                .chain([CRATES_CONFIG_TEMPLATE, crate::builds::ROUTE]),
+        );
         Self {
             counters: Arc::new(counters),
             routes,

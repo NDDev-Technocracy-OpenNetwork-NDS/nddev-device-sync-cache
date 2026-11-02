@@ -464,7 +464,7 @@ impl Harness {
         );
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().join("store");
-        let settings = Settings::read(|name| match name {
+        let mut settings = Settings::read(|name| match name {
             "NDS_CACHE_ROOT" => Some(root.to_string_lossy().into_owned()),
             "NDS_CACHE_CAPACITY_BYTES" => Some((1u64 << 30).to_string()),
             "NDS_CACHE_MAX_OBJECT_BYTES" => Some((1u64 << 20).to_string()),
@@ -472,6 +472,22 @@ impl Harness {
             _ => None,
         })
         .unwrap();
+        let credentials = directory.path().join("build-credentials.json");
+        std::fs::write(&credentials,serde_json::json!({"schema":1,
+            "readers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-reader")],
+            "ci_writers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-ci-writer")]}).to_string()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        settings.builds = Some(nddev_device_sync_cache::builds::Settings {
+            root: directory.path().join("builds"),
+            credentials,
+            capacity: 1 << 30,
+            max_object: 1 << 20,
+            retention: Duration::from_secs(86400),
+        });
         let identity = Identity::read(&|_| None).unwrap();
         let app = nddev_device_sync_cache::app(&settings, identity, routes)
             .await

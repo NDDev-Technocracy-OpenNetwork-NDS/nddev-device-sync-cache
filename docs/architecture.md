@@ -10,9 +10,9 @@ is rejected before any upstream connection.
 The service listens on a loopback address of its host. Devices and runners reach it with
 an estate-admitted remote-access forward, such as restricted SSH or `rds forward`. That transport
 authenticates its peer and restricts the remote target; the private estate owns the selection.
-Redundant forwards reach the same central listener and store. Write operations that later protocol
-increments add, such as shared build caches, additionally require a per-client key that only CI
-identities hold. Host, port and allowlist values live in the private estate.
+Redundant forwards reach the same central listener and stores. The optional build-result store
+additionally requires an estate-provisioned reader key or a distinct CI writer key. Only CI
+identities hold write access; the download store accepts no uploads. Host, port and allowlist values live in the private estate.
 
 ## Responsibilities
 
@@ -20,6 +20,7 @@ identities hold. Host, port and allowlist values live in the private estate.
 | --- | --- |
 | `domain` | Route allowlist, upstream mapping, request path validation and object freshness. Pure Rust without I/O. |
 | `cache` | The serve use case: store lookup, single-flight upstream fetch, revalidation, bounded fetch admission and stale fallback. It composes the store and upstream adapters and performs no I/O itself. |
+| `builds` | Separate authenticated compiler-result store, immutable uploads, durable observed use and full-response exclusion for bounded idle collection. |
 | `store` | Objects and metadata on the cache volume, atomic commits through temporary files and renames, size accounting, least-recently-used eviction and readiness. |
 | `upstream` | HTTPS client with rustls, connect and read deadlines, conditional requests and redirects limited to allowlisted hosts. |
 | `http` | axum routes for the downloads, `/v1/health`, `/v1/ready` and `/source`; matched route templates for telemetry. |

@@ -26,6 +26,7 @@ pub struct Settings {
     pub connect_timeout: Duration,
     pub read_timeout: Duration,
     pub shutdown_grace: Duration,
+    pub builds: Option<crate::builds::Settings>,
 }
 
 fn bounded(
@@ -81,8 +82,54 @@ impl Settings {
             1,
             86_400,
         )?);
+        let build_root = get("NDS_CACHE_BUILD_ROOT");
+        let credentials = get("NDS_CACHE_BUILD_CREDENTIALS_FILE");
+        let builds = match (build_root, credentials) {
+            (None, None) => None,
+            (Some(build_root), Some(credentials)) => {
+                let build_root = PathBuf::from(build_root);
+                let credentials = PathBuf::from(credentials);
+                if !build_root.is_absolute()
+                    || !credentials.is_absolute()
+                    || build_root.starts_with(&root)
+                    || root.starts_with(&build_root)
+                {
+                    return Err(ConfigError::Root);
+                }
+                let capacity = bounded(
+                    &get,
+                    "NDS_CACHE_BUILD_CAPACITY_BYTES",
+                    64 * GIB,
+                    GIB,
+                    64 * 1024 * GIB,
+                )?;
+                let max_object = bounded(
+                    &get,
+                    "NDS_CACHE_BUILD_MAX_OBJECT_BYTES",
+                    GIB,
+                    1024 * 1024,
+                    capacity,
+                )?;
+                let retention = Duration::from_secs(bounded(
+                    &get,
+                    "NDS_CACHE_BUILD_IDLE_SECONDS",
+                    86400,
+                    60,
+                    2592000,
+                )?);
+                Some(crate::builds::Settings {
+                    root: build_root,
+                    credentials,
+                    capacity,
+                    max_object,
+                    retention,
+                })
+            }
+            _ => return Err(ConfigError::Root),
+        };
         Ok(Self {
             listen,
+            builds,
             root,
             capacity,
             max_object,
@@ -107,6 +154,34 @@ mod tests {
                 .find(|(key, _)| *key == name)
                 .map(|(_, value)| value.to_string())
         })
+    }
+
+    #[test]
+    fn build_store_requires_complete_separate_bounded_settings() {
+        let base = [
+            ("NDS_CACHE_ROOT", "/cache/downloads"),
+            ("NDS_CACHE_BUILD_ROOT", "/cache/builds"),
+            ("NDS_CACHE_BUILD_CREDENTIALS_FILE", "/private/credentials"),
+        ];
+        assert!(read(&base).unwrap().builds.is_some());
+        assert!(read(&base[..2]).is_err());
+        for (name, value) in [
+            ("NDS_CACHE_BUILD_ROOT", "/cache/downloads/child"),
+            ("NDS_CACHE_BUILD_CREDENTIALS_FILE", "relative"),
+            ("NDS_CACHE_BUILD_IDLE_SECONDS", "0"),
+            ("NDS_CACHE_BUILD_MAX_OBJECT_BYTES", "0"),
+        ] {
+            let mut entries = base.to_vec();
+            entries.retain(|(key, _)| *key != name);
+            entries.push((name, value));
+            assert!(read(&entries).is_err());
+        }
+        assert!(
+            read(&[("NDS_CACHE_ROOT", "/cache/downloads")])
+                .unwrap()
+                .builds
+                .is_none()
+        );
     }
 
     #[test]

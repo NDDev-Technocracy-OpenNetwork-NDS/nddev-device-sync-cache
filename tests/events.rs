@@ -41,6 +41,55 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     let _subscriber = tracing::subscriber::set_default(subscriber);
 
     let harness = Arc::new(Harness::expiring().await);
+    let build_url = format!("{}/v1/build-cache/sccache/{}", harness.base, "a".repeat(64));
+    assert_eq!(
+        harness
+            .client
+            .put(&build_url)
+            .header("Authorization", "Bearer synthetic-reader")
+            .body("compiled")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        harness
+            .client
+            .get(&build_url)
+            .header("Authorization", "Bearer synthetic-reader")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        harness
+            .client
+            .put(&build_url)
+            .header("Authorization", "Bearer synthetic-ci-writer")
+            .body("compiled")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        201
+    );
+    assert_eq!(
+        harness
+            .client
+            .get(&build_url)
+            .header("Authorization", "Bearer synthetic-reader")
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap(),
+        "compiled"
+    );
     let first = {
         let harness = harness.clone();
         tokio::spawn(async move { harness.get("/origin/files/stream.bin").await })
@@ -180,6 +229,8 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         nddev_device_sync_telemetry::decode_event(event.clone())
             .unwrap_or_else(|_| panic!("event outside the contract: {}", event["event.name"]));
     }
+    let rendered = serde_json::to_string(&events).unwrap();
+    assert!(!rendered.contains("synthetic-reader") && !rendered.contains("synthetic-ci-writer"));
     let named = |name: &str| -> Vec<&serde_json::Value> {
         events
             .iter()
@@ -189,6 +240,7 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
     for name in [
         "cache.store.opened",
         "cache.index.config",
+        "cache.build.stored",
         "cache.miss",
         "cache.joined",
         "cache.hit",
@@ -228,6 +280,10 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
         .into_iter()
         .chain(named("cache.fill.failed"))
     {
+        if fill["route"] == nddev_device_sync_cache::builds::ROUTE {
+            assert!(fill["duration_ms"].as_f64().is_some());
+            continue;
+        }
         assert!(
             fill["route"] == "/origin/{path}"
                 || fill["route"] == "/oci/{path}"
@@ -263,7 +319,7 @@ async fn emitted_events_satisfy_the_shared_telemetry_contract() {
             "cache.joined" => "joined",
             "cache.revalidated" => "revalidated",
             "cache.stale" => "stale",
-            "cache.index.config" => "answered",
+            "cache.index.config" | "cache.build.stored" => "answered",
             "cache.rejected" => "rejected",
             "cache.failed" | "cache.store.read.failed" => "failed",
             _ => continue,

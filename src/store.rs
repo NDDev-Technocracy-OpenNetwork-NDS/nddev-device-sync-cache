@@ -76,6 +76,13 @@ pub struct Eviction {
     pub bytes: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Collection {
+    pub removed_objects: usize,
+    pub removed_bytes: u64,
+    pub failed_objects: usize,
+}
+
 struct Index {
     entries: HashMap<String, Meta>,
     bytes: u64,
@@ -240,6 +247,24 @@ impl Store {
         capacity: u64,
         max_object: u64,
     ) -> Result<(Self, usize), StoreError> {
+        Self::open_policy(root, capacity, max_object, true).await
+    }
+
+    /// A separately owned build store keeps unknown metadata for its owner to inspect.
+    pub async fn open_preserving_unknown(
+        root: &Path,
+        capacity: u64,
+        max_object: u64,
+    ) -> Result<(Self, usize), StoreError> {
+        Self::open_policy(root, capacity, max_object, false).await
+    }
+
+    async fn open_policy(
+        root: &Path,
+        capacity: u64,
+        max_object: u64,
+        discard_invalid: bool,
+    ) -> Result<(Self, usize), StoreError> {
         fs::create_dir_all(root).await?;
         let marker = root.join(MARKER);
         match fs::read_to_string(&marker).await {
@@ -259,7 +284,7 @@ impl Store {
         let _ = fs::remove_dir_all(root.join("tmp")).await;
         fs::create_dir_all(root.join("tmp")).await?;
 
-        let (entries, invalid) = Self::load(root).await?;
+        let (entries, invalid) = Self::load(root, discard_invalid).await?;
         let bytes = entries.values().map(|meta| meta.size).sum();
         Ok((
             Self {
@@ -272,7 +297,10 @@ impl Store {
         ))
     }
 
-    async fn load(root: &Path) -> Result<(HashMap<String, Meta>, usize), StoreError> {
+    async fn load(
+        root: &Path,
+        discard_invalid: bool,
+    ) -> Result<(HashMap<String, Meta>, usize), StoreError> {
         let mut entries = HashMap::new();
         let mut invalid = 0;
         let mut shards = fs::read_dir(root.join("meta")).await?;
@@ -286,7 +314,9 @@ impl Store {
                     .and_then(|bytes| serde_json::from_slice::<Meta>(&bytes).ok());
                 let Some(meta) = meta else {
                     invalid += 1;
-                    let _ = fs::remove_file(&path).await;
+                    if discard_invalid {
+                        let _ = fs::remove_file(&path).await;
+                    }
                     continue;
                 };
                 let hash = digest(meta.key.as_bytes());
@@ -297,8 +327,10 @@ impl Store {
                     }
                     _ => {
                         invalid += 1;
-                        let _ = fs::remove_file(&path).await;
-                        let _ = fs::remove_file(&object).await;
+                        if discard_invalid {
+                            let _ = fs::remove_file(&path).await;
+                            let _ = fs::remove_file(&object).await;
+                        }
                     }
                 }
             }
@@ -321,8 +353,56 @@ impl Store {
         let hash = digest(key.as_bytes());
         let mut index = self.index.lock().ok()?;
         let meta = index.entries.get_mut(&hash)?;
-        meta.last_access = now();
+        meta.last_access = meta.last_access.max(now());
         Some((meta.clone(), Self::object_path(&self.root, &hash)))
+    }
+
+    /// Durable last use for the optional build store. Its caller serializes metadata writers.
+    pub async fn touch(&self, key: &str) -> Result<(), StoreError> {
+        let hash = digest(key.as_bytes());
+        let meta = {
+            let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+            let meta = index.entries.get_mut(&hash).ok_or(StoreError::Io)?;
+            meta.last_access = meta.last_access.max(now());
+            meta.clone()
+        };
+        self.write_meta(&Self::meta_path(&self.root, &hash), &meta)
+            .await
+    }
+
+    /// Removes only recognized idle objects. The build-store owner excludes active readers and commits.
+    pub async fn collect_idle(&self, time: u64, retention: u64) -> Result<Collection, StoreError> {
+        let candidates: Vec<_> = {
+            let index = self.index.lock().map_err(|_| StoreError::Io)?;
+            index
+                .entries
+                .iter()
+                .filter(|(_, m)| {
+                    time.checked_sub(m.last_access)
+                        .is_some_and(|age| age >= retention)
+                })
+                .map(|(h, m)| (h.clone(), m.size))
+                .collect()
+        };
+        let mut report = Collection::default();
+        for (hash, size) in candidates {
+            let remove = async {
+                fs::remove_file(Self::object_path(&self.root, &hash)).await?;
+                fs::remove_file(Self::meta_path(&self.root, &hash)).await
+            }
+            .await;
+            if remove.is_err() {
+                report.failed_objects += 1;
+                continue;
+            }
+            let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+            if index.entries.remove(&hash).is_some() {
+                index.bytes -= size;
+                report.removed_objects += 1;
+                report.removed_bytes += size;
+            }
+        }
+        Ok(report)
     }
 
     pub async fn begin(&self) -> Result<Pending, StoreError> {

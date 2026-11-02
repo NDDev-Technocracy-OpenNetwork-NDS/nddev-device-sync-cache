@@ -2,6 +2,7 @@
 //! on the cache volume and reports through the shared NDS telemetry envelope.
 #![forbid(unsafe_code)]
 
+pub mod builds;
 pub mod cache;
 pub mod config;
 pub mod counters;
@@ -81,7 +82,17 @@ pub async fn app(
             revalidate_after: settings.revalidate_after,
         },
     );
-    Ok(Arc::new(http::App { cache, identity }))
+    let builds = match &settings.builds {
+        Some(builds) => Some(Arc::new(
+            crate::builds::BuildStore::open(builds, &settings.root).await?,
+        )),
+        None => None,
+    };
+    Ok(Arc::new(http::App {
+        cache,
+        identity,
+        builds,
+    }))
 }
 
 /// Serves until `shutdown` resolves, then drains connections within the grace period.
@@ -126,7 +137,19 @@ async fn watch_store(app: Arc<http::App>) {
     loop {
         interval.tick().await;
         let store = app.cache.store();
-        let ready = store.ready().await;
+        if let Some(builds) = &app.builds {
+            match builds.collect(store::now()).await {
+                Ok(report) if report.failed_objects == 0 => {}
+                _ => {
+                    tracing::error!(module = "cache", scope = "io", event.name = "cache.failed", route = builds::ROUTE, error.type = "store_io", outcome = "error")
+                }
+            }
+        }
+        let ready = store.ready().await
+            && match &app.builds {
+                Some(builds) => builds.ready().await,
+                None => true,
+            };
         if previous != Some(ready) {
             if ready {
                 tracing::info!(

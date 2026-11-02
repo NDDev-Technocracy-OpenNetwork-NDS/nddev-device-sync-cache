@@ -99,6 +99,46 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
 
+## Shared compiler results
+
+The optional build-result endpoint is a separate store in this process. Enable it only with an
+empty or already owned dedicated directory, its own capacity bound, and a private credentials
+file outside both stores:
+
+| Variable | Meaning |
+| --- | --- |
+| `NDS_CACHE_BUILD_ROOT` | Absolute build store, separate from the public download root. |
+| `NDS_CACHE_BUILD_CREDENTIALS_FILE` | Private regular JSON file; never a synchronized credential. |
+| `NDS_CACHE_BUILD_CAPACITY_BYTES` | Committed build-object capacity. |
+| `NDS_CACHE_BUILD_MAX_OBJECT_BYTES` | Maximum complete upload. |
+| `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention; collection runs in the existing minute watcher. |
+
+The credentials file has `{"schema":1,"readers":["<sha256>"],"ci_writers":["<sha256>"]}`.
+Each value hashes the complete HTTP Authorization header, for example a separately provisioned
+Bearer header. Provision unique device readers and trusted CI writers through the estate's
+credential owner. No writer credential belongs in a developer profile, public/fork job, source
+checkout, log or cache object. The admitted encrypted forward remains required.
+
+`GET` and `HEAD /v1/build-cache/sccache/{hash-path}` read compiler objects; only a writer
+can `PUT` a complete object with Content-Length. A repeated identical upload succeeds; different
+bytes under the same key are refused. The `gradle/{hash}` namespace accepts the same object
+protocol. Authentication is required for reads as well as writes. Missing objects return 404;
+disabled build storage returns 404. This endpoint never downloads an upstream object.
+
+Sccache selects the admitted loopback base plus `/v1/build-cache/`, key prefix `sccache`,
+Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for development devices.
+Trusted CI may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
+format identities: this is compatible compiler reuse, not a portable Cargo target directory.
+Enable a device only after its native client's real read/write-policy and reuse acceptance;
+the endpoint's source tests do not establish fleet adoption.
+
+Successful reads persist observed use, including at stream completion. Active response bodies
+exclude collection and replacement; a busy pass is reported and retried by the next existing
+watcher tick. Capacity eviction uses the same exclusion. Unknown build metadata and future use
+timestamps are preserved. Health includes build usage, selected retention and the last collection
+report; failed removals remain failures. The public download store keeps its independent
+capacity policy and never accepts client uploads.
+
 ## Device client
 
 [`crates/client`](crates/client) is the device side of the module, the
