@@ -4,7 +4,7 @@
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  nds-cache (status | bind | unbind) --port <loopback port> [--lane <lane root>]\n  nds-cache buildkit-config --port <loopback port>";
+  nds-cache (status | bind | unbind) --port <loopback port> [--lane <lane root>]\n  nds-cache buildkit-config --port <loopback port>\n  nds-cache pub-get --port <loopback port> --project <directory> --pub-cache <fresh absolute path> --dart <absolute executable>";
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn main() -> ExitCode {
@@ -20,6 +20,54 @@ async fn main() -> ExitCode {
     };
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    if let [
+        "pub-get",
+        "--port",
+        port,
+        "--project",
+        project,
+        "--pub-cache",
+        cache,
+        "--dart",
+        dart,
+    ] = words.as_slice()
+    {
+        let Some(base) = port.parse().ok().and_then(Base::new) else {
+            return usage();
+        };
+        let cancellation = CancellationToken::new();
+        let signal = cancellation.clone();
+        let mut termination =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(signal) => signal,
+                Err(_) => return ExitCode::from(2),
+            };
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => signal.cancel(),
+                _ = termination.recv() => signal.cancel(),
+            }
+        });
+        let options = nddev_device_sync_cache_client::pub_get::Options {
+            base,
+            project: (*project).into(),
+            cache: (*cache).into(),
+            dart: (*dart).into(),
+        };
+        return match nddev_device_sync_cache_client::pub_get::run(&options, cancellation).await {
+            Ok(report) => {
+                println!("{}", serde_json::to_string(&report).unwrap_or_default());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"error": error.code(), "message": error.to_string()})
+                );
+                ExitCode::from(2)
+            }
+        };
+    }
     let (command, port, root) = match words.as_slice() {
         [command, "--port", port] => (*command, *port, None),
         [command, "--port", port, "--lane", root] => (*command, *port, Some(*root)),

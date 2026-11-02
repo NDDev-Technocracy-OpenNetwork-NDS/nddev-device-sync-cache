@@ -431,3 +431,33 @@ evidence belong to the private
 
 Legal terms are in [LICENSE](LICENSE). The release journal is
 [GitHub Releases](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/releases).
+
+## Explicit canonical Pub preparation
+
+The opt-in pub-get command prepares an existing native lock without changing its registry:
+
+    nds-cache pub-get --port 8740 --project PROJECT --pub-cache FRESH_ABSOLUTE_PATH --dart ABSOLUTE_DART
+
+It qualifies the original pubspec.yaml and pubspec.lock before network I/O. This bounded class
+supports public pub.dev hosted dependencies and prepared native SDK rows. Private or additional
+hosted sources, Git/path sources, overrides, workspaces, unknown fields, duplicate keys, aliases
+and unsupported YAML tags are refused. Publishing metadata is not a registry override. Dart
+retains version resolution and SDK interpretation; the client does not author a lock.
+
+Each archive comes only from the selected loopback /pub route and must match the original lock's
+SHA-256. Redirects, caller credentials, automatic proxies and origin fallback are not used.
+All archives are checked before creating a cold namespace or invoking native Dart preload.
+Native Dart alone creates the package-cache layout and runs pub get --offline --enforce-lockfile.
+Original input bytes are rechecked; unexpected edits are reported without overwriting them.
+
+The cold cache path must not exist and its canonical parent must be a protected directory owned
+by the caller. It is created privately. An explicit existing caller-owned cache takes only a
+native offline get: success returns without network or preload; failure preserves it and asks
+for a fresh path. No existing package directory is replaced by this client. Failed native
+preparation leaves its explicitly selected namespace with the caller; temporary archive staging
+is removed. The execution owner retains cache leases, isolation and namespace lifecycle.
+
+Input, object, aggregate staging and package-count limits bound preparation. Cancellation
+terminates only the selected native child process group. This is an explicit project command;
+default bind/status behavior and the unbound Pub default remain separate. Actual consumer,
+SDK/platform and fleet adoption require their own acceptance.

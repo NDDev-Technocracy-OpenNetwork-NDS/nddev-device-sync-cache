@@ -14,8 +14,20 @@
       "upstream": "https://static.rust-lang.org",
       "objects": "Distribution components and rustup releases; channel manifests are revalidated.",
       "clients": [
-        {"tool": "rustup toolchains", "setting": {"RUSTUP_DIST_SERVER": "{base}/rustup"}, "acceptance": "real client"},
-        {"tool": "rustup self-update and rustup-init", "setting": {"RUSTUP_UPDATE_ROOT": "{base}/rustup/rustup"}, "acceptance": "route only"}
+        {
+          "tool": "rustup toolchains",
+          "setting": {
+            "RUSTUP_DIST_SERVER": "{base}/rustup"
+          },
+          "acceptance": "real client"
+        },
+        {
+          "tool": "rustup self-update and rustup-init",
+          "setting": {
+            "RUSTUP_UPDATE_ROOT": "{base}/rustup/rustup"
+          },
+          "acceptance": "route only"
+        }
       ]
     },
     {
@@ -26,7 +38,9 @@
       "clients": [
         {
           "tool": "flutter",
-          "setting": {"FLUTTER_STORAGE_BASE_URL": "{base}/flutter"},
+          "setting": {
+            "FLUTTER_STORAGE_BASE_URL": "{base}/flutter"
+          },
           "acceptance": "route only",
           "limits": "Gradle refuses plain-HTTP Maven repositories without an explicit opt-in, so Android engine artifacts need TLS in front of the forwarded port. Pub packages are a later increment."
         }
@@ -38,7 +52,13 @@
       "upstream": "https://github.com/astral-sh/python-build-standalone/releases/download",
       "objects": "CPython release archives of dated release tags.",
       "clients": [
-        {"tool": "uv python install", "setting": {"UV_PYTHON_INSTALL_MIRROR": "{base}/python-build-standalone"}, "acceptance": "real client"}
+        {
+          "tool": "uv python install",
+          "setting": {
+            "UV_PYTHON_INSTALL_MIRROR": "{base}/python-build-standalone"
+          },
+          "acceptance": "real client"
+        }
       ]
     },
     {
@@ -47,7 +67,14 @@
       "upstream": "https://github.com",
       "objects": "Public uploaded release assets under exact owner/repository/releases/download/tag/asset paths, with a caller-pinned SHA-256 in the cache URL. Only bytes matching that digest are committed. An escaped slash is allowed only within the release tag.",
       "clients": [
-        {"tool": "curl with pinned digest verification and native archive consumption", "setting": {"download_url": "{base}/github-releases/sha256/{sha256}/{owner}/{repository}/releases/download/{tag}/{asset}"}, "acceptance": "real client", "limits": "Qualified on Linux x86_64 with native curl, an independent size/SHA-256 pin, verified archive extraction and execution of the downloaded tool. A fresh local installation from the retained verified archive succeeds with central unavailable; a cold curl download refuses without public fallback. This does not give curl an offline package cache or qualify another platform, installer, project binding or tool selection. Public uploaded assets only; no API, latest-release resolution, caller authentication, source archives or automatic URL rewriting. The consumer keeps its own size, digest and signature checks and must not retry a public URL after a cache failure."}
+        {
+          "tool": "curl with pinned digest verification and native archive consumption",
+          "setting": {
+            "download_url": "{base}/github-releases/sha256/{sha256}/{owner}/{repository}/releases/download/{tag}/{asset}"
+          },
+          "acceptance": "real client",
+          "limits": "Qualified on Linux x86_64 with native curl, an independent size/SHA-256 pin, verified archive extraction and execution of the downloaded tool. A fresh local installation from the retained verified archive succeeds with central unavailable; a cold curl download refuses without public fallback. This does not give curl an offline package cache or qualify another platform, installer, project binding or tool selection. Public uploaded assets only; no API, latest-release resolution, caller authentication, source archives or automatic URL rewriting. The consumer keeps its own size, digest and signature checks and must not retry a public URL after a cache failure."
+        }
       ]
     },
     {
@@ -56,7 +83,13 @@
       "upstream": "https://cdn.playwright.dev",
       "objects": "Playwright browser and tool builds.",
       "clients": [
-        {"tool": "playwright install", "setting": {"PLAYWRIGHT_DOWNLOAD_HOST": "{base}/playwright"}, "acceptance": "route only"}
+        {
+          "tool": "playwright install",
+          "setting": {
+            "PLAYWRIGHT_DOWNLOAD_HOST": "{base}/playwright"
+          },
+          "acceptance": "route only"
+        }
       ]
     },
     {
@@ -67,7 +100,9 @@
       "clients": [
         {
           "tool": "gradle wrapper",
-          "setting": {"distributionUrl": "{base}/gradle/distributions/gradle-{version}-bin.zip"},
+          "setting": {
+            "distributionUrl": "{base}/gradle/distributions/gradle-{version}-bin.zip"
+          },
           "acceptance": "route only",
           "limits": "Keep distributionSha256Sum. Whether the wrapper accepts a plain-HTTP distributionUrl is not verified."
         }
@@ -81,7 +116,9 @@
       "clients": [
         {
           "tool": "go release archives",
-          "setting": {"download_url": "{base}/go/{file}"},
+          "setting": {
+            "download_url": "{base}/go/{file}"
+          },
           "acceptance": "route only",
           "limits": "GOTOOLCHAIN downloads go through the goproxy route instead."
         }
@@ -95,7 +132,9 @@
       "clients": [
         {
           "tool": "chrome for testing archives",
-          "setting": {"download_url": "{base}/chrome-for-testing/{version}/{platform}/{product}-{platform}.zip"},
+          "setting": {
+            "download_url": "{base}/chrome-for-testing/{version}/{platform}/{product}-{platform}.zip"
+          },
           "acceptance": "route only",
           "limits": "Version indexes on googlechromelabs.github.io are not proxied; resolve the version upstream or from a pinned lock."
         }
@@ -109,7 +148,10 @@
       "clients": [
         {
           "tool": "cargo, replacing the crates-io source",
-          "setting": {"source.crates-io.replace-with": "nds-cache", "source.nds-cache.registry": "sparse+{base}/crates-index/"},
+          "setting": {
+            "source.crates-io.replace-with": "nds-cache",
+            "source.nds-cache.registry": "sparse+{base}/crates-index/"
+          },
           "acceptance": "real client",
           "limits": "Set through cargo --config or a Cargo configuration file: Cargo reads source replacement from no environment variable. Index changes reach clients after the revalidation age. Cargo names its local registry cache by the URL, port included, so a client keeps one forwarded port to reuse it."
         }
@@ -123,7 +165,9 @@
       "clients": [
         {
           "tool": "cargo, through the index configuration the cache generates",
-          "setting": {"dl": "{base}/crates/{crate}/{crate}-{version}.crate"},
+          "setting": {
+            "dl": "{base}/crates/{crate}/{crate}-{version}.crate"
+          },
           "acceptance": "real client",
           "limits": "No client setting: the config.json of the crates-index route carries this download template."
         }
@@ -137,13 +181,17 @@
       "clients": [
         {
           "tool": "npm install and npm ci",
-          "setting": {"registry": "{base}/npm/"},
+          "setting": {
+            "registry": "{base}/npm/"
+          },
           "acceptance": "real client",
           "limits": "nds-cache bind writes the registry into a global configuration file of its own, which npm_config_globalconfig in the environment file names, because Bun reads npm's user file and variables but not that file; npm is bound where the environment file applies. The user's and the project's .npmrc rank above it, and while bound npm reads it in place of its default global file. npm's default replace-registry-host fetches the public tarball links of a package document through the cache, so package-lock.json keeps registry.npmjs.org; a project that sets replace-registry-host to never downloads tarballs directly. Audit, search, login and publish endpoints are not proxied; run npm without audit."
         },
         {
           "tool": "bun install and bun install --frozen-lockfile",
-          "setting": {"registry": "{base}/npm/"},
+          "setting": {
+            "registry": "{base}/npm/"
+          },
           "acceptance": "real client",
           "limits": "A project or job selects the route with --registry or a default registry in its own .npmrc; the device client leaves Bun unbound, because Bun does not read the npm global configuration file. A User-Agent that opens with Bun/ gets the install document with the tarball links under https://registry.npmjs.org/ empty, which Bun builds from its configured registry, so online and frozen installs download through the cache, and a bun.lock that Bun creates or installs from unchanged records those packages with an empty registry, as a public install does. Bun loads an empty registry as its configured one, so bun add, bun update or an edited package.json through the route write the cache address into the entries the lockfile already held; author those changes against the canonical registry. Scoped registries and their credentials in the project's or job's .npmrc keep precedence and do not pass through the cache. A tarball link to another host stays as upstream sent it."
         }
@@ -157,11 +205,20 @@
       "clients": [
         {
           "tool": "uv pip install and uv tool install",
-          "setting": {"UV_DEFAULT_INDEX": "{base}/pypi/simple/"},
+          "setting": {
+            "UV_DEFAULT_INDEX": "{base}/pypi/simple/"
+          },
           "acceptance": "real client",
           "limits": "uv lock through the cache records the forwarded base in uv.lock, and uv treats a lockfile resolved against another index as outdated, so locked project syncs keep the public index."
         },
-        {"tool": "pip install", "setting": {"PIP_INDEX_URL": "{base}/pypi/simple/"}, "acceptance": "real client", "limits": "Only the JSON form is served; a client that accepts only HTML pages gets 406."}
+        {
+          "tool": "pip install",
+          "setting": {
+            "PIP_INDEX_URL": "{base}/pypi/simple/"
+          },
+          "acceptance": "real client",
+          "limits": "Only the JSON form is served; a client that accepts only HTML pages gets 406."
+        }
       ]
     },
     {
@@ -172,7 +229,9 @@
       "clients": [
         {
           "tool": "uv and pip, through the project pages of the pypi route",
-          "setting": {"url": "{base}/pypi-files/packages/{digest-path}/{file}"},
+          "setting": {
+            "url": "{base}/pypi-files/packages/{digest-path}/{file}"
+          },
           "acceptance": "real client",
           "limits": "No client setting: the project pages served by the cache carry these links."
         }
@@ -186,15 +245,27 @@
       "clients": [
         {
           "tool": "dart pub get",
-          "setting": {"PUB_HOSTED_URL": "{base}/pub"},
+          "setting": {
+            "PUB_HOSTED_URL": "{base}/pub"
+          },
           "acceptance": "real client",
           "limits": "pubspec.lock records the forwarded base as the hosted URL, and dart pub get --enforce-lockfile refuses a lockfile resolved against pub.dev, so locked builds keep the public repository. Security advisories are served with the package documents."
         },
         {
           "tool": "flutter pub get",
-          "setting": {"PUB_HOSTED_URL": "{base}/pub"},
+          "setting": {
+            "PUB_HOSTED_URL": "{base}/pub"
+          },
           "acceptance": "real client",
           "limits": "The same pub client and lockfile limits as dart pub get; Flutter SDK artifacts use the flutter route."
+        },
+        {
+          "tool": "nds-cache pub-get",
+          "setting": {
+            "archive_base": "{base}/pub"
+          },
+          "acceptance": "real client",
+          "limits": "Explicit preparation of an original public pub.dev frozen lock: verify every archive against its original SHA-256 before native Dart cache preload, then native get --offline --enforce-lockfile. A fresh caller-owned cache is required for cold preparation; an existing cache takes only the native offline path or an explicit refusal. The caller keeps PUB_CACHE for subsequent commands. A public single-package Linux Dart case is qualified; macOS, Flutter and arbitrary transitive graphs require separate consumer evidence. Private, VCS, path, override and workspace inputs refuse before online preparation. No default binding or origin fallback is introduced."
         }
       ]
     },
@@ -206,7 +277,9 @@
       "clients": [
         {
           "tool": "gradle, as a Maven repository",
-          "setting": {"url": "{base}/maven-central"},
+          "setting": {
+            "url": "{base}/maven-central"
+          },
           "acceptance": "real client",
           "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
@@ -220,7 +293,9 @@
       "clients": [
         {
           "tool": "gradle, as a Maven repository for Android libraries",
-          "setting": {"url": "{base}/google-maven"},
+          "setting": {
+            "url": "{base}/google-maven"
+          },
           "acceptance": "real client",
           "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
@@ -234,7 +309,9 @@
       "clients": [
         {
           "tool": "gradle, as the plugin repository in pluginManagement",
-          "setting": {"url": "{base}/gradle-plugins"},
+          "setting": {
+            "url": "{base}/gradle-plugins"
+          },
           "acceptance": "real client",
           "limits": "Accepted as HTTP on the loopback end of an authenticated, encrypted rds forward, not JVM HTTPS. contracts/gradle/nds-cache.init.gradle.kts, passed to one build with --init-script and NDS_CACHE_BASE set to the literal http://127.0.0.1:PORT forward, retargets only the public repositories and sets isAllowInsecureProtocol on those cache URLs alone, with no global disable, trust store or local CA; private or authenticated repositories keep their URLs. It adds no repository beside them, so an unreachable cache fails the build. Use strict dependency verification against checksums that do not come from the cache. Gradle probes repositories in order, so upstream 404s from the earlier ones are expected."
         }
@@ -256,7 +333,9 @@
       "clients": [
         {
           "tool": "go mod download, go build and GOTOOLCHAIN switches",
-          "setting": {"GOPROXY": "{base}/goproxy"},
+          "setting": {
+            "GOPROXY": "{base}/goproxy"
+          },
           "acceptance": "real client",
           "limits": "The go command finds the checksum database through this proxy (the gosumdb route) and verifies its signed notes with the database's own key, so keep GOSUMDB enabled. Private modules stay outside through GOPRIVATE."
         }
