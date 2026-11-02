@@ -116,6 +116,21 @@ async fn authenticated_native_http_objects_are_immutable_and_separate() {
             .status(),
         404
     );
+    assert_eq!(
+        f.put("sccache/.sccache_check", READER, "Hello, World!")
+            .await,
+        403
+    );
+    assert_eq!(
+        f.put("sccache/.sccache_check", WRITER, "Hello, World!")
+            .await,
+        201
+    );
+    assert_eq!(
+        f.put("sccache/.sccache_check", WRITER, "Hello, World!")
+            .await,
+        204
+    );
     assert_eq!(f.put(&key, READER, "compiled").await, 403);
     assert_eq!(f.put(&key, WRITER, "compiled").await, 201);
     assert_eq!(f.put(&key, WRITER, "compiled").await, 204);

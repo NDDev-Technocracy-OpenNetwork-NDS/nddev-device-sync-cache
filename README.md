@@ -122,7 +122,8 @@ checkout, log or cache object. The admitted encrypted forward remains required.
 `GET` and `HEAD /v1/build-cache/sccache/{hash-path}` read compiler objects; only a writer
 can `PUT` a complete object with Content-Length. A repeated identical upload succeeds; different
 bytes under the same key are refused. The `gradle/{hash}` namespace accepts the same object
-protocol. Authentication is required for reads as well as writes. Missing objects return 404;
+protocol. Authentication is required for reads as well as writes. Sccache's exact `.sccache_check`
+sentinel uses the same authenticated immutable object protocol. Missing objects return 404;
 disabled build storage returns 404. This endpoint never downloads an upstream object.
 
 Sccache selects the admitted loopback base plus `/v1/build-cache`, key prefix `sccache`,

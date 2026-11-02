@@ -75,6 +75,9 @@ fn key(uri: &Uri) -> Option<&str> {
     if value.len() > 512 {
         return None;
     }
+    if value == "sccache/.sccache_check" {
+        return Some(value);
+    }
     let (kind, path) = value.split_once('/')?;
     if !matches!(kind, "sccache" | "gradle") {
         return None;
