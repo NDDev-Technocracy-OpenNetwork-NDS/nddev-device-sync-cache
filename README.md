@@ -113,6 +113,10 @@ file outside both stores:
 | `NDS_CACHE_BUILD_MAX_OBJECT_BYTES` | Maximum complete upload. |
 | `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention; collection runs in the existing minute watcher. |
 
+For Compose deployments, add `-f compose.build-cache.yaml` after `-f compose.yaml` and
+provide `NDS_CACHE_BUILD_STORE` and `NDS_CACHE_BUILD_CREDENTIALS` outside source. Both bind
+sources must already exist. The credentials file is read-only inside the non-root container.
+
 The credentials file has `{"schema":1,"readers":["<sha256>"],"ci_writers":["<sha256>"]}`.
 Each value hashes the complete HTTP Authorization header, for example a separately provisioned
 Bearer header. Provision unique device readers and trusted CI writers through the estate's

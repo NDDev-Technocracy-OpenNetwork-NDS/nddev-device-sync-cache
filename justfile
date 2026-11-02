@@ -118,9 +118,21 @@ container-check commit=`git rev-parse HEAD`:
     work=$(mktemp -d)
     trap 'docker rm --force "$name" > /dev/null 2>&1 || true; docker image rm "$name" > /dev/null 2>&1 || true; rm -rf -- "$work"' EXIT
     docker build --build-arg "NDS_SOURCE_COMMIT=$1" --tag "$name" .
+    fixture_uid=$(id -u)
+    fixture_gid=$(id -g)
+    fixture_reader=$(printf '%s' 'Bearer synthetic-reader' | sha256sum | cut -d' ' -f1)
+    fixture_writer=$(printf '%s' 'Bearer synthetic-ci-writer' | sha256sum | cut -d' ' -f1)
+    jq -n --arg r "$fixture_reader" --arg w "$fixture_writer" '{schema:1,readers:[$r],ci_writers:[$w]}' > "$work/credentials.json"
+    chmod 600 "$work/credentials.json"
     docker run --detach --name "$name" --read-only --cap-drop ALL \
+        --user "$fixture_uid:$fixture_gid" \
         --security-opt no-new-privileges:true --memory 128m --pids-limit 64 \
-        --tmpfs /var/lib/nds-cache:uid=10001,gid=10001,mode=0700,size=64m \
+        --tmpfs "/var/lib/nds-cache:uid=$fixture_uid,gid=$fixture_gid,mode=0700,size=64m" \
+        --tmpfs "/var/lib/nds-build-cache:uid=$fixture_uid,gid=$fixture_gid,mode=0700,size=64m" \
+        --mount "type=bind,source=$work/credentials.json,target=/run/build-credentials.json,readonly" \
+        --env NDS_CACHE_BUILD_ROOT=/var/lib/nds-build-cache \
+        --env NDS_CACHE_BUILD_CREDENTIALS_FILE=/run/build-credentials.json \
+        --env NDS_CACHE_BUILD_CAPACITY_BYTES=1073741824 --env NDS_CACHE_BUILD_MAX_OBJECT_BYTES=1048576 \
         --env NDS_CACHE_CAPACITY_BYTES=1073741824 --env NDS_CACHE_MAX_OBJECT_BYTES=1048576 \
         --publish 127.0.0.1::8740 "$name" > /dev/null
     for _ in {1..50}; do
@@ -133,6 +145,11 @@ container-check commit=`git rev-parse HEAD`:
     jq -e --arg commit "$1" '.status == "ok" and .source_commit == $commit and .store_objects == 0' \
         "$work/health.json" > /dev/null
     test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$base/unknown/object")" = 404
+    key=sccache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    test "$(curl --silent --output /dev/null --write-out '%{http_code}' -H 'Authorization: Bearer synthetic-reader' --data-binary 'compiled' -X PUT "$base/v1/build-cache/$key")" = 403
+    test "$(curl --silent --output /dev/null --write-out '%{http_code}' -H 'Authorization: Bearer synthetic-ci-writer' --data-binary 'compiled' -X PUT "$base/v1/build-cache/$key")" = 201
+    test "$(curl --fail --silent -H 'Authorization: Bearer synthetic-reader' "$base/v1/build-cache/$key")" = compiled
+    curl --fail --silent "$base/v1/health" | jq -e '.build_store.objects == 1 and .build_store.idle_retention_seconds == 86400' > /dev/null
     docker stop --time 10 "$name" > /dev/null
     docker logs "$name" > "$work/events.jsonl" 2>&1
     jq -e -s --arg commit "$1" '
