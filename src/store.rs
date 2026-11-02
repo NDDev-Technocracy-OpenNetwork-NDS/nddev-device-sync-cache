@@ -24,6 +24,8 @@ const MARKER: &str = ".nds-cache-store";
 const FOLLOW_CHUNK: u64 = 64 * 1024;
 const MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache\"}\n";
 
+const BUILD_MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache-builds\"}\n";
+
 static PENDING: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -247,7 +249,7 @@ impl Store {
         capacity: u64,
         max_object: u64,
     ) -> Result<(Self, usize), StoreError> {
-        Self::open_policy(root, capacity, max_object, true).await
+        Self::open_policy(root, capacity, max_object, true, MARKER_CONTENT).await
     }
 
     /// A separately owned build store keeps unknown metadata for its owner to inspect.
@@ -256,7 +258,7 @@ impl Store {
         capacity: u64,
         max_object: u64,
     ) -> Result<(Self, usize), StoreError> {
-        Self::open_policy(root, capacity, max_object, false).await
+        Self::open_policy(root, capacity, max_object, false, BUILD_MARKER_CONTENT).await
     }
 
     async fn open_policy(
@@ -264,18 +266,19 @@ impl Store {
         capacity: u64,
         max_object: u64,
         discard_invalid: bool,
+        marker_content: &str,
     ) -> Result<(Self, usize), StoreError> {
         fs::create_dir_all(root).await?;
         let marker = root.join(MARKER);
         match fs::read_to_string(&marker).await {
-            Ok(content) if content == MARKER_CONTENT => {}
+            Ok(content) if content == marker_content => {}
             Ok(_) => return Err(StoreError::Unowned),
             Err(_) => {
                 let mut entries = fs::read_dir(root).await?;
                 if entries.next_entry().await?.is_some() {
                     return Err(StoreError::Unowned);
                 }
-                fs::write(&marker, MARKER_CONTENT).await?;
+                fs::write(&marker, marker_content).await?;
             }
         }
         for directory in ["objects", "meta"] {

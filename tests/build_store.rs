@@ -321,6 +321,12 @@ async fn store_aliases_unowned_roots_and_exposed_credentials_are_refused() {
         std::fs::read_to_string(bad.root.join("keep")).unwrap(),
         "foreign"
     );
+    let public_copy = f._temp.path().join("other-downloads");
+    let _public = store::Store::open(&public_copy, 1 << 30, 1 << 20)
+        .await
+        .unwrap();
+    bad.root = public_copy;
+    assert!(BuildStore::open(&bad, &f.downloads).await.is_err());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
