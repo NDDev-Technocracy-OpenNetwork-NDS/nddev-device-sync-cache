@@ -125,7 +125,7 @@ bytes under the same key are refused. The `gradle/{hash}` namespace accepts the 
 protocol. Authentication is required for reads as well as writes. Missing objects return 404;
 disabled build storage returns 404. This endpoint never downloads an upstream object.
 
-Sccache selects the admitted loopback base plus `/v1/build-cache/`, key prefix `sccache`,
+Sccache selects the admitted loopback base plus `/v1/build-cache`, key prefix `sccache`,
 Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for development devices.
 Trusted CI may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
 format identities: this is compatible compiler reuse, not a portable Cargo target directory.

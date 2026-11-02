@@ -194,7 +194,12 @@ impl BuildStore {
         body: Body,
     ) -> Response {
         let Some(key) = key(uri) else {
-            return StatusCode::BAD_REQUEST.into_response();
+            return if method == Method::GET || method == Method::HEAD {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::BAD_REQUEST
+            }
+            .into_response();
         };
         if headers.contains_key(header::COOKIE)
             || headers.contains_key(header::PROXY_AUTHORIZATION)

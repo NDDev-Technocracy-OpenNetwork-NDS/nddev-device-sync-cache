@@ -105,6 +105,17 @@ async fn authenticated_native_http_objects_are_immutable_and_separate() {
     let key = object();
     let client = reqwest::Client::new();
     assert_eq!(client.get(f.url(&key)).send().await.unwrap().status(), 403);
+    // OpenDAL's real startup probe reads an absent non-object sentinel.
+    assert_eq!(
+        client
+            .get(f.url("sccache/.sccache_check"))
+            .header("Authorization", READER)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
     assert_eq!(f.put(&key, READER, "compiled").await, 403);
     assert_eq!(f.put(&key, WRITER, "compiled").await, 201);
     assert_eq!(f.put(&key, WRITER, "compiled").await, 204);
