@@ -99,6 +99,11 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
 
+A native Linux image build may select `--network host --build-arg NDS_CACHE_PORT=PORT`.
+The build then obtains Rust distributions and public crates through that admitted loopback
+cache and fails on its outage; it keeps Git source transport independent. Public hosted builds
+omit the argument. The same optional port is accepted by `just container-check`.
+
 ## Shared compiler results
 
 The optional build-result endpoint is a separate store in this process. Enable it only with an

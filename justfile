@@ -117,8 +117,13 @@ container-check commit=`git rev-parse HEAD`:
     name="nds-cache-check-$$"
     work=$(mktemp -d)
     trap 'docker rm --force "$name" > /dev/null 2>&1 || true; docker image rm "$name" > /dev/null 2>&1 || true; rm -rf -- "$work"' EXIT
-    docker build --build-arg "NDS_SOURCE_COMMIT=$1" --tag "$name" .
+    native_build_args=()
+    if [ -n "${NDS_CACHE_PORT:-}" ]; then
+        native_build_args=(--network host --build-arg "NDS_CACHE_PORT=$NDS_CACHE_PORT")
+    fi
+    docker build "${native_build_args[@]}" --build-arg "NDS_SOURCE_COMMIT=$1" --tag "$name" .
     fixture_uid=$(id -u)
+    test "$fixture_uid" -ne 0
     fixture_gid=$(id -g)
     fixture_reader=$(printf '%s' 'Bearer synthetic-reader' | sha256sum | cut -d' ' -f1)
     fixture_writer=$(printf '%s' 'Bearer synthetic-ci-writer' | sha256sum | cut -d' ' -f1)
