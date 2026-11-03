@@ -306,13 +306,32 @@ pub struct Harness {
     pub client: reqwest::Client,
 }
 
+/// Stored objects stay fresh for the whole test unless it opts into expiry: freshness is
+/// compared in whole seconds, so a one-second window could close one millisecond after a fill.
+const STEADY_REVALIDATE_SECONDS: &str = "300";
+/// Tests that exercise revalidation use two seconds and sleep [`EXPIRY`]: a hit right after a
+/// fill stays fresh across one second boundary, and the sleep always crosses two.
+const EXPIRING_REVALIDATE_SECONDS: &str = "2";
+pub const EXPIRY: Duration = Duration::from_millis(2100);
+
 impl Harness {
     pub async fn start() -> Self {
+        Self::start_with(STEADY_REVALIDATE_SECONDS).await
+    }
+
+    /// A harness whose mutable objects expire after [`EXPIRY`].
+    pub async fn expiring() -> Self {
+        Self::start_with(EXPIRING_REVALIDATE_SECONDS).await
+    }
+
+    async fn start_with(revalidate: &'static str) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let upstream = Arc::new(Upstream::default());
         let origin = spawn(
             Router::new()
                 .route("/files/immutable.bin", get(immutable))
+                .route("/v9.1.2/node-v9.1.2-linux-x64.tar.xz", get(immutable))
+                .route("/v9.1.2/SHASUMS256.txt", get(immutable))
                 .route("/files/slow.bin", get(slow))
                 .route("/files/channel.toml", get(channel))
                 .route("/files/big.bin", get(big))
@@ -376,8 +395,16 @@ impl Harness {
             sha256_prefix: false,
             answers: &[],
         };
+        let mut node = Routes::production()
+            .routes()
+            .iter()
+            .find(|route| route.id == "nodejs")
+            .unwrap()
+            .clone();
+        node.upstream = format!("http://{origin}");
         let routes = Routes::new(
             vec![
+                node,
                 route("/origin", "/origin/{path}", format!("http://{origin}")),
                 route(
                     "/redirector",
@@ -398,6 +425,24 @@ impl Harness {
                     accept: oci_accept,
                     oci: true,
                     ..route("/oci", "/oci/{path}", format!("http://{origin}/v2"))
+                },
+                Route {
+                    accept: oci_accept,
+                    oci: true,
+                    ..route(
+                        "/v2/docker.io",
+                        "/v2/docker.io/{path}",
+                        format!("http://{origin}/v2"),
+                    )
+                },
+                Route {
+                    accept: oci_accept,
+                    oci: true,
+                    ..route(
+                        "/v2/ghcr.io",
+                        "/v2/ghcr.io/{path}",
+                        format!("http://{origin}/v2"),
+                    )
                 },
                 Route {
                     accept: nddev_device_sync_cache::domain::github_release,
@@ -429,14 +474,30 @@ impl Harness {
         );
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().join("store");
-        let settings = Settings::read(|name| match name {
+        let mut settings = Settings::read(|name| match name {
             "NDS_CACHE_ROOT" => Some(root.to_string_lossy().into_owned()),
             "NDS_CACHE_CAPACITY_BYTES" => Some((1u64 << 30).to_string()),
             "NDS_CACHE_MAX_OBJECT_BYTES" => Some((1u64 << 20).to_string()),
-            "NDS_CACHE_REVALIDATE_SECONDS" => Some("1".into()),
+            "NDS_CACHE_REVALIDATE_SECONDS" => Some(revalidate.into()),
             _ => None,
         })
         .unwrap();
+        let credentials = directory.path().join("build-credentials.json");
+        std::fs::write(&credentials,serde_json::json!({"schema":1,
+            "readers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-reader")],
+            "writers":[nddev_device_sync_cache::builds::credential_hash("Bearer synthetic-ci-writer")]}).to_string()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        settings.builds = Some(nddev_device_sync_cache::builds::Settings {
+            root: directory.path().join("builds"),
+            credentials,
+            capacity: 1 << 30,
+            max_object: 1 << 20,
+            retention: Duration::from_secs(86400),
+        });
         let identity = Identity::read(&|_| None).unwrap();
         let app = nddev_device_sync_cache::app(&settings, identity, routes)
             .await

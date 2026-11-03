@@ -57,6 +57,19 @@ fn client_settings_stay_inside_their_route() {
                     continue;
                 }
                 let value = value.strip_prefix("sparse+").unwrap_or(value);
+                if name == "registry-mirrors" {
+                    assert_eq!(route["id"], "docker-hub");
+                    assert_eq!(value, "{base}/");
+                    assert_eq!(
+                        Routes::production()
+                            .resolve("/v2/library/example/manifests/latest", None)
+                            .unwrap()
+                            .route
+                            .prefix,
+                        route["prefix"].as_str().unwrap()
+                    );
+                    continue;
+                }
                 assert!(
                     value == mount.trim_end_matches('/') || value.starts_with(&mount),
                     "{name} = {value} leaves {mount}"

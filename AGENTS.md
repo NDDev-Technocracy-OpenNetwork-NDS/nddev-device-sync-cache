@@ -18,7 +18,9 @@ The parent task is
   from it and official-source evidence. `registry/journal.jsonl` is append-only.
 - A version below the latest stable upstream needs a reason, an upstream reference and a removal
   condition. Version values stay out of Markdown.
-- Shared build caches accept writes only from CI identities.
+- Shared build caches accept writes only from admitted trusted identities. CI is the default;
+  an owner's explicit development-device writer exception is recorded in the private estate.
+  Public/fork jobs never receive writer credentials.
 
 ## Service rules
 

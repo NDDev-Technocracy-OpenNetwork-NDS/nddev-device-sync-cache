@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::{SystemTime, UNIX_EPOCH},
@@ -24,6 +24,8 @@ const MARKER: &str = ".nds-cache-store";
 const FOLLOW_CHUNK: u64 = 64 * 1024;
 const MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache\"}\n";
 
+const BUILD_MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache-builds\"}\n";
+
 static PENDING: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -34,6 +36,8 @@ pub enum StoreError {
     Io,
     #[error("store_object_too_large")]
     TooLarge,
+    #[error("store_capacity")]
+    Full,
 }
 
 impl From<std::io::Error> for StoreError {
@@ -76,8 +80,17 @@ pub struct Eviction {
     pub bytes: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Collection {
+    pub removed_objects: usize,
+    pub removed_bytes: u64,
+    pub failed_objects: usize,
+    pub busy_objects: usize,
+}
+
 struct Index {
     entries: HashMap<String, Meta>,
+    readers: HashMap<String, usize>,
     bytes: u64,
 }
 
@@ -85,7 +98,25 @@ pub struct Store {
     root: PathBuf,
     capacity: u64,
     max_object: u64,
-    index: Mutex<Index>,
+    index: Arc<Mutex<Index>>,
+}
+
+/// A live immutable-object response. Capacity and idle eviction keep this key until drop.
+pub struct ReadLease {
+    index: Arc<Mutex<Index>>,
+    hash: String,
+}
+impl Drop for ReadLease {
+    fn drop(&mut self) {
+        if let Ok(mut index) = self.index.lock()
+            && let Some(count) = index.readers.get_mut(&self.hash)
+        {
+            *count -= 1;
+            if *count == 0 {
+                index.readers.remove(&self.hash);
+            }
+        }
+    }
 }
 
 /// An in-progress download. Dropping it without `commit` removes the partial file.
@@ -240,17 +271,36 @@ impl Store {
         capacity: u64,
         max_object: u64,
     ) -> Result<(Self, usize), StoreError> {
+        Self::open_policy(root, capacity, max_object, true, MARKER_CONTENT).await
+    }
+
+    /// A separately owned build store keeps unknown metadata for its owner to inspect.
+    pub async fn open_preserving_unknown(
+        root: &Path,
+        capacity: u64,
+        max_object: u64,
+    ) -> Result<(Self, usize), StoreError> {
+        Self::open_policy(root, capacity, max_object, false, BUILD_MARKER_CONTENT).await
+    }
+
+    async fn open_policy(
+        root: &Path,
+        capacity: u64,
+        max_object: u64,
+        discard_invalid: bool,
+        marker_content: &str,
+    ) -> Result<(Self, usize), StoreError> {
         fs::create_dir_all(root).await?;
         let marker = root.join(MARKER);
         match fs::read_to_string(&marker).await {
-            Ok(content) if content == MARKER_CONTENT => {}
+            Ok(content) if content == marker_content => {}
             Ok(_) => return Err(StoreError::Unowned),
             Err(_) => {
                 let mut entries = fs::read_dir(root).await?;
                 if entries.next_entry().await?.is_some() {
                     return Err(StoreError::Unowned);
                 }
-                fs::write(&marker, MARKER_CONTENT).await?;
+                fs::write(&marker, marker_content).await?;
             }
         }
         for directory in ["objects", "meta"] {
@@ -259,20 +309,27 @@ impl Store {
         let _ = fs::remove_dir_all(root.join("tmp")).await;
         fs::create_dir_all(root.join("tmp")).await?;
 
-        let (entries, invalid) = Self::load(root).await?;
+        let (entries, invalid) = Self::load(root, discard_invalid).await?;
         let bytes = entries.values().map(|meta| meta.size).sum();
         Ok((
             Self {
                 root: root.to_owned(),
                 capacity,
                 max_object,
-                index: Mutex::new(Index { entries, bytes }),
+                index: Arc::new(Mutex::new(Index {
+                    entries,
+                    bytes,
+                    readers: HashMap::new(),
+                })),
             },
             invalid,
         ))
     }
 
-    async fn load(root: &Path) -> Result<(HashMap<String, Meta>, usize), StoreError> {
+    async fn load(
+        root: &Path,
+        discard_invalid: bool,
+    ) -> Result<(HashMap<String, Meta>, usize), StoreError> {
         let mut entries = HashMap::new();
         let mut invalid = 0;
         let mut shards = fs::read_dir(root.join("meta")).await?;
@@ -286,7 +343,9 @@ impl Store {
                     .and_then(|bytes| serde_json::from_slice::<Meta>(&bytes).ok());
                 let Some(meta) = meta else {
                     invalid += 1;
-                    let _ = fs::remove_file(&path).await;
+                    if discard_invalid {
+                        let _ = fs::remove_file(&path).await;
+                    }
                     continue;
                 };
                 let hash = digest(meta.key.as_bytes());
@@ -297,8 +356,10 @@ impl Store {
                     }
                     _ => {
                         invalid += 1;
-                        let _ = fs::remove_file(&path).await;
-                        let _ = fs::remove_file(&object).await;
+                        if discard_invalid {
+                            let _ = fs::remove_file(&path).await;
+                            let _ = fs::remove_file(&object).await;
+                        }
                     }
                 }
             }
@@ -321,8 +382,133 @@ impl Store {
         let hash = digest(key.as_bytes());
         let mut index = self.index.lock().ok()?;
         let meta = index.entries.get_mut(&hash)?;
-        meta.last_access = now();
+        meta.last_access = meta.last_access.max(now());
         Some((meta.clone(), Self::object_path(&self.root, &hash)))
+    }
+
+    pub fn lease(&self, key: &str) -> Option<(Meta, PathBuf, ReadLease)> {
+        let hash = digest(key.as_bytes());
+        let mut index = self.index.lock().ok()?;
+        let meta = index.entries.get_mut(&hash)?;
+        meta.last_access = meta.last_access.max(now());
+        let meta = meta.clone();
+        *index.readers.entry(hash.clone()).or_default() += 1;
+        Some((
+            meta,
+            Self::object_path(&self.root, &hash),
+            ReadLease {
+                index: self.index.clone(),
+                hash,
+            },
+        ))
+    }
+
+    /// Make room before an immutable build commit. The caller excludes new lookups and commits.
+    /// Existing response leases may finish while unrelated objects are evicted.
+    pub async fn make_room(&self, additional: u64) -> Result<Eviction, StoreError> {
+        let mut eviction = Eviction::default();
+        loop {
+            let victim = {
+                let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+                if index.bytes.saturating_add(additional) <= self.capacity {
+                    return Ok(eviction);
+                }
+                let hash = index
+                    .entries
+                    .iter()
+                    .filter(|(hash, _)| !index.readers.contains_key(*hash))
+                    .min_by_key(|(_, meta)| meta.last_access)
+                    .map(|(hash, _)| hash.clone())
+                    .ok_or(StoreError::Full)?;
+                let meta = index.entries.remove(&hash).ok_or(StoreError::Io)?;
+                index.bytes -= meta.size;
+                (hash, meta)
+            };
+            match self.remove_files(&victim.0).await {
+                Ok(body_removed) => {
+                    eviction.objects += 1;
+                    if body_removed {
+                        eviction.bytes += victim.1.size;
+                    }
+                }
+                Err(error) => {
+                    let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+                    index.bytes += victim.1.size;
+                    index.entries.insert(victim.0, victim.1);
+                    return Err(error);
+                }
+            }
+        }
+    }
+
+    async fn remove_files(&self, hash: &str) -> Result<bool, StoreError> {
+        let removed = match fs::remove_file(Self::object_path(&self.root, hash)).await {
+            Ok(()) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(_) => return Err(StoreError::Io),
+        };
+        match fs::remove_file(Self::meta_path(&self.root, hash)).await {
+            Ok(()) => Ok(removed),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(removed),
+            Err(_) => Err(StoreError::Io),
+        }
+    }
+
+    /// Durable last use for the optional build store. Its caller serializes metadata writers.
+    pub async fn touch(&self, key: &str) -> Result<(), StoreError> {
+        let hash = digest(key.as_bytes());
+        let meta = {
+            let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+            let meta = index.entries.get_mut(&hash).ok_or(StoreError::Io)?;
+            meta.last_access = meta.last_access.max(now());
+            meta.clone()
+        };
+        self.write_meta(&Self::meta_path(&self.root, &hash), &meta)
+            .await
+    }
+
+    /// Removes only recognized idle objects. The build-store owner excludes active readers and commits.
+    pub async fn collect_idle(&self, time: u64, retention: u64) -> Result<Collection, StoreError> {
+        let (candidates, busy) = {
+            let index = self.index.lock().map_err(|_| StoreError::Io)?;
+            let mut candidates = Vec::new();
+            let mut busy = 0;
+            for (hash, meta) in &index.entries {
+                if time
+                    .checked_sub(meta.last_access)
+                    .is_some_and(|age| age >= retention)
+                {
+                    if index.readers.contains_key(hash) {
+                        busy += 1;
+                    } else {
+                        candidates.push((hash.clone(), meta.size));
+                    }
+                }
+            }
+            (candidates, busy)
+        };
+        let mut report = Collection {
+            busy_objects: busy,
+            ..Default::default()
+        };
+        for (hash, size) in candidates {
+            let removed = match self.remove_files(&hash).await {
+                Ok(removed) => removed,
+                Err(_) => {
+                    report.failed_objects += 1;
+                    continue;
+                }
+            };
+            let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+            if index.entries.remove(&hash).is_some() {
+                index.bytes -= size;
+                report.removed_objects += 1;
+                if removed {
+                    report.removed_bytes += size;
+                }
+            }
+        }
+        Ok(report)
     }
 
     pub async fn begin(&self) -> Result<Pending, StoreError> {
@@ -441,7 +627,7 @@ impl Store {
                 let Some(hash) = index
                     .entries
                     .iter()
-                    .filter(|(hash, _)| hash.as_str() != keep)
+                    .filter(|(hash, _)| hash.as_str() != keep && !index.readers.contains_key(*hash))
                     .min_by_key(|(_, meta)| meta.last_access)
                     .map(|(hash, _)| hash.clone())
                 else {
@@ -477,7 +663,11 @@ impl Store {
 
     /// Writable and with free filesystem space for at least one maximum-size object.
     pub async fn ready(&self) -> bool {
-        let probe = self.root.join("tmp").join(".ready");
+        let sequence = PENDING.fetch_add(1, Ordering::Relaxed);
+        let probe = self
+            .root
+            .join("tmp")
+            .join(format!(".ready-{}-{sequence}", std::process::id()));
         let writable =
             fs::write(&probe, b"ok").await.is_ok() && fs::remove_file(&probe).await.is_ok();
         writable
@@ -513,6 +703,38 @@ mod tests {
             .await
             .unwrap()
             .2
+    }
+
+    #[tokio::test]
+    async fn pinned_objects_survive_capacity_pressure_and_retry_of_partial_collection() {
+        let (root, store) = store(8, 8).await;
+        put(&store, "a", b"aaaa").await;
+        let (_, path, lease) = store.lease("a").unwrap();
+        store.make_room(4).await.unwrap();
+        put(&store, "b", b"bbbb").await;
+        assert!(matches!(store.make_room(8).await, Err(StoreError::Full)));
+        assert!(path.exists());
+        drop(lease);
+        store.make_room(8).await.unwrap();
+        put(&store, "c", b"cccccccc").await;
+        assert_eq!(store.usage().bytes, 8);
+        let hash = digest(b"c");
+        let meta = Store::meta_path(&root.path().join("store"), &hash);
+        let original = fs::read(&meta).await.unwrap();
+        fs::remove_file(&meta).await.unwrap();
+        fs::create_dir(&meta).await.unwrap();
+        fs::write(meta.join("keep"), b"foreign").await.unwrap();
+        let partial = store.collect_idle(now() + 86401, 86400).await.unwrap();
+        assert_eq!(partial.failed_objects, 1);
+        assert_eq!(fs::read(meta.join("keep")).await.unwrap(), b"foreign");
+        fs::remove_file(meta.join("keep")).await.unwrap();
+        fs::remove_dir(&meta).await.unwrap();
+        fs::write(&meta, original).await.unwrap();
+        let recovered = store.collect_idle(now() + 86401, 86400).await.unwrap();
+        assert_eq!(recovered.failed_objects, 0);
+        assert_eq!(recovered.removed_objects, 1);
+        assert_eq!(recovered.removed_bytes, 0);
+        assert_eq!(store.usage().bytes, 0);
     }
 
     #[tokio::test]

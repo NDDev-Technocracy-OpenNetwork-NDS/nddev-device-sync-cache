@@ -55,11 +55,12 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.store.evicted` | A commit evicted least recently used objects. |
 | `cache.store.read.failed` | A stored object could not be opened for a response. |
 | `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy; `status` is `304` when the client already held the object's entity tag. |
+| `cache.build.stored` | An authenticated admitted writer committed a build object or repeated identical bytes; only the fixed build route, method, status and duration are reported. |
 | `cache.fill.committed`, `cache.fill.failed` | A background download completed or failed, with its duration, in the trace of the request that started it; a `HEAD` on a missing object starts one too. An OCI blob or manifest whose bytes lack the digest its path names fails with `digest_mismatch` and is not stored. |
 | `cache.upstream.available`, `cache.upstream.degraded` | The upstream dependency state changed. |
 | `cache.upstream.failed` | Revalidation failed and a stale copy was served. |
 | `cache.index.config` | The cache answered the crates.io sparse index `config.json` for a loopback client base. |
-| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, or an index configuration or index document request from a host that is not loopback. |
+| `cache.rejected` | A request was refused: unknown route, invalid or disallowed path, unsupported method, an object missing upstream, an index document in no representation the client accepts, an index configuration or index document request from a host that is not loopback, credentials on an OCI pull, or an OCI mirror query inconsistent with its selected registry. |
 | `cache.failed` | A request failed: upstream error class, fetch capacity or store error. |
 
 The forward pool (`nds-forward-pool`) emits the canonical envelope through the same local SDK,
@@ -121,7 +122,22 @@ expired heartbeat.
 The observability requirements in `registry/cache-services.json` are met for the live increment as
 follows. Startup, shutdown, readiness, storage pressure, eviction, upstream degradation and recovery
 are emitted. Served bytes and hit ratio per protocol need a coordinated change of the shared event
-contract. Registry admission events start with the admission increment, and client
-authentication events start with the write endpoints of shared build caches. Acceptance through
+contract. Registry admission events start with the admission increment. The optional build store reports
+authenticated object storage as `cache.build.stored`, reads as `cache.hit`, missing objects as
+`cache.miss`, and authentication or protocol refusals as `cache.rejected`, without credential or
+object identity. Its health collection report distinguishes busy, removed and failed units. Acceptance through
 OpenObserve, including one alert exercised through resolution, requires the deployed observability
 pipeline.
+
+
+## Idle object collection
+
+The existing minute watcher collects rebuildable public downloads when `NDS_CACHE_IDLE_SECONDS`
+is selected, and the optional build store using `NDS_CACHE_BUILD_IDLE_SECONDS`. Reads update
+last use; live response bodies and fills keep their object leases. The public store grants one
+retention window after startup to observe historical objects whose former hit times were not
+durable. A held build read protects only its object, so an unrelated upload can proceed.
+Health exposes collection outcomes, removed bytes and busy objects. A failed partial deletion
+does not discard the remaining index entry, and the next collection can finish it. Unknown
+layouts, future timestamps and foreign files are preserved. These collectors do not remove
+source trees, installed SDKs, environments or release evidence.

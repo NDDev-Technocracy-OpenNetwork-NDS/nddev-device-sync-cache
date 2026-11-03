@@ -182,26 +182,26 @@ async fn concurrent_misses_share_one_upstream_fetch() {
 
 #[tokio::test]
 async fn mutable_objects_revalidate_refresh_and_fall_back_to_stale() {
-    let harness = Harness::start().await;
+    let harness = Harness::expiring().await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "miss".into(), "channel v1".into())
     );
     assert_eq!(harness.get("/origin/files/channel.toml").await.1, "hit");
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "revalidated".into(), "channel v1".into())
     );
     harness.upstream.channel_v2.store(true, Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "miss".into(), "channel v2".into())
     );
     assert_eq!(harness.ready().await.1["upstream"], "ok");
     harness.upstream.broken.store(true, Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get("/origin/files/channel.toml").await,
         (200, "stale".into(), "channel v2".into())
@@ -576,7 +576,7 @@ async fn a_client_that_derives_links_gets_them_empty_from_the_same_stored_docume
 
 #[tokio::test]
 async fn oci_pulls_answer_the_token_challenge_once_and_carry_digests() {
-    let harness = Harness::start().await;
+    let harness = Harness::expiring().await;
     let ping = harness
         .client
         .get(format!("{}/v2/", harness.base))
@@ -630,7 +630,7 @@ async fn oci_pulls_answer_the_token_challenge_once_and_carry_digests() {
     );
 
     // Revalidating the tag reuses the token the registry issued.
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    tokio::time::sleep(support::EXPIRY).await;
     assert_eq!(
         harness.get(&manifest_url[harness.base.len()..]).await.0,
         200
@@ -723,4 +723,98 @@ async fn a_release_asset_cannot_redirect_to_an_unlisted_host() {
     assert_eq!(harness.get(&path).await.0, 502);
     assert_eq!(harness.hits(), 1);
     assert_eq!(harness.objects().await, 0);
+}
+
+#[tokio::test]
+async fn docker_mirror_alias_reuses_prefixed_objects_and_rejects_credentials() {
+    let harness = Harness::start().await;
+    let root = format!("/v2/library/app/blobs/sha256:{LAYER_DIGEST}");
+    let prefixed = format!("/v2/docker.io/library/app/blobs/sha256:{LAYER_DIGEST}");
+    let first = harness.get(&root).await;
+    assert_eq!(
+        (first.0, first.1.as_str(), first.2.as_bytes()),
+        (200, "miss", LAYER)
+    );
+    harness.committed(1).await;
+    let hits = harness.hits();
+    let second = harness.get(&prefixed).await;
+    assert_eq!(
+        (second.0, second.1.as_str(), second.2.as_bytes()),
+        (200, "hit", LAYER)
+    );
+    assert_eq!(harness.hits(), hits);
+    for path in ["/v2/", root.as_str(), prefixed.as_str()] {
+        for name in [
+            header::AUTHORIZATION,
+            header::PROXY_AUTHORIZATION,
+            header::COOKIE,
+        ] {
+            for method in [reqwest::Method::GET, reqwest::Method::HEAD] {
+                let response = harness
+                    .client
+                    .request(method, format!("{}{path}", harness.base))
+                    .header(name.clone(), "private-canary-never-forward")
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            }
+        }
+    }
+    assert_eq!(harness.hits(), hits);
+}
+
+#[tokio::test]
+async fn mirror_namespace_cannot_change_the_selected_registry() {
+    let harness = Harness::start().await;
+    for path in [
+        "/v2/library/app/manifests/latest?ns=ghcr.io",
+        "/v2/docker.io/library/app/manifests/latest?ns=ghcr.io",
+        "/v2/ghcr.io/library/app/manifests/latest?ns=docker.io",
+        "/v2/docker.io/library/app/manifests/latest?ns=docker.io&ns=ghcr.io",
+        "/v2/docker.io/library/app/manifests/latest?token=private-canary-never-forward",
+    ] {
+        assert_eq!(harness.get(path).await.0, 400, "{path}");
+    }
+    assert_eq!(harness.hits(), 0);
+    assert_eq!(
+        harness
+            .get("/v2/ghcr.io/library/app/manifests/latest?ns=ghcr.io")
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        harness
+            .get("/v2/library/app/manifests/latest?ns=docker.io")
+            .await
+            .0,
+        200
+    );
+}
+
+#[tokio::test]
+async fn exact_node_distributions_are_reused_and_mutable_aliases_never_reach_upstream() {
+    let harness = Harness::start().await;
+    let path = "/nodejs/v9.1.2/node-v9.1.2-linux-x64.tar.xz";
+    assert_eq!(
+        harness.get(path).await,
+        (200, "miss".into(), "immutable payload".into())
+    );
+    harness.committed(1).await;
+    harness.upstream.broken.store(true, Ordering::SeqCst);
+    assert_eq!(
+        harness.get(path).await,
+        (200, "hit".into(), "immutable payload".into())
+    );
+    for invalid in [
+        "/nodejs/latest/node-v9.1.2-linux-x64.tar.xz",
+        "/nodejs/index.json",
+        "/nodejs/v9.1.2/node-v9.1.3-linux-x64.tar.xz",
+        "/nodejs/v9.1.2/../../secret",
+        "/nodejs/v9.1.2/a/b",
+    ] {
+        assert_ne!(harness.get(invalid).await.0, 200, "{invalid}");
+    }
+    assert_eq!(harness.hits(), 1);
 }

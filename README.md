@@ -99,6 +99,64 @@ route table. Clients keep their own digest and signature checks. Gradle builds p
 [`contracts/gradle/nds-cache.init.gradle.kts`](contracts/gradle/nds-cache.init.gradle.kts) with
 `--init-script`; it points only the public Maven repositories at the forwarded base.
 
+A native Linux image build may select `--network host --build-arg NDS_CACHE_PORT=PORT`.
+The build then obtains Rust distributions and public crates through that admitted loopback
+cache and fails on its outage; it keeps Git source transport independent. Public hosted builds
+omit the argument. The same optional port is accepted by `just container-check`.
+
+The optional `NDS_CACHE_IDLE_SECONDS` enables idle collection of public download objects in the
+existing minute watcher. Active response bodies and background fills are protected. A restart
+allows one retention window of observation before collecting this store, because historical
+in-memory hit timestamps cannot prove which objects were recently used. Capacity eviction remains
+enabled during that grace. Unknown files and future timestamps are preserved; this is not a
+general filesystem cleaner. Health reports the last completed download collection.
+
+## Shared compiler results
+
+The optional build-result endpoint is a separate store in this process. Enable it only with an
+empty or already owned dedicated directory, its own capacity bound, and a private credentials
+file outside both stores:
+
+| Variable | Meaning |
+| --- | --- |
+| `NDS_CACHE_BUILD_ROOT` | Absolute build store, separate from the public download root. |
+| `NDS_CACHE_BUILD_CREDENTIALS_FILE` | Private regular JSON file; never a synchronized credential. |
+| `NDS_CACHE_BUILD_CAPACITY_BYTES` | Committed build-object capacity. |
+| `NDS_CACHE_BUILD_MAX_OBJECT_BYTES` | Maximum complete upload. |
+| `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention; collection runs in the existing minute watcher. |
+
+For Compose deployments, add `-f compose.build-cache.yaml` after `-f compose.yaml` and
+provide `NDS_CACHE_BUILD_STORE` and `NDS_CACHE_BUILD_CREDENTIALS` outside source. Both bind
+sources must already exist. The credentials file is read-only inside the non-root container.
+
+The credentials file has `{"schema":1,"readers":["<sha256>"],"writers":["<sha256>"]}`.
+Each value hashes the complete HTTP Authorization header, for example a separately provisioned
+Bearer header. Provision unique readers and explicitly admitted trusted writers through the
+estate's credential owner. CI is the default writer class; owner-approved development-device
+writers require a recorded estate admission. A writer credential never belongs in a public/fork
+job, source checkout, log or cache object. The admitted encrypted forward remains required.
+
+`GET` and `HEAD /v1/build-cache/sccache/{hash-path}` read compiler objects; only a writer
+can `PUT` a complete object with Content-Length. A repeated identical upload succeeds; different
+bytes under the same key are refused. The `gradle/{hash}` namespace accepts the same object
+protocol. Authentication is required for reads as well as writes. Sccache's exact `.sccache_check`
+sentinel uses the same authenticated immutable object protocol. Missing objects return 404;
+disabled build storage returns 404. This endpoint never downloads an upstream object.
+
+Sccache selects the admitted loopback base plus `/v1/build-cache`, key prefix `sccache`,
+Bearer token, `SCCACHE_WEBDAV_DISABLE_CREATE_DIR=true`, and `READ_ONLY` for readers.
+An explicitly admitted writer may select `READ_WRITE`. Keep sccache's native compiler, target, source, flags and
+format identities: this is compatible compiler reuse, not a portable Cargo target directory.
+Enable a device only after its native client's real read/write-policy and reuse acceptance;
+the endpoint's source tests do not establish fleet adoption.
+
+Successful reads persist observed use, including at stream completion. Active response bodies
+exclude collection and replacement; a busy pass is reported and retried by the next existing
+watcher tick. Capacity eviction uses the same exclusion. Unknown build metadata and future use
+timestamps are preserved. Health includes build usage, selected retention and the last collection
+report; failed removals remain failures. The public download store keeps its independent
+capacity policy and never accepts client uploads.
+
 ## Device client
 
 [`crates/client`](crates/client) is the device side of the module, the
@@ -167,6 +225,13 @@ caches cannot serve fails visibly. Nothing falls back to the public source on it
 differs from an optional acceleration layer: locked and offline builds keep working from the
 lane's local caches, and the way back to direct downloads is `unbind`.
 
+npm 11.3 rewrites a lockfile's `resolved` tarball URL to the configured registry's host
+but drops the registry path (npm/cli#8319), and later npm still drops it for a package named
+like that path (npm/cli#10159). The cache therefore also serves exactly the immutable
+tarball form `/{package}/-/{package}-{version}.tgz` (and its scoped form) without the `/npm`
+prefix, from the same stored object; package documents and every other path still need
+the prefix, and `npm ci` keeps the lockfile's integrity unchanged.
+
 A project or job can select the central npm route for Bun with
 `--registry "${NDS_CACHE_BASE:?}/npm/"` or a default registry in its own `.npmrc`. The route
 serves Bun the install document with the public registry's tarball links empty, so an online
@@ -213,6 +278,38 @@ receipts remain in the private estate.
 GitHub documents [release asset links](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)
 and [asset digests](https://docs.github.com/en/rest/releases/assets); a tag or download URL alone
 does not establish the caller's expected bytes.
+
+## Native OCI mirrors
+
+Docker Engine can use the cache base directly in its registry-mirrors setting. Requests at
+the registry root, such as /v2/library/alpine/manifests/TAG, resolve to the same stored object
+as the existing /v2/docker.io/library/alpine/manifests/TAG route. This needs no second HTTP
+bridge or store. Explicit ghcr.io, gcr.io and cgr.dev prefixes retain their original owners;
+an unknown registry-looking prefix is refused. OCI requests carrying Authorization,
+Proxy-Authorization or Cookie are rejected before cache lookup or upstream I/O. A mirror
+namespace query is accepted only when it agrees with the route's original registry.
+
+BuildKit supports all four registries with canonical FROM references:
+
+    nds-cache buildkit-config --port 8740 > buildkitd.toml
+    docker buildx create --name MY_OWNED_BUILDER --driver docker-container --buildkitd-config buildkitd.toml
+
+This command prints native TOML and changes no file, binding or running daemon. The caller
+owns the output and builder. The loopback forward must be reachable from that builder's
+network namespace. Existing private registry policies and credential helpers must be reviewed
+before selecting these anonymous public mirrors; this configuration does not replace them.
+
+Docker Engine's native mirror setting covers Docker Hub only. BuildKit's registry mappings
+apply to builds, not arbitrary Docker Engine pulls. Both clients retain native origin fallback.
+A central-only executor therefore also needs qualified egress controls; merely writing a mirror
+configuration does not establish that guarantee. A failed cache must not silently be reported
+as a cache hit or justify disabling digest verification. The client contract records these
+acceptance boundaries separately from device deployment.
+
+Primary references: [Docker registry mirrors](https://docs.docker.com/docker-hub/image-library/mirror/),
+[BuildKit configuration](https://docs.docker.com/build/buildkit/configure/), and
+[containerd registry hosts](https://github.com/containerd/containerd/blob/main/docs/hosts.md).
+Containerd hosts.toml is a separate client integration, not a Docker classic-store setting.
 
 ## Forward pool
 
@@ -392,3 +489,33 @@ evidence belong to the private
 
 Legal terms are in [LICENSE](LICENSE). The release journal is
 [GitHub Releases](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-cache/releases).
+
+## Explicit canonical Pub preparation
+
+The opt-in pub-get command prepares an existing native lock without changing its registry:
+
+    nds-cache pub-get --port 8740 --project PROJECT --pub-cache FRESH_ABSOLUTE_PATH --dart ABSOLUTE_DART
+
+It qualifies the original pubspec.yaml and pubspec.lock before network I/O. This bounded class
+supports public pub.dev hosted dependencies and prepared native SDK rows. Private or additional
+hosted sources, Git/path sources, overrides, workspaces, unknown fields, duplicate keys, aliases
+and unsupported YAML tags are refused. Publishing metadata is not a registry override. Dart
+retains version resolution and SDK interpretation; the client does not author a lock.
+
+Each archive comes only from the selected loopback /pub route and must match the original lock's
+SHA-256. Redirects, caller credentials, automatic proxies and origin fallback are not used.
+All archives are checked before creating a cold namespace or invoking native Dart preload.
+Native Dart alone creates the package-cache layout and runs pub get --offline --enforce-lockfile.
+Original input bytes are rechecked; unexpected edits are reported without overwriting them.
+
+The cold cache path must not exist and its canonical parent must be a protected directory owned
+by the caller. It is created privately. An explicit existing caller-owned cache takes only a
+native offline get: success returns without network or preload; failure preserves it and asks
+for a fresh path. No existing package directory is replaced by this client. Failed native
+preparation leaves its explicitly selected namespace with the caller; temporary archive staging
+is removed. The execution owner retains cache leases, isolation and namespace lifecycle.
+
+Input, object, aggregate staging and package-count limits bound preparation. Cancellation
+terminates only the selected native child process group. This is an explicit project command;
+default bind/status behavior and the unbound Pub default remain separate. Actual consumer,
+SDK/platform and fleet adoption require their own acceptance.

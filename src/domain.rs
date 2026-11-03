@@ -215,6 +215,13 @@ impl Routes {
                     rustup,
                 ),
                 route(
+                    "nodejs",
+                    "/nodejs",
+                    "/nodejs/{path}",
+                    "https://nodejs.org/dist",
+                    nodejs,
+                ),
+                route(
                     "flutter",
                     "/flutter",
                     "/flutter/{path}",
@@ -440,15 +447,64 @@ impl Routes {
 
     /// Resolves a request path. `accept` is the client's `Accept` header, which selects the
     /// representation of an index document.
-    pub fn resolve(&self, path: &str, accept: Option<&str>) -> Result<Target<'_>, Rejection> {
+    /// npm 11.3 replaces the host of a lockfile's `resolved` tarball URL with the configured
+    /// registry's host but drops its path (npm/cli#8319), and later releases still drop it for a
+    /// package whose name equals the path (npm/cli#10159). Such a request arrives as
+    /// `/{package}/-/{package}-{version}.tgz` without the `/npm` prefix. Exactly that immutable
+    /// tarball form is served by the npm route, under the same store key as the prefixed request;
+    /// package documents and every other path still need the prefix.
+    fn npm_tarball_at_root(&self, path: &str) -> Option<Target<'_>> {
+        let route = self.routes.iter().find(|route| route.id == "npm")?;
+        let subpath = (route.canonical)(path);
+        if !valid_subpath(&subpath, None) || (route.accept)(&subpath) != Some(Freshness::Immutable)
+        {
+            return None;
+        }
+        Some(Target {
+            route,
+            subpath: subpath.into_owned(),
+            freshness: Freshness::Immutable,
+            media_type: None,
+            answered: false,
+        })
+    }
+
+    /// Docker Engine's mirror protocol omits the original registry prefix. Reuse the
+    /// existing Docker Hub route and object key; an apparent foreign registry is not a
+    /// Docker Hub namespace. Explicit registry-prefixed routes retain precedence.
+    fn docker_hub_at_root(&self, path: &str) -> Option<Target<'_>> {
+        let path = path.strip_prefix("/v2")?;
+        let first = path.strip_prefix('/')?.split('/').next()?;
+        if first.contains(['.', ':']) {
+            return None;
+        }
         let route = self
             .routes
             .iter()
-            .find(|route| {
-                path.strip_prefix(route.prefix)
-                    .is_some_and(|rest| rest.starts_with('/'))
-            })
-            .ok_or(Rejection::UnknownRoute)?;
+            .find(|route| route.oci && route.prefix == "/v2/docker.io")?;
+        let subpath = (route.canonical)(path);
+        if !valid_subpath(&subpath, None) {
+            return None;
+        }
+        Some(Target {
+            route,
+            freshness: (route.accept)(&subpath)?,
+            subpath: subpath.into_owned(),
+            media_type: None,
+            answered: false,
+        })
+    }
+
+    pub fn resolve(&self, path: &str, accept: Option<&str>) -> Result<Target<'_>, Rejection> {
+        let Some(route) = self.routes.iter().find(|route| {
+            path.strip_prefix(route.prefix)
+                .is_some_and(|rest| rest.starts_with('/'))
+        }) else {
+            return self
+                .docker_hub_at_root(path)
+                .or_else(|| self.npm_tarball_at_root(path))
+                .ok_or(Rejection::UnknownRoute);
+        };
         let subpath = (route.canonical)(&path[route.prefix.len()..]);
         // An index document may be a directory URL, as PyPI project pages are.
         let checked = match route.index {
@@ -467,7 +523,9 @@ impl Routes {
                 answered: true,
             });
         }
-        let freshness = (route.accept)(&subpath).ok_or(Rejection::NotAllowed)?;
+        let Some(freshness) = (route.accept)(&subpath) else {
+            return self.npm_tarball_at_root(path).ok_or(Rejection::NotAllowed);
+        };
         let media_type = match (&route.index, freshness) {
             (Some(index), Freshness::Revalidate) => {
                 Some(negotiate(index.media_types, accept).ok_or(Rejection::NotAcceptable)?)
@@ -560,6 +618,43 @@ fn rustup(path: &str) -> Option<Freshness> {
     } else {
         Some(Freshness::Immutable)
     }
+}
+
+/// Exact stable Node distribution versions and checksum documents, never a mutable alias.
+fn nodejs(path: &str) -> Option<Freshness> {
+    let (version, file) = path.strip_prefix('/')?.split_once('/')?;
+    let numbers: Vec<_> = version.strip_prefix('v')?.split('.').collect();
+    if numbers.len() != 3
+        || numbers
+            .iter()
+            .any(|n| n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()))
+        || file.contains('/')
+    {
+        return None;
+    }
+    if matches!(
+        file,
+        "SHASUMS256.txt" | "SHASUMS256.txt.asc" | "SHASUMS256.txt.sig"
+    ) {
+        return Some(Freshness::Immutable);
+    }
+    let target = file.strip_prefix(&format!("node-{version}-"))?;
+    let target = [".tar.gz", ".tar.xz", ".zip", ".7z", ".msi"]
+        .iter()
+        .find_map(|extension| target.strip_suffix(extension))?;
+    matches!(
+        target,
+        "linux-x64"
+            | "linux-arm64"
+            | "linux-armv7l"
+            | "linux-ppc64le"
+            | "linux-s390x"
+            | "darwin-x64"
+            | "darwin-arm64"
+            | "win-x64"
+            | "win-arm64"
+    )
+    .then_some(Freshness::Immutable)
 }
 
 fn flutter(path: &str) -> Option<Freshness> {
@@ -1579,6 +1674,50 @@ mod tests {
     }
 
     #[test]
+    fn npm_tarballs_that_lost_the_registry_prefix_reach_the_same_object() {
+        let routes = Routes::production();
+        let key = |path: &str| {
+            let target = routes.resolve(path, None).unwrap();
+            let upstream = target.upstream_url();
+            (target.route.id, target.subpath, target.freshness, upstream)
+        };
+        // npm 11.3 drops the registry path when it rewrites a lockfile's resolved URL.
+        for (dropped, prefixed) in [
+            (
+                "/is-number/-/is-number-7.0.0.tgz",
+                "/npm/is-number/-/is-number-7.0.0.tgz",
+            ),
+            (
+                "/@types/node/-/node-22.9.0.tgz",
+                "/npm/@types/node/-/node-22.9.0.tgz",
+            ),
+            (
+                "/@types%2fnode/-/node-22.9.0.tgz",
+                "/npm/@types%2fnode/-/node-22.9.0.tgz",
+            ),
+            // A package named like the registry path (npm/cli#10159) or like another route.
+            ("/npm/-/npm-11.19.1.tgz", "/npm/npm/-/npm-11.19.1.tgz"),
+            ("/pypi/-/pypi-1.0.0.tgz", "/npm/pypi/-/pypi-1.0.0.tgz"),
+        ] {
+            assert_eq!(key(dropped), key(prefixed), "{dropped}");
+        }
+        assert_eq!(
+            key("/npm/-/npm-11.19.1.tgz").3,
+            "https://registry.npmjs.org/npm/-/npm-11.19.1.tgz"
+        );
+        // Only the immutable tarball form is served without the prefix.
+        for path in [
+            "/is-number",
+            "/is-number/-/other-7.0.0.tgz",
+            "/is-number/-/is-number-latest.tgz",
+            "/-/v1/search",
+            "/elsewhere/files/a",
+        ] {
+            assert!(routes.resolve(path, None).is_err(), "{path}");
+        }
+    }
+
+    #[test]
     fn classifies_pypi_objects() {
         use Freshness::*;
         let file = "/pypi-files/packages/6b/34/415834bfdafca3c5f451532e8a8d9ba89a21c9743a0c59fbd0205c7f9426/six-1.16.0-py2.py3-none-any.whl";
@@ -1802,6 +1941,39 @@ mod tests {
             class("/go/go1.27.3.linux-amd64.tar.gz"),
             Ok(("go", Immutable))
         );
+    }
+
+    #[test]
+    fn docker_hub_mirror_and_prefixed_pulls_have_one_store_identity() {
+        let routes = Routes::production();
+        for suffix in [
+            "/library/alpine/manifests/3.22",
+            "/alpine/manifests/3.22",
+            "/org/app/manifests/sha256:28a33e0390da2b341d05e53803c6766977039baedfc8a82a4910d5acc4755b66",
+            "/library/alpine/blobs/sha256:28a33e0390da2b341d05e53803c6766977039baedfc8a82a4910d5acc4755b66",
+        ] {
+            let root = routes.resolve(&format!("/v2{suffix}"), None).unwrap();
+            let prefixed = routes
+                .resolve(&format!("/v2/docker.io{suffix}"), None)
+                .unwrap();
+            assert_eq!(root.key(), prefixed.key());
+            assert_eq!(root.upstream_url(), prefixed.upstream_url());
+            assert_eq!(root.digest(), prefixed.digest());
+        }
+        for path in [
+            "/v2/quay.io/org/app/manifests/latest",
+            "/v2/registry:5000/org/app/manifests/latest",
+            "/v2/library/app/tags/list",
+            "/v2/library/app/blobs/uploads/",
+            "/v2/../app/manifests/latest",
+            "/v2/%2e%2e/app/manifests/latest",
+        ] {
+            assert!(routes.resolve(path, None).is_err(), "{path}");
+        }
+        let ghcr = routes
+            .resolve("/v2/ghcr.io/org/app/manifests/latest", None)
+            .unwrap();
+        assert_eq!(ghcr.route.id, "ghcr");
     }
 
     #[test]

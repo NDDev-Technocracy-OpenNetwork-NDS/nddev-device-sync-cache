@@ -3,8 +3,20 @@
 FROM rust:1.99.0-trixie@sha256:81015672d6939b0265f09adf96d5de125482bb1330106076956b0518e74edc90 AS build
 WORKDIR /build
 ARG TARGETARCH
+# Native private builders may select an admitted loopback cache using host networking.
+# Public hosted CI leaves this unset and retains its independent public source route.
+ARG NDS_CACHE_PORT
 COPY rust-toolchain.toml ./
-RUN test "$(dpkg --print-architecture)" = "$TARGETARCH" && rustup show active-toolchain && rustc --version
+RUN test "$(dpkg --print-architecture)" = "$TARGETARCH" \
+    && if [ -n "$NDS_CACHE_PORT" ]; then \
+         case "$NDS_CACHE_PORT" in *[!0-9]*) exit 2;; esac; \
+         test "$NDS_CACHE_PORT" -ge 1 && test "$NDS_CACHE_PORT" -le 65535 \
+         && test ! -e "$CARGO_HOME/config.toml" \
+         && printf '[source.crates-io]\nreplace-with = "nds-cache"\n[source.nds-cache]\nregistry = "sparse+http://127.0.0.1:%s/crates-index/"\n' "$NDS_CACHE_PORT" > "$CARGO_HOME/config.toml" \
+         && RUSTUP_DIST_SERVER="http://127.0.0.1:$NDS_CACHE_PORT/rustup" \
+            RUSTUP_UPDATE_ROOT="http://127.0.0.1:$NDS_CACHE_PORT/rustup/rustup" rustup show active-toolchain; \
+       else rustup show active-toolchain; fi \
+    && rustc --version
 ARG NDS_SOURCE_COMMIT
 ENV NDS_SOURCE_COMMIT=${NDS_SOURCE_COMMIT}
 COPY Cargo.toml Cargo.lock build.rs ./
