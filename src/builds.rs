@@ -139,10 +139,14 @@ impl BuildStore {
         }
         let (store, _) =
             Store::open_preserving_unknown(&root, settings.capacity, settings.max_object).await?;
+        let retention = settings
+            .retention
+            .as_secs()
+            .max(crate::store::MIN_RETENTION);
         Ok(Self {
-            store,
+            store: store.with_retention(retention),
             credentials,
-            retention: settings.retention,
+            retention: Duration::from_secs(retention),
             gate: Arc::new(RwLock::new(())),
             touches: Mutex::new(()),
             uploads: Semaphore::new(2),
@@ -306,7 +310,7 @@ impl BuildStore {
         else {
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         };
-        if !self.store.ready().await {
+        if self.store.preflight(key, length, false).is_err() || !self.store.ready().await {
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
         let Ok(mut pending) = self.store.begin().await else {
@@ -345,9 +349,6 @@ impl BuildStore {
                 StatusCode::SERVICE_UNAVAILABLE
             }
             .into_response();
-        }
-        if self.store.make_room(pending.size()).await.is_err() {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
         match self.store.commit(key, pending, Validators::default()).await {
             Ok(_) => StatusCode::CREATED.into_response(),

@@ -36,6 +36,23 @@ async fn immutable_objects_are_fetched_once_and_then_served_from_the_store() {
 }
 
 #[tokio::test]
+async fn a_full_download_store_refuses_a_new_body_and_keeps_its_warm_hit() {
+    let harness = Harness::with_capacity(17).await;
+    let existing = "/origin/files/immutable.bin";
+    assert_eq!(harness.get(existing).await.0, 200);
+    harness.committed(1).await;
+    let new = "/nodejs/v9.1.2/node-v9.1.2-linux-x64.tar.xz";
+    let refused = harness.get(new).await;
+    assert_eq!(refused.0, 503, "{refused:?}");
+    assert_eq!(
+        harness.get(existing).await,
+        (200, "hit".into(), "immutable payload".into())
+    );
+    harness.committed(1).await;
+    assert_eq!(harness.hits(), 2);
+}
+
+#[tokio::test]
 async fn the_checksum_database_answers_supported_and_passes_its_signed_notes_through() {
     let harness = Harness::start().await;
     // go asks whether the proxy mirrors the database; the cache says so without its upstream.
