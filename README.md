@@ -157,6 +157,9 @@ timestamps are preserved. Health includes build usage, selected retention and th
 report; failed removals remain failures. The public download store keeps its independent
 capacity policy and never accepts client uploads.
 
+The [runner SDK cache contract](docs/runner-cache-tiers.md) describes when a managed runner
+uses an existing L2 download route and how to measure that boundary.
+
 ## Device client
 
 [`crates/client`](crates/client) is the device side of the module, the

@@ -37,6 +37,8 @@ pub struct Upstream {
     pub tokens: AtomicUsize,
     pub manifest_accepts: Mutex<Vec<String>>,
     pub release_credentials: AtomicBool,
+    pub browser_started: tokio::sync::Notify,
+    pub release_browser: tokio::sync::Notify,
 }
 
 /// The test registry's layer and the SHA-256 hex digest of it, and a digest its bytes lack.
@@ -180,6 +182,16 @@ async fn slow(State(state): State<Arc<Upstream>>) -> Response {
     state.hits.fetch_add(1, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(300)).await;
     "slow payload".into_response()
+}
+
+async fn browser_archive(State(state): State<Arc<Upstream>>) -> Response {
+    state.hits.fetch_add(1, Ordering::SeqCst);
+    if state.broken.load(Ordering::SeqCst) {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    state.browser_started.notify_one();
+    state.release_browser.notified().await;
+    "browser archive".into_response()
 }
 
 async fn channel(State(state): State<Arc<Upstream>>, headers: HeaderMap) -> Response {
@@ -333,6 +345,10 @@ impl Harness {
                 .route("/v9.1.2/node-v9.1.2-linux-x64.tar.xz", get(immutable))
                 .route("/v9.1.2/SHASUMS256.txt", get(immutable))
                 .route("/files/slow.bin", get(slow))
+                .route(
+                    "/builds/cft/1.2.3.4/linux64/chrome-linux64.zip",
+                    get(browser_archive),
+                )
                 .route("/files/channel.toml", get(channel))
                 .route("/files/big.bin", get(big))
                 .route("/files/stream.bin", get(stream))
@@ -402,9 +418,17 @@ impl Harness {
             .unwrap()
             .clone();
         node.upstream = format!("http://{origin}");
+        let mut playwright = Routes::production()
+            .routes()
+            .iter()
+            .find(|route| route.id == "playwright")
+            .unwrap()
+            .clone();
+        playwright.upstream = format!("http://{origin}");
         let routes = Routes::new(
             vec![
                 node,
+                playwright,
                 route("/origin", "/origin/{path}", format!("http://{origin}")),
                 route(
                     "/redirector",
