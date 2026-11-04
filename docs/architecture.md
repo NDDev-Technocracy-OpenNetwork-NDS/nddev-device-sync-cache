@@ -103,8 +103,11 @@ objects use the same streamed download and digest verification as content-addres
 without OCI authentication or response headers. A replaced release asset cannot poison the old
 digest's cache entry. The downloader still verifies the completed file before using it.
 
-The store has a configured capacity. Commits that would exceed it evict the least recently used
-objects first. Storage pressure, eviction and failed commits are reported, never hidden. The cache
+The store has a configured capacity. Under pressure, admission selects enough unleased
+objects with confirmed idle time, oldest first, before publishing a new object. Both stores
+use at least a 24-hour floor. Download admission also observes the restart grace.
+An insufficient safe set causes a capacity refusal. Read leases cover the complete body.
+Storage pressure, eviction and failed commits are reported. The cache
 holds acceleration state only: losing it costs downloads, not data.
 
 ## Device client
