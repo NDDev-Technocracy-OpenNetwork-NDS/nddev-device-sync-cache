@@ -181,6 +181,107 @@ async fn concurrent_misses_share_one_upstream_fetch() {
 }
 
 #[tokio::test]
+async fn a_browser_fill_does_not_block_build_results_or_warm_downloads() {
+    const BROWSER: &str = "/playwright/builds/cft/1.2.3.4/linux64/chrome-linux64.zip";
+    const DEPENDENCY: &str = "/origin/files/immutable.bin";
+    const READER: &str = "Bearer synthetic-reader";
+    const WRITER: &str = "Bearer synthetic-ci-writer";
+    const WAIT: Duration = Duration::from_secs(10);
+
+    let harness = Arc::new(Harness::start().await);
+    let build = |digit: char| {
+        format!(
+            "{}/v1/build-cache/sccache/{}",
+            harness.base,
+            digit.to_string().repeat(64)
+        )
+    };
+    let existing = build('a');
+    let new = build('b');
+    assert_eq!(harness.get(DEPENDENCY).await.1, "miss");
+    assert_eq!(
+        harness
+            .client
+            .put(&existing)
+            .header(header::AUTHORIZATION, WRITER)
+            .body("compiled")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+
+    let requests = (0..8)
+        .map(|_| {
+            let harness = harness.clone();
+            tokio::spawn(async move { harness.get(BROWSER).await })
+        })
+        .collect::<Vec<_>>();
+    tokio::time::timeout(WAIT, harness.upstream.browser_started.notified())
+        .await
+        .expect("browser request reached the upstream");
+    tokio::time::timeout(WAIT, async {
+        assert_eq!(
+            harness.get(DEPENDENCY).await,
+            (200, "hit".into(), "immutable payload".into())
+        );
+        let hit = harness
+            .client
+            .get(&existing)
+            .header(header::AUTHORIZATION, READER)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(hit.status(), StatusCode::OK);
+        assert_eq!(hit.text().await.unwrap(), "compiled");
+        assert_eq!(
+            harness
+                .client
+                .put(&new)
+                .header(header::AUTHORIZATION, WRITER)
+                .body("new compiled result")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            harness.client.get(&new).send().await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+    })
+    .await
+    .expect("warm dependency and build operations completed before browser release");
+    assert!(requests.iter().all(|request| !request.is_finished()));
+    harness.upstream.release_browser.notify_one();
+
+    tokio::time::timeout(WAIT, async {
+        for request in requests {
+            let (status, _, body) = request.await.unwrap();
+            assert_eq!((status, body.as_str()), (200, "browser archive"));
+        }
+    })
+    .await
+    .expect("the burst shared the released browser fill");
+
+    harness.upstream.broken.store(true, Ordering::SeqCst);
+    assert_eq!(
+        harness.get(BROWSER).await,
+        (200, "hit".into(), "browser archive".into())
+    );
+    assert_eq!(harness.hits(), 2, "one dependency and one browser fetch");
+    let counted = harness.counted("/playwright/{path}").await;
+    let outcomes = &counted["outcomes"];
+    assert_eq!(outcomes["miss"], 1);
+    let served = ["miss", "joined", "hit"].map(|outcome| outcomes[outcome].as_u64().unwrap());
+    assert_eq!(served.iter().sum::<u64>(), 9);
+    assert_eq!(counted["bytes_filled"], "browser archive".len());
+    assert_eq!(counted["bytes_sent"], 9 * "browser archive".len());
+}
+
+#[tokio::test]
 async fn mutable_objects_revalidate_refresh_and_fall_back_to_stale() {
     let harness = Harness::expiring().await;
     assert_eq!(
