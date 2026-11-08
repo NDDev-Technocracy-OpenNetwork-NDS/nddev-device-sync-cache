@@ -165,7 +165,3 @@ container-check commit=`git rev-parse HEAD`:
       and all(."source.commit" == $commit and ."service.name" == "nddev-device-sync-cache")' \
         "$work/events.jsonl" > /dev/null
     echo "container ready, identified and observable"
-
-# Run the std-0001 structural check with a prepared nddev validator.
-structure:
-    "${NDDEV_STRUCTURE_VALIDATOR:-nddev}" check --root .
