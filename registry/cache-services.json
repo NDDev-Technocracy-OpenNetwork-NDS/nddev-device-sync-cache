@@ -168,9 +168,9 @@
  },
  "observability": {
   "standards": [
-   "nddev-device-sync standarts/05-observability.md",
-   "nddev-device-sync standarts/10-operations.md",
-   "nddev-device-sync standarts/15-observability-and-telemetry-standard.md"
+   "docs/operations.md",
+   "docs/architecture.md",
+   "contracts/clients.json"
   ],
   "telemetry_contract": "nddev-device-sync-telemetry, the code-first SDK provided by nddev-device-sync-observability; the service consumes it through an exact source revision and emits the canonical envelope with module = cache.",
   "pipeline": "cache process -> nddev-observability -> Vector -> OpenObserve; only the central pipeline holds OpenObserve credentials.",

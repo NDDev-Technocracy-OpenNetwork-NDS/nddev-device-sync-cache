@@ -2,7 +2,7 @@
 //!
 //! The keys are the matched route templates of the fixed route table and the outcome classes that
 //! the request events already carry, so the set is bounded and the counters cannot drift from the
-//! events. Nothing identifies a request, client, project or package (STD-0011 R-0017). The
+//! events. Nothing identifies a request, client, project or package. The
 //! counters live in memory and start from zero when the process starts; they are an observation,
 //! not a receipt.
 

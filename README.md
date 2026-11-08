@@ -463,7 +463,7 @@ the container check also needs Docker and `curl`:
 
 ```sh
 just setup                      # install the pinned Rust JSON Schema validator into .tools
-just check                      # run every local check below except the container and structure checks
+just check                      # run every local check below except the container check
 just registry-check             # validate schemas, registry files and decisions-to-state consistency
 just registry-test              # confirm the schemas reject representative invalid content
 just test                       # unit tests and real-socket service tests against local upstreams
@@ -471,19 +471,16 @@ just clippy                     # deny every Clippy warning
 just dependencies-check         # RustSec advisories, licenses and dependency sources
 just journal-check origin/main  # confirm the journal only appends to that revision
 just container-check            # build and exercise the hardened service container
-just structure                  # std-0001 structural check with a prepared nddev validator
 ```
 
-Pull requests run the registry checks, the journal check and the STD-0004 native Rust contract on
-GitHub-hosted runners. `main` pushes also run the advisory audit and the container check. The
-std-0001 validator is private, so the structural check runs where it is prepared.
+Pull requests run the registry checks, journal check and native Rust checks on
+GitHub-hosted runners. `main` pushes also run the advisory audit and container check.
 
 ## Privacy boundary
 
 This public repository contains no private project names, device inventory, endpoints or
 credentials. Exception-to-project bindings, the cache host and volume values and the survey
-evidence belong to the private
-[estate](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-estate).
+evidence belong in deployment configuration outside this source repository.
 
 ## License and releases
 

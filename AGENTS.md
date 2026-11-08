@@ -1,11 +1,8 @@
 # nddev-device-sync-cache working contract
 
-Public AGPL-3.0-only NDDev OpenNetwork module. Read [README.md](README.md) first. The NDS
-product standards selected by [standarts.lock](standarts.lock) live in the
-[system root](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync) `standarts/`;
-[module.yaml](module.yaml) is the NDS module descriptor and [.nds/nddev.yaml](.nds/nddev.yaml)
-selects the NDDev structural contract.
-The parent task is
+Public AGPL-3.0-only NDDev OpenNetwork module. Read [README.md](README.md) first. Read
+module.yaml and contracts.lock for component identity and source provenance. The parent
+task is
 [nddev-device-sync#75](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync/issues/75).
 
 ## Constraints
@@ -40,5 +37,4 @@ The parent task is
   tests, Clippy and the dependency policy.
 - `just journal-check REVISION` before integration; the journal never rewrites recorded lines.
 - `just container-check` for any change to the image, the Compose files or process lifecycle.
-- `just structure` with a prepared std-0001 `nddev`; the validator is private, so CI does not run it.
 - A schema change keeps `just registry-test` rejecting each covered invalid case.
