@@ -2,7 +2,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 set positional-arguments
 
 validator_version := "0.60.1"
-rust_toolchain := "1.99.1"
 tools := justfile_directory() / ".tools"
 validator := tools / "bin" / "jsonschema-cli"
 
@@ -12,10 +11,13 @@ default:
 
 # Install the pinned Rust JSON Schema validator into .tools with the pinned Rust toolchain.
 setup:
-    cargo +{{ rust_toolchain }} install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
+    cargo fetch --locked
+    cargo install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
 
 # Run every local check: registry, formatting, tests, lints and dependency policy.
-check: registry-check registry-test fmt-check test clippy dependencies-check
+check: registry-check fmt-check
+    just --fmt --check
+    cargo deny --workspace --locked check licenses sources
 
 # Validate the schemas, the registry files, the client contract and decisions-to-state consistency.
 registry-check:
@@ -97,7 +99,7 @@ fmt-check:
     cargo fmt --all -- --check
 
 # Run the unit tests and the real-socket service tests against isolated local upstreams.
-test:
+test: build audit clippy registry-test
     cargo test --locked --workspace --all-targets --jobs 4
     cargo test --locked --workspace --doc --jobs 4
 
@@ -165,3 +167,17 @@ container-check commit=`git rev-parse HEAD`:
       and all(."source.commit" == $commit and ."service.name" == "nddev-device-sync-cache")' \
         "$work/events.jsonl" > /dev/null
     echo "container ready, identified and observable"
+
+# Compile the locked release workspace.
+build:
+    cargo build --locked --workspace --release --jobs 4
+
+# Check current RustSec advisories.
+audit:
+    cargo audit --deny warnings
+
+# Run source checks, native tests and the advisory audit.
+verify: check test audit build journal-check container-check
+
+# Run the portable CI contract; native fixtures have explicit acceptance recipes.
+ci-verify: check test build audit
