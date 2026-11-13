@@ -165,3 +165,21 @@ container-check commit=`git rev-parse HEAD`:
       and all(."source.commit" == $commit and ."service.name" == "nddev-device-sync-cache")' \
         "$work/events.jsonl" > /dev/null
     echo "container ready, identified and observable"
+
+# The checks the former CI library ran from .github/nddev-ci.toml; CI calls them through
+# `just test` on a pull request and `just verify` on dev.
+ci-extras:
+    cargo audit --deny warnings
+
+ci-policy:
+    cargo deny --locked check licenses sources
+
+ci-build:
+    cargo build --locked --workspace --release --jobs 4
+
+verify:
+    just check
+    just test
+    just ci-policy
+    just ci-extras
+    just ci-build
