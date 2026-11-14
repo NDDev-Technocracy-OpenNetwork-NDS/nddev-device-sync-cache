@@ -19,7 +19,7 @@ default-members = [".", "crates/client", "crates/egress", "crates/pool"]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 bytes = "1.12"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
-nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "586597486d67a48e190d1970653927d83beb687f" }
+nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "c942a9ec95b11824d86e9842d2c0e3be340f3728" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
 rustix = { version = "1.1.5", features = ["fs"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

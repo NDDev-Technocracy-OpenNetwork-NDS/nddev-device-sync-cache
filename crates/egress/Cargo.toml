@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 nddev-device-sync-cache = { path = "../.." }
-nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "586597486d67a48e190d1970653927d83beb687f" }
+nddev-device-sync-telemetry = { git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-observability.git", rev = "c942a9ec95b11824d86e9842d2c0e3be340f3728" }
 thiserror = "2.0"
 tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
