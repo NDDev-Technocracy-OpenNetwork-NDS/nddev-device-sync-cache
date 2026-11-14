@@ -1,6 +1,6 @@
 # Bootstrap image has the complete architecture index. The repository toolchain
 # selects the current compiler independently of Docker tag publication timing.
-FROM rust:1.99.0-trixie@sha256:81015672d6939b0265f09adf96d5de125482bb1330106076956b0518e74edc90 AS build
+FROM rust:1.99.1-trixie@sha256:8a4e90c7946b74626488b1446f712c0fe0ed1a596cbd3d871684bc9c5433ae07 AS build
 WORKDIR /build
 ARG TARGETARCH
 # Native private builders may select an admitted loopback cache using host networking.
