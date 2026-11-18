@@ -33,8 +33,9 @@ task is
 
 ## Checks
 
-- `just setup` once, then `just check` before integration; it runs the registry checks, formatting,
-  tests, Clippy and the dependency policy.
+- Prepare the schema validator with `just setup` on an execution host. `just check` validates the
+  registry and formatting without compiling. Run `just test` on an execution host for the native
+  tests, Clippy and dependency policy.
 - `just journal-check REVISION` before integration; the journal never rewrites recorded lines.
 - `just container-check` for any change to the image, the Compose files or process lifecycle.
 - A schema change keeps `just registry-test` rejecting each covered invalid case.
