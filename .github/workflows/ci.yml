@@ -20,5 +20,4 @@ jobs:
       setup: true
       rust-version: 1.100.0
       rust-components: clippy,rustfmt
-      tools: cargo-deny@0.21.0
       tool-assets: .github/ci-tools.json
