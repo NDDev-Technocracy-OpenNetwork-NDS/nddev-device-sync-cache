@@ -463,10 +463,10 @@ the container check also needs Docker and `curl`:
 
 ```sh
 just setup                      # install the pinned Rust JSON Schema validator into .tools
-just check                      # run every local check below except the container check
+just check                      # check the registry and formatting without compiling
 just registry-check             # validate schemas, registry files and decisions-to-state consistency
 just registry-test              # confirm the schemas reject representative invalid content
-just test                       # unit tests and real-socket service tests against local upstreams
+just test                       # native service tests, Clippy and dependency policy
 just clippy                     # deny every Clippy warning
 just dependencies-check         # RustSec advisories, licenses and dependency sources
 just journal-check origin/main  # confirm the journal only appends to that revision

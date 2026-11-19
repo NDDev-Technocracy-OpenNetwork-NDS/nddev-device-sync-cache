@@ -2,7 +2,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 set positional-arguments
 
 validator_version := "0.60.1"
-rust_toolchain := "1.99.1"
 tools := justfile_directory() / ".tools"
 validator := tools / "bin" / "jsonschema-cli"
 
@@ -10,12 +9,12 @@ validator := tools / "bin" / "jsonschema-cli"
 default:
     @just --list
 
-# Install the pinned Rust JSON Schema validator into .tools with the pinned Rust toolchain.
+# Install the pinned Rust JSON Schema validator into .tools.
 setup:
-    cargo +{{ rust_toolchain }} install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
+    cargo install --locked --version {{ validator_version }} jsonschema-cli --root "{{ tools }}"
 
-# Run every local check: registry, formatting, tests, lints and dependency policy.
-check: registry-check registry-test fmt-check test clippy dependencies-check
+# Check the registry and formatting without compiling.
+check: registry-check registry-test fmt-check
 
 # Validate the schemas, the registry files, the client contract and decisions-to-state consistency.
 registry-check:
@@ -96,10 +95,12 @@ journal-check revision="origin/main":
 fmt-check:
     cargo fmt --all -- --check
 
-# Run the unit tests and the real-socket service tests against isolated local upstreams.
+# Run native service tests, compiler lints and dependency policy on an execution host.
 test:
     cargo test --locked --workspace --all-targets --jobs 4
     cargo test --locked --workspace --doc --jobs 4
+    just clippy
+    just dependencies-check
 
 # Deny every Clippy warning across all targets.
 clippy:
@@ -180,6 +181,4 @@ ci-build:
 verify:
     just check
     just test
-    just ci-policy
-    just ci-extras
     just ci-build
