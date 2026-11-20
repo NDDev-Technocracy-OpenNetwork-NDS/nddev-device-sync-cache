@@ -18,7 +18,7 @@ use tracing::Instrument;
 use crate::{
     counters::Counters,
     domain::{CRATES_CONFIG_TEMPLATE, Freshness, Links, Rejection, Routes, Target},
-    store::{Eviction, Meta, Pending, Progress, Store, StoreError, Validators, now},
+    store::{Eviction, Meta, Pending, Progress, ReadLease, Store, StoreError, Validators, now},
     upstream::{Body, Fetched, Upstream, UpstreamError},
 };
 
@@ -248,12 +248,6 @@ impl Cache {
         }
     }
 
-    pub fn observe_use(&self, path: &str, accept: Option<&str>) {
-        if let Ok(target) = self.routes.resolve(path, accept) {
-            let _ = self.store.get(&target.key());
-        }
-    }
-
     pub fn has_active_fills(&self) -> bool {
         self.fills
             .lock()
@@ -321,13 +315,13 @@ impl Cache {
         accept: Option<&str>,
         base: Option<&str>,
         user_agent: Option<&str>,
-    ) -> Result<Delivery, ServeError> {
+    ) -> Result<(Delivery, Option<ReadLease>), ServeError> {
         let target = self
             .routes
             .resolve(path, accept)
             .map_err(ServeError::Rejected)?;
         if target.answered {
-            return Ok(Delivery::Answered);
+            return Ok((Delivery::Answered, None));
         }
         let links = match target.index() {
             Some(index) => Some(Box::new(Links::new(
@@ -338,18 +332,18 @@ impl Cache {
             None => None,
         };
         let key = target.key();
-        if let Some((meta, path)) = self
-            .store
-            .get(&key)
-            .filter(|(meta, _)| self.fresh(&target, meta))
-        {
-            return Ok(Delivery::Stored(Object {
-                links,
-                ..stored(meta, path, Served::Hit)
-            }));
+        let (object, lease) = self.store.protect(&key).map_err(ServeError::Store)?;
+        if let Some((meta, path)) = object.filter(|(meta, _)| self.fresh(&target, meta)) {
+            return Ok((
+                Delivery::Stored(Object {
+                    links,
+                    ..stored(meta, path, Served::Hit)
+                }),
+                Some(lease),
+            ));
         }
         if let Some(filling) = self.joined(&key) {
-            return Ok(Delivery::Filling(filling));
+            return Ok((Delivery::Filling(filling), Some(lease)));
         }
         let flight = {
             let mut flights = self
@@ -373,7 +367,7 @@ impl Cache {
         {
             flights.remove(&key);
         }
-        result
+        result.map(|delivery| (delivery, Some(lease)))
     }
 
     async fn permit(&self) -> Result<OwnedSemaphorePermit, ServeError> {
@@ -421,7 +415,13 @@ impl Cache {
         if length.is_some_and(|length| length > self.store.max_object()) {
             return Err(ServeError::Store(StoreError::TooLarge));
         }
+        if let Some(length) = length {
+            self.store
+                .preflight(key, length, true)
+                .map_err(ServeError::Store)?;
+        }
         let pending = self.store.begin().await.map_err(ServeError::Store)?;
+        let (_, lease) = self.store.protect(key).map_err(ServeError::Store)?;
         let (progress, follower) = watch::channel(Progress::Writing(0));
         let fill = Arc::new(Fill {
             temp: pending.path().to_owned(),
@@ -453,6 +453,7 @@ impl Cache {
             started: Instant::now(),
             span: span.clone(),
             _permit: permit,
+            _lease: lease,
         };
         tokio::spawn(download(job).instrument(span));
         Ok(Delivery::Filling(fill.follow(Served::Miss)))
@@ -481,8 +482,16 @@ impl Cache {
                 Ok(stored(meta, path, Served::Revalidated))
             }
             Ok(Fetched::NotFound) => Err(ServeError::NotFound),
-            Ok(Fetched::Content(validators, _, mut body)) => {
+            Ok(Fetched::Content(validators, length, mut body)) => {
                 let written = async {
+                    if let Some(length) = length {
+                        if length > self.store.max_object() {
+                            return Err(ServeError::Store(StoreError::TooLarge));
+                        }
+                        self.store
+                            .preflight(key, length, true)
+                            .map_err(ServeError::Store)?;
+                    }
                     let mut pending = self.store.begin().await.map_err(ServeError::Store)?;
                     while let Some(chunk) = body.next().await {
                         let chunk = chunk.map_err(ServeError::Upstream)?;
@@ -548,6 +557,7 @@ struct Download {
     started: Instant,
     span: tracing::Span,
     _permit: OwnedSemaphorePermit,
+    _lease: ReadLease,
 }
 
 /// Writes the body to the store, publishing progress after every flushed chunk, then

@@ -252,44 +252,23 @@ async fn crates_config(
     response
 }
 
-struct DownloadLease {
-    app: Arc<App>,
-    path: String,
-    accept: Option<String>,
-    _guard: tokio::sync::OwnedRwLockReadGuard<()>,
-}
-impl Drop for DownloadLease {
-    fn drop(&mut self) {
-        self.app
-            .cache
-            .observe_use(&self.path, self.accept.as_deref());
-    }
-}
-
 async fn serve(
     State(app): State<Arc<App>>,
     method: Method,
     uri: Uri,
     headers: HeaderMap,
 ) -> Response {
-    let lease = match &app.downloads_gc {
-        Some(gc) => Some(DownloadLease {
-            app: app.clone(),
-            path: uri.path().to_owned(),
-            accept: headers
-                .get(header::ACCEPT)
-                .and_then(|v| v.to_str().ok())
-                .map(str::to_owned),
-            _guard: gc.gate.clone().read_owned().await,
-        }),
+    let gc_guard = match &app.downloads_gc {
+        Some(gc) => Some(gc.gate.clone().read_owned().await),
         None => None,
     };
+    let mut object_lease = None;
     let started = Instant::now();
     let route = app.cache.template(uri.path());
     let span = nddev_device_sync_telemetry::http_server_span(method.as_str(), route)
         .unwrap_or_else(|_| tracing::Span::none());
     let finished = span.clone();
-    let response = async move {
+    let response = async {
         let duration_ms = || started.elapsed().as_secs_f64() * 1000.0;
         let counters = app.cache.counters();
         if method != Method::GET && method != Method::HEAD {
@@ -327,7 +306,8 @@ async fn serve(
             .get(header::USER_AGENT)
             .and_then(|value| value.to_str().ok());
         match app.cache.serve(uri.path(), accept, base.as_deref(), user_agent).await {
-            Ok(delivery) => {
+            Ok((delivery, lease)) => {
+                object_lease = lease;
                 let served = match &delivery {
                     Delivery::Stored(object) => {
                         if object.eviction.objects > 0 {
@@ -409,17 +389,17 @@ async fn serve(
     .await;
     let _ =
         nddev_device_sync_telemetry::finish_http_server_span(&finished, response.status().as_u16());
-    match lease {
-        Some(lease) => response.map(|body| {
-            Body::from_stream(futures_util::stream::unfold(
-                (body.into_data_stream(), lease),
-                |(mut stream, lease)| async move {
-                    stream.next().await.map(|chunk| (chunk, (stream, lease)))
-                },
-            ))
-        }),
-        None => response,
+    if gc_guard.is_none() && object_lease.is_none() {
+        return response;
     }
+    response.map(|body| {
+        Body::from_stream(futures_util::stream::unfold(
+            (body.into_data_stream(), (gc_guard, object_lease)),
+            |(mut stream, guards)| async move {
+                stream.next().await.map(|chunk| (chunk, (stream, guards)))
+            },
+        ))
+    })
 }
 
 fn event_name(served: Served) -> &'static str {

@@ -60,7 +60,7 @@ impl DownloadGc {
     fn new(retention: Duration) -> Self {
         Self {
             gate: Arc::new(tokio::sync::RwLock::new(())),
-            retention: retention.as_secs(),
+            retention: retention.as_secs().max(store::MIN_RETENTION),
             opened_at: store::now(),
             last: std::sync::Mutex::new(serde_json::Value::Null),
         }
@@ -104,6 +104,11 @@ pub async fn app(
     let routes = Arc::new(routes);
     let (store, invalid) =
         Store::open(&settings.root, settings.capacity, settings.max_object).await?;
+    let store = store.with_retention(
+        settings
+            .idle_retention
+            .map_or(store::MIN_RETENTION, |age| age.as_secs()),
+    );
     tracing::info!(
         module = "cache",
         scope = "io",

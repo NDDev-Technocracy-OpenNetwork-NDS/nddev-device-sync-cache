@@ -72,7 +72,7 @@ upstream is unreachable. `GET /source` links the corresponding source.
 | --- | --- |
 | `NDS_CACHE_ROOT` | Required absolute store directory; it must be empty or already owned by the cache. |
 | `NDS_CACHE_LISTEN` | Listener address; the binary defaults to loopback. |
-| `NDS_CACHE_CAPACITY_BYTES` | Store capacity; least recently used objects are evicted beyond it. |
+| `NDS_CACHE_CAPACITY_BYTES` | Committed download capacity. Admission can evict only sufficiently idle, unleased objects. |
 | `NDS_CACHE_MAX_OBJECT_BYTES` | Largest admitted object. |
 | `NDS_CACHE_FETCHES` | Concurrent upstream downloads. |
 | `NDS_CACHE_REVALIDATE_SECONDS` | Age after which channel and index documents are revalidated. |
@@ -107,9 +107,11 @@ omit the argument. The same optional port is accepted by `just container-check`.
 The optional `NDS_CACHE_IDLE_SECONDS` enables idle collection of public download objects in the
 existing minute watcher. Active response bodies and background fills are protected. A restart
 allows one retention window of observation before collecting this store, because historical
-in-memory hit timestamps cannot prove which objects were recently used. Capacity eviction remains
-enabled during that grace. Unknown files and future timestamps are preserved; this is not a
-general filesystem cleaner. Health reports the last completed download collection.
+in-memory hit timestamps cannot prove which objects were recently used. That protection
+also applies to quota eviction, including when scheduled download collection is disabled.
+Both stores require at least 24 hours of idle time, or the configured retention if longer,
+and preserve active leases and future timestamps. A write that cannot fit without removing
+protected objects is refused. Health reports the last completed download collection.
 
 ## Shared compiler results
 
@@ -123,7 +125,7 @@ file outside both stores:
 | `NDS_CACHE_BUILD_CREDENTIALS_FILE` | Private regular JSON file; never a synchronized credential. |
 | `NDS_CACHE_BUILD_CAPACITY_BYTES` | Committed build-object capacity. |
 | `NDS_CACHE_BUILD_MAX_OBJECT_BYTES` | Maximum complete upload. |
-| `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention; collection runs in the existing minute watcher. |
+| `NDS_CACHE_BUILD_IDLE_SECONDS` | Idle retention of at least 24 hours; collection runs in the existing minute watcher. |
 
 For Compose deployments, add `-f compose.build-cache.yaml` after `-f compose.yaml` and
 provide `NDS_CACHE_BUILD_STORE` and `NDS_CACHE_BUILD_CREDENTIALS` outside source. Both bind
@@ -152,7 +154,8 @@ the endpoint's source tests do not establish fleet adoption.
 
 Successful reads persist observed use, including at stream completion. Active response bodies
 exclude collection and replacement; a busy pass is reported and retried by the next existing
-watcher tick. Capacity eviction uses the same exclusion. Unknown build metadata and future use
+watcher tick. Capacity eviction uses the same exclusion and selects the oldest eligible
+objects only when they can make sufficient room. Unknown build metadata and future use
 timestamps are preserved. Health includes build usage, selected retention and the last collection
 report; failed removals remain failures. The public download store keeps its independent
 capacity policy and never accepts client uploads.
