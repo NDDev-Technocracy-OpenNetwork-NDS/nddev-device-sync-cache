@@ -3,6 +3,7 @@
   "assets": [
     {
       "repository": "rustsec/rustsec",
+      "tag": "cargo-audit/v0.23.0",
       "asset": 731642913,
       "size": 6481356,
       "sha256": "4f01c74ed84b2dffd0b1d37012a62cdf2a92c96e25bdf8eec7fcc0d4d3eb7811",
@@ -19,6 +20,7 @@
     },
     {
       "repository": "EmbarkStudios/cargo-deny",
+      "tag": "0.21.0",
       "asset": 755168773,
       "size": 5049575,
       "sha256": "a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903",
