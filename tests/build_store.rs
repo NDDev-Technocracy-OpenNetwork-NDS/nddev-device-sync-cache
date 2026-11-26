@@ -31,6 +31,10 @@ impl Drop for Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::with_capacity(1 << 30).await
+    }
+
+    async fn with_capacity(capacity: u64) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let downloads = temp.path().join("downloads");
         let credentials = temp.path().join("credentials.json");
@@ -50,7 +54,7 @@ impl Fixture {
         let settings = builds::Settings {
             root: temp.path().join("builds"),
             credentials,
-            capacity: 1 << 30,
+            capacity,
             max_object: 1 << 20,
             retention: Duration::from_secs(86400),
         };
@@ -99,6 +103,33 @@ impl Fixture {
             .as_u16()
     }
 }
+#[tokio::test]
+async fn a_full_build_store_preserves_warm_reads_and_idempotent_writes() {
+    let fixture = Fixture::with_capacity(8).await;
+    let existing = object();
+    let new = format!("sccache/{}", "b".repeat(64));
+    assert_eq!(fixture.put(&existing, WRITER, "compiled").await, 201);
+    assert_eq!(fixture.put(&new, WRITER, "more").await, 503);
+    assert_eq!(fixture.put(&existing, WRITER, "compiled").await, 204);
+    assert_eq!(fixture.put(&existing, WRITER, "different").await, 409);
+    let client = reqwest::Client::new();
+    let hit = client
+        .get(fixture.url(&existing))
+        .header("Authorization", READER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hit.status(), 200);
+    assert_eq!(hit.text().await.unwrap(), "compiled");
+    let absent = client
+        .get(fixture.url(&new))
+        .header("Authorization", READER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(absent.status(), 404);
+}
+
 #[tokio::test]
 async fn authenticated_native_http_objects_are_immutable_and_separate() {
     let f = Fixture::new().await;
@@ -267,7 +298,9 @@ async fn observed_hits_survive_reopen_and_future_or_unknown_data_stays() {
         "{\"schema\":99}"
     );
     // An old completed entry becomes live on a real read, including after reopening the store.
-    value["last_access"] = json!(store::now() - 86401);
+    let old = json!(store::now() - 86401);
+    value["last_access"] = old.clone();
+    value["fetched_at"] = old;
     std::fs::write(&meta, value.to_string()).unwrap();
     let reopened = Arc::new(BuildStore::open(&f.settings, &f.downloads).await.unwrap());
     let response = reopened

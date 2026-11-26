@@ -35,8 +35,9 @@ room for one maximum object.
 
 ## Capacity
 
-`NDS_CACHE_CAPACITY_BYTES` bounds the committed objects; a commit beyond it evicts the least
-recently used objects. Lowering the capacity takes effect at the next commit. The service reports
+`NDS_CACHE_CAPACITY_BYTES` bounds new committed objects. Quota admission considers the oldest
+unleased objects after at least 24 hours of idle time, or the configured retention if longer.
+Lowering the capacity applies this guard to subsequent writes. The service reports
 pressure when the store reaches 95 percent of its capacity or the volume's free space falls below
 one twentieth of it. Other users of the same volume count against that free space.
 
@@ -52,7 +53,7 @@ fixed error classes and no URL, client address, key or project identity.
 | `cache.store.opened` | The store opened; `rejected_count` counts discarded metadata without its object. |
 | `cache.store.ready`, `cache.store.degraded` | Readiness of the store changed. |
 | `cache.store.pressure` | The store or its volume is close to full. |
-| `cache.store.evicted` | A commit evicted least recently used objects. |
+| `cache.store.evicted` | A commit evicted sufficiently idle, unleased objects to fit the quota. |
 | `cache.store.read.failed` | A stored object could not be opened for a response. |
 | `cache.hit`, `cache.miss`, `cache.joined`, `cache.revalidated`, `cache.stale` | A response was served from the store, from a new download, from a download another request started, after revalidation, or from a stale copy; `status` is `304` when the client already held the object's entity tag. |
 | `cache.build.stored` | An authenticated admitted writer committed a build object or repeated identical bytes; only the fixed build route, method, status and duration are reported. |
@@ -112,6 +113,7 @@ expired heartbeat.
 | `502` with `upstream_auth` | A registry's anonymous token service failed or answered with something other than a token. |
 | A pull fails with `digest_mismatch` | The registry served bytes that do not have the digest of their path; nothing was stored. Retry; a repeated mismatch is an upstream fault. |
 | `502` with `object_too_large` | The object exceeds `NDS_CACHE_MAX_OBJECT_BYTES`. |
+| `503` with `store_capacity` | The write could not fit without evicting protected objects. Existing warm hits remain available. A streaming response whose headers already went out ends with a download error. |
 | `503` with `fetch_capacity` | All concurrent downloads are busy for longer than the admission wait; raise `NDS_CACHE_FETCHES` or wait. |
 | `504` with `upstream_timeout` | Upstream did not answer within the connect or read deadline. |
 | A response ends early | The background download failed; the next request downloads the object again. |
@@ -136,7 +138,9 @@ The existing minute watcher collects rebuildable public downloads when `NDS_CACH
 is selected, and the optional build store using `NDS_CACHE_BUILD_IDLE_SECONDS`. Reads update
 last use; live response bodies and fills keep their object leases. The public store grants one
 retention window after startup to observe historical objects whose former hit times were not
-durable. A held build read protects only its object, so an unrelated upload can proceed.
+durable. Both collection and quota admission honor this grace. Both stores keep an object
+lease for the response body. An unrelated write can proceed within capacity or evict other
+qualified objects under pressure.
 Health exposes collection outcomes, removed bytes and busy objects. A failed partial deletion
 does not discard the remaining index entry, and the next collection can finish it. Unknown
 layouts, future timestamps and foreign files are preserved. These collectors do not remove

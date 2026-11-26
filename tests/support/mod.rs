@@ -316,15 +316,19 @@ pub const EXPIRY: Duration = Duration::from_millis(2100);
 
 impl Harness {
     pub async fn start() -> Self {
-        Self::start_with(STEADY_REVALIDATE_SECONDS).await
+        Self::start_with(STEADY_REVALIDATE_SECONDS, 1 << 30).await
     }
 
     /// A harness whose mutable objects expire after [`EXPIRY`].
     pub async fn expiring() -> Self {
-        Self::start_with(EXPIRING_REVALIDATE_SECONDS).await
+        Self::start_with(EXPIRING_REVALIDATE_SECONDS, 1 << 30).await
     }
 
-    async fn start_with(revalidate: &'static str) -> Self {
+    pub async fn with_capacity(capacity: u64) -> Self {
+        Self::start_with(STEADY_REVALIDATE_SECONDS, capacity).await
+    }
+
+    async fn start_with(revalidate: &'static str, capacity: u64) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let upstream = Arc::new(Upstream::default());
         let origin = spawn(
@@ -491,6 +495,7 @@ impl Harness {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
+        settings.capacity = capacity;
         settings.builds = Some(nddev_device_sync_cache::builds::Settings {
             root: directory.path().join("builds"),
             credentials,

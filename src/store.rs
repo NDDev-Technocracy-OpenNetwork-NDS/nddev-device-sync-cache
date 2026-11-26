@@ -17,11 +17,12 @@ use sha2::{Digest, Sha256};
 use tokio::{
     fs,
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::watch,
+    sync::{Mutex as AsyncMutex, OwnedMutexGuard, watch},
 };
 
 const MARKER: &str = ".nds-cache-store";
 const FOLLOW_CHUNK: u64 = 64 * 1024;
+pub(crate) const MIN_RETENTION: u64 = 86_400;
 const MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache\"}\n";
 
 const BUILD_MARKER_CONTENT: &str = "{\"schema\":1,\"owner\":\"nddev-device-sync-cache-builds\"}\n";
@@ -59,6 +60,11 @@ pub struct Meta {
     pub last_access: u64,
 }
 
+fn idle(meta: &Meta, time: u64, retention: u64) -> bool {
+    time.checked_sub(meta.last_access.max(meta.fetched_at))
+        .is_some_and(|age| age >= retention)
+}
+
 /// Validators and media type of a completed upstream response.
 #[derive(Clone, Debug, Default)]
 pub struct Validators {
@@ -94,11 +100,17 @@ struct Index {
     bytes: u64,
 }
 
+type Stored = (Meta, PathBuf);
+
+#[derive(Clone)]
 pub struct Store {
     root: PathBuf,
     capacity: u64,
     max_object: u64,
     index: Arc<Mutex<Index>>,
+    mutation: Arc<AsyncMutex<()>>,
+    retention: u64,
+    observation_started: Option<u64>,
 }
 
 /// A live immutable-object response. Capacity and idle eviction keep this key until drop.
@@ -114,6 +126,9 @@ impl Drop for ReadLease {
             *count -= 1;
             if *count == 0 {
                 index.readers.remove(&self.hash);
+            }
+            if let Some(meta) = index.entries.get_mut(&self.hash) {
+                meta.last_access = meta.last_access.max(now());
             }
         }
     }
@@ -316,6 +331,10 @@ impl Store {
                 root: root.to_owned(),
                 capacity,
                 max_object,
+                mutation: Arc::new(AsyncMutex::new(())),
+                retention: MIN_RETENTION,
+                // Download hits were volatile before this process opened.
+                observation_started: discard_invalid.then(now),
                 index: Arc::new(Mutex::new(Index {
                     entries,
                     bytes,
@@ -387,15 +406,22 @@ impl Store {
     }
 
     pub fn lease(&self, key: &str) -> Option<(Meta, PathBuf, ReadLease)> {
+        let (stored, lease) = self.protect(key).ok()?;
+        stored.map(|(meta, path)| (meta, path, lease))
+    }
+
+    /// Pin a key before looking it up, including a response that follows an
+    /// uncommitted fill. Taking the lease and taking the snapshot are atomic.
+    pub(crate) fn protect(&self, key: &str) -> Result<(Option<Stored>, ReadLease), StoreError> {
         let hash = digest(key.as_bytes());
-        let mut index = self.index.lock().ok()?;
-        let meta = index.entries.get_mut(&hash)?;
-        meta.last_access = meta.last_access.max(now());
-        let meta = meta.clone();
+        let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+        let stored = index.entries.get_mut(&hash).map(|meta| {
+            meta.last_access = meta.last_access.max(now());
+            (meta.clone(), Self::object_path(&self.root, &hash))
+        });
         *index.readers.entry(hash.clone()).or_default() += 1;
-        Some((
-            meta,
-            Self::object_path(&self.root, &hash),
+        Ok((
+            stored,
             ReadLease {
                 index: self.index.clone(),
                 hash,
@@ -403,42 +429,161 @@ impl Store {
         ))
     }
 
-    /// Make room before an immutable build commit. The caller excludes new lookups and commits.
-    /// Existing response leases may finish while unrelated objects are evicted.
-    pub async fn make_room(&self, additional: u64) -> Result<Eviction, StoreError> {
-        let mut eviction = Eviction::default();
-        loop {
-            let victim = {
-                let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
-                if index.bytes.saturating_add(additional) <= self.capacity {
-                    return Ok(eviction);
+    pub(crate) fn with_retention(mut self, seconds: u64) -> Self {
+        self.retention = seconds.max(MIN_RETENTION);
+        self
+    }
+
+    fn needed(&self, index: &Index, incoming: &str, size: u64) -> u64 {
+        let replaced = index.entries.get(incoming).map_or(0, |meta| meta.size);
+        (index.bytes - replaced)
+            .saturating_add(size)
+            .saturating_sub(self.capacity)
+    }
+
+    fn quota_eviction_allowed(&self, time: u64) -> bool {
+        self.observation_started.is_none_or(|start| {
+            time.checked_sub(start)
+                .is_some_and(|age| age >= self.retention)
+        })
+    }
+
+    fn victim(&self, index: &Index, hash: &str, meta: &Meta, incoming: &str, time: u64) -> bool {
+        hash != incoming && !index.readers.contains_key(hash) && idle(meta, time, self.retention)
+    }
+
+    /// Avoid streaming a known-length body if admission is already impossible.
+    /// The final commit rechecks this under the mutation guard.
+    pub(crate) fn preflight(&self, key: &str, size: u64, replace: bool) -> Result<(), StoreError> {
+        let incoming = digest(key.as_bytes());
+        let index = self.index.lock().map_err(|_| StoreError::Io)?;
+        if !replace && index.entries.contains_key(&incoming) {
+            // Build PUT still verifies the digest before answering an existing key.
+            return Ok(());
+        }
+        let mut needed = self.needed(&index, &incoming, size);
+        if needed == 0 {
+            return Ok(());
+        }
+        let time = now();
+        if self.quota_eviction_allowed(time) {
+            for (hash, meta) in &index.entries {
+                if self.victim(&index, hash, meta, &incoming, time) {
+                    needed = needed.saturating_sub(meta.size);
+                    if needed == 0 {
+                        return Ok(());
+                    }
                 }
-                let hash = index
+            }
+        }
+        Err(StoreError::Full)
+    }
+
+    async fn admit(
+        &self,
+        incoming: &str,
+        size: u64,
+        guard: OwnedMutexGuard<()>,
+    ) -> Result<(Eviction, OwnedMutexGuard<()>), StoreError> {
+        {
+            let index = self.index.lock().map_err(|_| StoreError::Io)?;
+            if self.needed(&index, incoming, size) == 0 {
+                return Ok((Eviction::default(), guard));
+            }
+        }
+        let store = self.clone();
+        let incoming = incoming.to_owned();
+        // Once victims are reserved, finish their accounting even if the
+        // requester disconnects. The owned mutation guard moves with the work.
+        tokio::spawn(async move {
+            let eviction = store.evict_idle_for_quota(&incoming, size).await?;
+            Ok((eviction, guard))
+        })
+        .await
+        .map_err(|_| StoreError::Io)?
+    }
+
+    async fn evict_idle_for_quota(
+        &self,
+        incoming: &str,
+        size: u64,
+    ) -> Result<Eviction, StoreError> {
+        let time = now();
+        if !self.quota_eviction_allowed(time) {
+            return Err(StoreError::Full);
+        }
+        let mut candidates = {
+            let index = self.index.lock().map_err(|_| StoreError::Io)?;
+            index
+                .entries
+                .iter()
+                .filter(|(hash, meta)| self.victim(&index, hash, meta, incoming, time))
+                .map(|(hash, meta)| (meta.last_access.max(meta.fetched_at), hash.clone()))
+                .collect::<Vec<_>>()
+        };
+        // Keep sorting off the lookup lock. Hits and new body leases may
+        // invalidate candidates while the snapshot is being ranked.
+        candidates.sort_unstable();
+        let victims = {
+            let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
+            let mut needed = self.needed(&index, incoming, size);
+            let mut selected = Vec::new();
+            for (_, hash) in candidates {
+                let Some(meta) = index
                     .entries
-                    .iter()
-                    .filter(|(hash, _)| !index.readers.contains_key(*hash))
-                    .min_by_key(|(_, meta)| meta.last_access)
-                    .map(|(hash, _)| hash.clone())
-                    .ok_or(StoreError::Full)?;
-                let meta = index.entries.remove(&hash).ok_or(StoreError::Io)?;
-                index.bytes -= meta.size;
-                (hash, meta)
-            };
-            match self.remove_files(&victim.0).await {
-                Ok(body_removed) => {
+                    .get(&hash)
+                    .filter(|meta| self.victim(&index, &hash, meta, incoming, time))
+                else {
+                    continue;
+                };
+                needed = needed.saturating_sub(meta.size);
+                selected.push(hash);
+                if needed == 0 {
+                    break;
+                }
+            }
+            if needed != 0 {
+                return Err(StoreError::Full);
+            }
+            selected
+                .into_iter()
+                .filter_map(|hash| {
+                    let meta = index.entries.remove(&hash)?;
+                    index.bytes -= meta.size;
+                    Some((hash, meta))
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut eviction = Eviction::default();
+        let mut victims = victims.into_iter();
+        while let Some((hash, meta)) = victims.next() {
+            match self.remove_files(&hash).await {
+                Ok(removed) => {
                     eviction.objects += 1;
-                    if body_removed {
-                        eviction.bytes += victim.1.size;
+                    if removed {
+                        eviction.bytes += meta.size;
                     }
                 }
                 Err(error) => {
+                    // A failed metadata unlink after the payload is gone
+                    // must not put the missing object back into the index.
+                    let body_retained = fs::symlink_metadata(Self::object_path(&self.root, &hash))
+                        .await
+                        .is_ok();
                     let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
-                    index.bytes += victim.1.size;
-                    index.entries.insert(victim.0, victim.1);
+                    for (hash, meta) in body_retained
+                        .then_some((hash, meta))
+                        .into_iter()
+                        .chain(victims)
+                    {
+                        index.bytes += meta.size;
+                        index.entries.insert(hash, meta);
+                    }
                     return Err(error);
                 }
             }
         }
+        Ok(eviction)
     }
 
     async fn remove_files(&self, hash: &str) -> Result<bool, StoreError> {
@@ -469,15 +614,14 @@ impl Store {
 
     /// Removes only recognized idle objects. The build-store owner excludes active readers and commits.
     pub async fn collect_idle(&self, time: u64, retention: u64) -> Result<Collection, StoreError> {
+        let _mutation = self.mutation.lock().await;
+        let retention = retention.max(self.retention);
         let (candidates, busy) = {
             let index = self.index.lock().map_err(|_| StoreError::Io)?;
             let mut candidates = Vec::new();
             let mut busy = 0;
             for (hash, meta) in &index.entries {
-                if time
-                    .checked_sub(meta.last_access)
-                    .is_some_and(|age| age >= retention)
-                {
+                if idle(meta, time, retention) {
                     if index.readers.contains_key(hash) {
                         busy += 1;
                     } else {
@@ -537,18 +681,12 @@ impl Store {
         mut pending: Pending,
         validators: Validators,
     ) -> Result<(Meta, PathBuf, Eviction), StoreError> {
-        let mut file = pending.file.take().ok_or(StoreError::Io)?;
-        let flushed = async {
-            file.flush().await?;
-            file.sync_data().await
-        }
-        .await;
-        drop(file);
-        if flushed.is_err() {
-            let _ = fs::remove_file(&pending.path).await;
-            return Err(StoreError::Io);
-        }
+        let file = pending.file.as_mut().ok_or(StoreError::Io)?;
+        file.flush().await?;
+        file.sync_data().await?;
         let hash = digest(key.as_bytes());
+        let guard = self.mutation.clone().lock_owned().await;
+        let (eviction, _guard) = self.admit(&hash, pending.size, guard).await?;
         let object = Self::object_path(&self.root, &hash);
         let meta_path = Self::meta_path(&self.root, &hash);
         let time = now();
@@ -562,17 +700,11 @@ impl Store {
             fetched_at: time,
             last_access: time,
         };
-        let placed = async {
-            fs::create_dir_all(object.parent().ok_or(StoreError::Io)?).await?;
-            fs::create_dir_all(meta_path.parent().ok_or(StoreError::Io)?).await?;
-            fs::rename(&pending.path, &object).await?;
-            self.write_meta(&meta_path, &meta).await
-        }
-        .await;
-        if let Err(error) = placed {
-            let _ = fs::remove_file(&pending.path).await;
-            return Err(error);
-        }
+        fs::create_dir_all(object.parent().ok_or(StoreError::Io)?).await?;
+        fs::create_dir_all(meta_path.parent().ok_or(StoreError::Io)?).await?;
+        fs::rename(&pending.path, &object).await?;
+        drop(pending.file.take());
+        self.write_meta(&meta_path, &meta).await?;
         {
             let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
             let previous = index
@@ -582,12 +714,12 @@ impl Store {
                 .unwrap_or(0);
             index.bytes = index.bytes - previous + meta.size;
         }
-        let eviction = self.evict(&hash).await;
         Ok((meta, object, eviction))
     }
 
     /// Records a successful revalidation of a stored object.
     pub async fn refresh(&self, key: &str, validators: Validators) -> Result<Meta, StoreError> {
+        let _mutation = self.mutation.lock().await;
         let hash = digest(key.as_bytes());
         let meta = {
             let mut index = self.index.lock().map_err(|_| StoreError::Io)?;
@@ -612,37 +744,6 @@ impl Store {
         fs::write(&temporary, bytes).await?;
         fs::rename(&temporary, path).await?;
         Ok(())
-    }
-
-    async fn evict(&self, keep: &str) -> Eviction {
-        let mut eviction = Eviction::default();
-        loop {
-            let victim = {
-                let Ok(mut index) = self.index.lock() else {
-                    return eviction;
-                };
-                if index.bytes <= self.capacity {
-                    return eviction;
-                }
-                let Some(hash) = index
-                    .entries
-                    .iter()
-                    .filter(|(hash, _)| hash.as_str() != keep && !index.readers.contains_key(*hash))
-                    .min_by_key(|(_, meta)| meta.last_access)
-                    .map(|(hash, _)| hash.clone())
-                else {
-                    return eviction;
-                };
-                let meta = index.entries.remove(&hash);
-                let size = meta.map(|meta| meta.size).unwrap_or(0);
-                index.bytes -= size;
-                (hash, size)
-            };
-            let _ = fs::remove_file(Self::object_path(&self.root, &victim.0)).await;
-            let _ = fs::remove_file(Self::meta_path(&self.root, &victim.0)).await;
-            eviction.objects += 1;
-            eviction.bytes += victim.1;
-        }
     }
 
     pub fn max_object(&self) -> u64 {
@@ -688,21 +789,32 @@ mod tests {
 
     async fn store(capacity: u64, max_object: u64) -> (tempfile::TempDir, Store) {
         let root = tempfile::tempdir().unwrap();
-        let (store, invalid) = Store::open(&root.path().join("store"), capacity, max_object)
-            .await
-            .unwrap();
+        let (store, invalid) =
+            Store::open_preserving_unknown(&root.path().join("store"), capacity, max_object)
+                .await
+                .unwrap();
         assert_eq!(invalid, 0);
         (root, store)
     }
 
-    async fn put(store: &Store, key: &str, body: &[u8]) -> Eviction {
+    async fn try_put(store: &Store, key: &str, body: &[u8]) -> Result<Eviction, StoreError> {
         let mut pending = store.begin().await.unwrap();
         pending.write(body).await.unwrap();
         store
             .commit(key, pending, Validators::default())
             .await
-            .unwrap()
-            .2
+            .map(|value| value.2)
+    }
+
+    async fn put(store: &Store, key: &str, body: &[u8]) -> Eviction {
+        try_put(store, key, body).await.unwrap()
+    }
+
+    fn use_at(store: &Store, key: &str, time: u64) {
+        let mut index = store.index.lock().unwrap();
+        let meta = index.entries.get_mut(&digest(key.as_bytes())).unwrap();
+        meta.fetched_at = time;
+        meta.last_access = time;
     }
 
     #[tokio::test]
@@ -710,12 +822,24 @@ mod tests {
         let (root, store) = store(8, 8).await;
         put(&store, "a", b"aaaa").await;
         let (_, path, lease) = store.lease("a").unwrap();
-        store.make_room(4).await.unwrap();
         put(&store, "b", b"bbbb").await;
-        assert!(matches!(store.make_room(8).await, Err(StoreError::Full)));
+        let old = now() - MIN_RETENTION - 60;
+        use_at(&store, "a", old);
+        use_at(&store, "b", old);
+        assert_eq!(
+            try_put(&store, "c", b"cccccccc").await,
+            Err(StoreError::Full)
+        );
         assert!(path.exists());
+        assert!(Store::object_path(&store.root, &digest(b"b")).exists());
+        assert_eq!(store.usage().bytes, 8);
         drop(lease);
-        store.make_room(8).await.unwrap();
+        // A completed response renews the protection window.
+        assert_eq!(
+            try_put(&store, "c", b"cccccccc").await,
+            Err(StoreError::Full)
+        );
+        use_at(&store, "a", old);
         put(&store, "c", b"cccccccc").await;
         assert_eq!(store.usage().bytes, 8);
         let hash = digest(b"c");
@@ -745,9 +869,10 @@ mod tests {
         assert_eq!(meta.size, 7);
         assert_eq!(fs::read(path).await.unwrap(), b"payload");
         drop(store);
-        let (reopened, invalid) = Store::open(&root.path().join("store"), 1024, 1024)
-            .await
-            .unwrap();
+        let (reopened, invalid) =
+            Store::open_preserving_unknown(&root.path().join("store"), 1024, 1024)
+                .await
+                .unwrap();
         assert_eq!(invalid, 0);
         assert_eq!(reopened.usage().objects, 1);
     }
@@ -767,16 +892,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn eviction_removes_least_recently_used_objects() {
+    async fn eviction_removes_oldest_eligible_objects() {
         let (_root, store) = store(10, 10).await;
         put(&store, "k/old", b"aaaa").await;
         put(&store, "k/used", b"bbbb").await;
-        {
-            let mut index = store.index.lock().unwrap();
-            for meta in index.entries.values_mut() {
-                meta.last_access = if meta.key == "k/old" { 1 } else { 2 };
-            }
-        }
+        use_at(&store, "k/old", now() - MIN_RETENTION - 60);
+        use_at(&store, "k/used", now() - MIN_RETENTION - 30);
         let eviction = put(&store, "k/new", b"cccc").await;
         assert_eq!(
             eviction,
@@ -791,6 +912,81 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn quota_refusal_preserves_recent_future_and_existing_replacement() {
+        let (_root, store) = store(12, 12).await;
+        put(&store, "current", b"keep").await;
+        put(&store, "old", b"old!").await;
+        put(&store, "future", b"safe").await;
+        use_at(&store, "old", now() - MIN_RETENTION - 60);
+        use_at(&store, "future", now() + 60);
+        assert_eq!(store.preflight("other", 5, true), Err(StoreError::Full));
+        assert_eq!(
+            try_put(&store, "other", b"12345").await,
+            Err(StoreError::Full)
+        );
+        assert_eq!(
+            try_put(&store, "current", b"replace!!").await,
+            Err(StoreError::Full)
+        );
+        let (_, path) = store.get("current").unwrap();
+        assert_eq!(fs::read(path).await.unwrap(), b"keep");
+        assert_eq!(store.usage().bytes, 12);
+        assert!(
+            fs::read_dir(store.root.join("tmp"))
+                .await
+                .unwrap()
+                .next_entry()
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(put(&store, "current", b"same").await, Eviction::default());
+        let eviction = put(&store, "other", b"new!").await;
+        assert_eq!(
+            eviction,
+            Eviction {
+                objects: 1,
+                bytes: 4
+            }
+        );
+        assert!(store.get("old").is_none());
+        assert!(store.get("future").is_some());
+    }
+
+    #[tokio::test]
+    async fn download_quota_waits_for_restart_observation() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("store");
+        let (store, _) = Store::open(&root, 4, 4).await.unwrap();
+        put(&store, "old", b"old!").await;
+        let hash = digest(b"old");
+        use_at(&store, "old", now() - MIN_RETENTION - 60);
+        let meta = store.index.lock().unwrap().entries[&hash].clone();
+        store
+            .write_meta(&Store::meta_path(&root, &hash), &meta)
+            .await
+            .unwrap();
+        drop(store);
+        let (mut store, _) = Store::open(&root, 4, 4).await.unwrap();
+        assert_eq!(try_put(&store, "new", b"new!").await, Err(StoreError::Full));
+        store.observation_started = Some(now() - MIN_RETENTION - 30);
+        assert_eq!(put(&store, "new", b"new!").await.bytes, 4);
+    }
+
+    #[tokio::test]
+    async fn concurrent_commits_share_one_capacity_boundary() {
+        let (_root, store) = store(4, 4).await;
+        let (first, second) =
+            tokio::join!(try_put(&store, "a", b"aaaa"), try_put(&store, "b", b"bbbb"));
+        assert!(matches!(
+            (&first, &second),
+            (Ok(_), Err(StoreError::Full)) | (Err(StoreError::Full), Ok(_))
+        ));
+        assert_eq!(store.usage().bytes, 4);
+        assert_eq!(store.usage().objects, 1);
+    }
+
+    #[tokio::test]
     async fn refuses_an_unowned_root() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("foreign"), b"data").unwrap();
@@ -802,7 +998,10 @@ mod tests {
 
     #[tokio::test]
     async fn discards_metadata_without_its_object() {
-        let (root, store) = store(1024, 1024).await;
+        let root = tempfile::tempdir().unwrap();
+        let (store, _) = Store::open(&root.path().join("store"), 1024, 1024)
+            .await
+            .unwrap();
         put(&store, "k/a", b"abc").await;
         let (_, object) = store.get("k/a").unwrap();
         drop(store);
